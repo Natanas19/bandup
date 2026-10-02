@@ -31,13 +31,18 @@ export default function LoginPage() {
 
     try {
       const supabase = getSupabaseBrowserClient();
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
 
       if (signInError) {
         setError(getFriendlyError(signInError.message));
+        return;
+      }
+
+      if (!data.session) {
+        setError("Não foi possível iniciar uma sessão. Tente novamente.");
         return;
       }
 
