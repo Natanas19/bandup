@@ -43,18 +43,22 @@ function BandNavigation({
       <ul className={mobile ? "grid grid-cols-2 gap-2" : "space-y-1"}>
         {navigationItems.map((item) => (
           <li key={item.label}>
-            {item.active ? (
+            {item.active || item.label === "Tarefas" ? (
               <Link
-                href={`/bandas/${bandId}`}
+                href={item.active ? `/bandas/${bandId}` : `/bandas/${bandId}/tarefas`}
                 onClick={onNavigate}
-                aria-current="page"
+                aria-current={item.active ? "page" : undefined}
                 className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold ${
-                  mobile
-                    ? "bg-violet-700 text-white"
-                    : "bg-violet-50 text-violet-800"
+                  item.active
+                    ? mobile
+                      ? "bg-violet-700 text-white"
+                      : "bg-violet-50 text-violet-800"
+                    : mobile
+                      ? "border border-violet-200 bg-white text-violet-800"
+                      : "text-zinc-600 transition hover:bg-violet-50 hover:text-violet-800"
                 }`}
               >
-                <span aria-hidden="true" className="h-2 w-2 rounded-full bg-violet-500" />
+                <span aria-hidden="true" className={`h-2 w-2 rounded-full ${item.active ? "bg-violet-500" : "bg-zinc-300"}`} />
                 {item.label}
               </Link>
             ) : (
