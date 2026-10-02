@@ -43,13 +43,15 @@ function BandNavigation({
       <ul className={mobile ? "grid grid-cols-2 gap-2" : "space-y-1"}>
         {navigationItems.map((item) => (
           <li key={item.label}>
-            {item.active || item.label === "Tarefas" || item.label === "Agenda" ? (
+            {item.active || item.label === "Tarefas" || item.label === "Agenda" || item.label === "Membros" ? (
               <Link
                 href={item.active
                   ? `/bandas/${bandId}`
                   : item.label === "Tarefas"
                     ? `/bandas/${bandId}/tarefas`
-                    : `/bandas/${bandId}/agenda`}
+                    : item.label === "Agenda"
+                      ? `/bandas/${bandId}/agenda`
+                      : `/bandas/${bandId}/membros`}
                 onClick={onNavigate}
                 aria-current={item.active ? "page" : undefined}
                 className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold ${
