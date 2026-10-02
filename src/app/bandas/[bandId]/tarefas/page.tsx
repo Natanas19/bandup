@@ -79,12 +79,15 @@ export default function BandTasksPage() {
   const { bandId } = useParams<{ bandId: string }>();
   const [pageState, setPageState] = useState<PageState>("loading");
   const [bandName, setBandName] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [members, setMembers] = useState<BandMember[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [formError, setFormError] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<TaskStatus>("todo");
@@ -180,6 +183,7 @@ export default function BandTasksPage() {
         }
 
         setBandName(band.name);
+        setIsAdmin(membership.role === "admin");
         setMembers(bandMembers);
         setTasks(sortTasks((taskRows ?? []) as unknown as Task[]));
         setPageState("ready");
@@ -272,6 +276,55 @@ export default function BandTasksPage() {
       setFormError("Não foi possível criar a tarefa agora. Tente novamente.");
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleDeleteTask(task: Task) {
+    if (deletingTaskId || !window.confirm(`Excluir a tarefa "${task.title}"? Esta ação não pode ser desfeita.`)) return;
+
+    setDeleteError("");
+    setDeletingTaskId(task.id);
+
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const user = sessionData.session?.user;
+
+      if (sessionError || !user) {
+        setDeleteError("Sua sessão expirou. Entre novamente para excluir uma tarefa.");
+        return;
+      }
+
+      const { data: membership, error: membershipError } = await supabase
+        .from("band_members")
+        .select("role")
+        .eq("band_id", bandId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (membershipError || membership?.role !== "admin") {
+        setDeleteError("Somente administradores da banda podem excluir tarefas.");
+        return;
+      }
+
+      const { data: deletedTask, error: deleteTaskError } = await supabase
+        .from("tasks")
+        .delete()
+        .eq("id", task.id)
+        .eq("band_id", bandId)
+        .select("id")
+        .maybeSingle();
+
+      if (deleteTaskError || !deletedTask) {
+        setDeleteError("Não foi possível excluir a tarefa. Tente novamente.");
+        return;
+      }
+
+      setTasks((currentTasks) => currentTasks.filter((currentTask) => currentTask.id !== task.id));
+    } catch {
+      setDeleteError("Não foi possível excluir a tarefa agora. Tente novamente.");
+    } finally {
+      setDeletingTaskId(null);
     }
   }
 
@@ -406,6 +459,8 @@ export default function BandTasksPage() {
           </section>
         )}
 
+        {deleteError && <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{deleteError}</p>}
+
         {tasks.length === 0 ? (
           <section className="mt-6 rounded-2xl border border-dashed border-violet-200 bg-white px-5 py-10 text-center sm:py-14">
             <div aria-hidden="true" className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-violet-50 text-violet-700">
@@ -442,6 +497,18 @@ export default function BandTasksPage() {
                     <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-zinc-100 pt-3 text-xs text-zinc-500">
                       {task.due_date && <p>Prazo: <span className="font-medium text-zinc-700">{formatDate(task.due_date)}</span></p>}
                       {assignee && <p>Responsável: <span className="font-medium text-zinc-700">{assignee}</span></p>}
+                    </div>
+                  )}
+                  {isAdmin && (
+                    <div className="mt-4 flex justify-end border-t border-zinc-100 pt-3">
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteTask(task)}
+                        disabled={deletingTaskId !== null}
+                        className="inline-flex min-h-10 items-center rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {deletingTaskId === task.id ? "Excluindo..." : "Excluir"}
+                      </button>
                     </div>
                   )}
                 </article>

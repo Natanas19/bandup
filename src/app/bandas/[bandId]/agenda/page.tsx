@@ -19,7 +19,7 @@ type BandEvent = {
   id: string;
   title: string;
   description: string | null;
-  event_type: EventType;
+  event_type: string;
   start_at: string;
   end_at: string | null;
   location: string | null;
@@ -67,8 +67,8 @@ function formatEventTime(value: string) {
   }).format(new Date(value));
 }
 
-function getEventTypeLabel(eventType: EventType) {
-  return eventTypes.find((type) => type.value === eventType)?.label ?? "Outro";
+function getEventTypeLabel(eventType: string) {
+  return eventTypes.find((type) => type.value === eventType)?.label ?? eventType;
 }
 
 function getLocalDateTimeMinimum(now: number) {
@@ -122,18 +122,23 @@ export default function BandAgendaPage() {
   const [pageState, setPageState] = useState<PageState>("loading");
   const [currentTime, setCurrentTime] = useState(0);
   const [bandName, setBandName] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
   const [events, setEvents] = useState<BandEvent[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [minimumStartAt, setMinimumStartAt] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [formError, setFormError] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [eventType, setEventType] = useState<EventType>("show");
+  const [customEventType, setCustomEventType] = useState("");
   const [startAt, setStartAt] = useState("");
   const [endAt, setEndAt] = useState("");
   const [location, setLocation] = useState("");
+  const endAtMinimum = startAt || undefined;
 
   useEffect(() => {
     if (!isFormOpen) return;
@@ -214,6 +219,7 @@ export default function BandAgendaPage() {
         }
 
         setBandName(band.name);
+        setIsAdmin(membership.role === "admin");
         setEvents(sortEvents((data ?? []) as unknown as BandEvent[]));
         setCurrentTime(Date.now());
         setPageState("ready");
@@ -235,6 +241,7 @@ export default function BandAgendaPage() {
     setTitle("");
     setDescription("");
     setEventType("show");
+    setCustomEventType("");
     setStartAt("");
     setEndAt("");
     setLocation("");
@@ -261,6 +268,12 @@ export default function BandAgendaPage() {
     if (isSubmitting) return;
 
     setFormError("");
+
+    const normalizedEventType = eventType === "other" ? customEventType.trim() : eventType;
+    if (!normalizedEventType) {
+      setFormError("Informe o nome do tipo de evento.");
+      return;
+    }
 
     const submittedStartAt = startAt;
     const submittedEndAt = endAt;
@@ -309,7 +322,7 @@ export default function BandAgendaPage() {
           created_by: user.id,
           title: title.trim(),
           description: description.trim() || null,
-          event_type: eventType,
+          event_type: normalizedEventType,
           start_at: startDate.toISOString(),
           end_at: endDate ? endDate.toISOString() : null,
           location: location.trim() || null,
@@ -330,6 +343,55 @@ export default function BandAgendaPage() {
       setFormError("Não foi possível criar o evento agora. Tente novamente.");
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleDeleteEvent(bandEvent: BandEvent) {
+    if (deletingEventId || !window.confirm(`Excluir o evento "${bandEvent.title}"? Esta ação não pode ser desfeita.`)) return;
+
+    setDeleteError("");
+    setDeletingEventId(bandEvent.id);
+
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const user = sessionData.session?.user;
+
+      if (sessionError || !user) {
+        setDeleteError("Sua sessão expirou. Entre novamente para excluir um evento.");
+        return;
+      }
+
+      const { data: membership, error: membershipError } = await supabase
+        .from("band_members")
+        .select("role")
+        .eq("band_id", bandId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (membershipError || membership?.role !== "admin") {
+        setDeleteError("Somente administradores da banda podem excluir eventos.");
+        return;
+      }
+
+      const { data: deletedEvent, error: deleteEventError } = await supabase
+        .from("events")
+        .delete()
+        .eq("id", bandEvent.id)
+        .eq("band_id", bandId)
+        .select("id")
+        .maybeSingle();
+
+      if (deleteEventError || !deletedEvent) {
+        setDeleteError("Não foi possível excluir o evento. Tente novamente.");
+        return;
+      }
+
+      setEvents((currentEvents) => currentEvents.filter((event) => event.id !== bandEvent.id));
+    } catch {
+      setDeleteError("Não foi possível excluir o evento agora. Tente novamente.");
+    } finally {
+      setDeletingEventId(null);
     }
   }
 
@@ -403,10 +465,30 @@ export default function BandAgendaPage() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label htmlFor="event-type" className="mb-2 block text-sm font-medium text-zinc-700">Tipo *</label>
-                  <select id="event-type" required value={eventType} onChange={(event) => setEventType(event.target.value as EventType)} className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100">
+                  <select id="event-type" required value={eventType} onChange={(event) => {
+                    const selectedEventType = event.target.value as EventType;
+                    setEventType(selectedEventType);
+                    if (selectedEventType !== "other") setCustomEventType("");
+                  }} className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100">
                     {eventTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
                   </select>
                 </div>
+                {eventType === "other" && (
+                  <div>
+                    <label htmlFor="event-custom-type" className="mb-2 block text-sm font-medium text-zinc-700">Nome do tipo *</label>
+                    <input
+                      id="event-custom-type"
+                      type="text"
+                      required
+                      maxLength={100}
+                      value={customEventType}
+                      onChange={(event) => setCustomEventType(event.target.value)}
+                      disabled={isSubmitting}
+                      placeholder="Ex.: Podcast"
+                      className="min-h-11 w-full rounded-xl border border-zinc-200 px-4 py-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
+                    />
+                  </div>
+                )}
                 <div>
                   <label htmlFor="event-location" className="mb-2 block text-sm font-medium text-zinc-700">Local <span className="font-normal text-zinc-400">(opcional)</span></label>
                   <input id="event-location" type="text" maxLength={300} value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Ex.: Estúdio central" className="min-h-11 w-full rounded-xl border border-zinc-200 px-4 py-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100" />
@@ -417,7 +499,7 @@ export default function BandAgendaPage() {
                 </div>
                 <div>
                   <label htmlFor="event-end" className="mb-2 block text-sm font-medium text-zinc-700">Término <span className="font-normal text-zinc-400">(opcional)</span></label>
-                  <input id="event-end" type="datetime-local" min={startAt || undefined} value={endAt} disabled={isSubmitting} onChange={(event) => setEndAt(event.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100" />
+                  <input id="event-end" type="datetime-local" min={endAtMinimum} value={endAt} disabled={isSubmitting} onChange={(event) => setEndAt(event.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100" />
                 </div>
               </div>
 
@@ -439,6 +521,8 @@ export default function BandAgendaPage() {
             </form>
           </section>
         )}
+
+        {deleteError && <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{deleteError}</p>}
 
         {events.length === 0 ? (
           <section className="mt-6 rounded-2xl border border-dashed border-violet-200 bg-white px-5 py-10 text-center sm:py-14">
@@ -481,6 +565,18 @@ export default function BandAgendaPage() {
                     <p className="mt-4 border-t border-zinc-100 pt-3 text-sm text-zinc-600">
                       <span className="font-medium text-zinc-800">Local:</span> {bandEvent.location}
                     </p>
+                  )}
+                  {isAdmin && (
+                    <div className="mt-4 flex justify-end border-t border-zinc-100 pt-3">
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteEvent(bandEvent)}
+                        disabled={deletingEventId !== null}
+                        className="inline-flex min-h-10 items-center rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {deletingEventId === bandEvent.id ? "Excluindo..." : "Excluir"}
+                      </button>
+                    </div>
                   )}
                 </article>
               );

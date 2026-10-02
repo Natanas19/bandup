@@ -64,7 +64,7 @@ function BandNavigation({
       <ul className={mobile ? "grid grid-cols-2 gap-2" : "space-y-1"}>
         {navigationItems.map((item) => (
           <li key={item.label}>
-            {item.active || item.label === "Tarefas" || item.label === "Agenda" || item.label === "Membros" ? (
+            {item.active || item.label === "Tarefas" || item.label === "Agenda" || item.label === "Membros" || item.label === "Links" ? (
               <Link
                 href={item.active
                   ? `/bandas/${bandId}`
@@ -72,7 +72,9 @@ function BandNavigation({
                     ? `/bandas/${bandId}/tarefas`
                     : item.label === "Agenda"
                       ? `/bandas/${bandId}/agenda`
-                      : `/bandas/${bandId}/membros`}
+                      : item.label === "Membros"
+                        ? `/bandas/${bandId}/membros`
+                        : `/bandas/${bandId}/links`}
                 onClick={onNavigate}
                 aria-current={item.active ? "page" : undefined}
                 className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold ${
