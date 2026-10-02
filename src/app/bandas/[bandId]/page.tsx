@@ -13,6 +13,12 @@ type Band = {
 };
 
 type PageState = "loading" | "unauthenticated" | "unavailable" | "error" | "ready";
+type CardState = "loading" | "error" | "ready";
+type SummaryData = {
+  tasks: { total: number; pending: number; completed: number } | null;
+  event: { title: string; event_type: string; start_at: string; location: string | null } | null;
+  members: number | null;
+};
 
 const navigationItems = [
   { label: "Visão geral", active: true },
@@ -23,11 +29,26 @@ const navigationItems = [
   { label: "Configurações", active: false },
 ];
 
-const summaryCards = [
-  { label: "Tarefas", value: 0, description: "Tarefas da banda" },
-  { label: "Próximos eventos", value: 0, description: "Eventos na agenda" },
-  { label: "Membros", value: 0, description: "Pessoas na banda" },
+const eventTypes = [
+  { value: "show", label: "Show" },
+  { value: "rehearsal", label: "Ensaio" },
+  { value: "recording", label: "Gravação" },
+  { value: "meeting", label: "Reunião" },
+  { value: "interview", label: "Entrevista" },
+  { value: "other", label: "Outro" },
 ];
+
+function getEventTypeLabel(eventType: string) {
+  return eventTypes.find((type) => type.value === eventType)?.label ?? "Outro";
+}
+
+function formatEventDate(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "long", year: "numeric" }).format(new Date(value));
+}
+
+function formatEventTime(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(value));
+}
 
 function BandNavigation({
   bandId,
@@ -92,6 +113,8 @@ export default function BandPage() {
   const [band, setBand] = useState<Band | null>(null);
   const [pageState, setPageState] = useState<PageState>("loading");
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const [summary, setSummary] = useState<SummaryData>({ tasks: null, event: null, members: null });
+  const [cardStates, setCardStates] = useState<Record<"tasks" | "event" | "members", CardState>>({ tasks: "loading", event: "loading", members: "loading" });
 
   useEffect(() => {
     let isMounted = true;
@@ -151,6 +174,36 @@ export default function BandPage() {
 
         setBand({ ...bandData, role: membership.role });
         setPageState("ready");
+
+        const now = new Date().toISOString();
+        const [tasksResult, eventResult, membersResult] = await Promise.allSettled([
+          supabase.from("tasks").select("status").eq("band_id", bandId),
+          supabase.from("events").select("title, event_type, start_at, location")
+            .eq("band_id", bandId).gte("start_at", now).order("start_at", { ascending: true }).limit(1).maybeSingle(),
+          supabase.from("band_members").select("user_id", { count: "exact", head: true }).eq("band_id", bandId),
+        ]);
+
+        if (!isMounted) return;
+        if (tasksResult.status === "fulfilled" && !tasksResult.value.error) {
+          const tasks = tasksResult.value.data ?? [];
+          const completed = tasks.filter((task) => task.status === "done").length;
+          setSummary((current) => ({ ...current, tasks: {
+            total: tasks.length,
+            pending: tasks.filter((task) => task.status === "todo" || task.status === "in_progress").length,
+            completed,
+          } }));
+          setCardStates((current) => ({ ...current, tasks: "ready" }));
+        } else setCardStates((current) => ({ ...current, tasks: "error" }));
+
+        if (eventResult.status === "fulfilled" && !eventResult.value.error) {
+          setSummary((current) => ({ ...current, event: eventResult.value.data }));
+          setCardStates((current) => ({ ...current, event: "ready" }));
+        } else setCardStates((current) => ({ ...current, event: "error" }));
+
+        if (membersResult.status === "fulfilled" && !membersResult.value.error && membersResult.value.count !== null) {
+          setSummary((current) => ({ ...current, members: membersResult.value.count }));
+          setCardStates((current) => ({ ...current, members: "ready" }));
+        } else setCardStates((current) => ({ ...current, members: "error" }));
       } catch {
         if (isMounted) setPageState("error");
       }
@@ -288,33 +341,30 @@ export default function BandPage() {
           </div>
 
           <section aria-label="Resumo da banda" className="mt-7 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4">
-            {summaryCards.map((card) => (
-              <article key={card.label} className="min-w-0 rounded-2xl border border-violet-100 bg-white p-5 shadow-[0_12px_36px_-28px_rgba(54,36,104,0.35)] sm:p-6">
-                <p className="text-sm font-medium text-zinc-600">{card.label}</p>
-                <p className="mt-4 text-3xl font-semibold tracking-tight text-zinc-900">{card.value}</p>
-                <p className="mt-1 text-xs text-zinc-500">{card.description}</p>
-              </article>
-            ))}
-          </section>
-
-          <p className="mt-3 text-xs leading-5 text-zinc-500">
-            Os números acima são exemplos visuais; ainda não representam dados do banco.
-          </p>
-
-          <section className="mt-8 rounded-2xl border border-violet-100 bg-white p-5 shadow-[0_12px_36px_-28px_rgba(54,36,104,0.35)] sm:p-7">
-            <div>
-              <p className="text-xs font-semibold tracking-[0.14em] text-violet-700 uppercase">Agenda</p>
-              <h2 className="mt-2 text-xl font-semibold text-zinc-900">Próximos eventos</h2>
-            </div>
-            <div className="mt-5 rounded-xl bg-violet-50/70 px-5 py-8 text-center sm:py-10">
-              <div aria-hidden="true" className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-white text-violet-700 shadow-sm">
-                <span className="text-lg">♪</span>
-              </div>
-              <h3 className="mt-4 text-sm font-semibold text-zinc-800">Sua agenda está pronta para começar</h3>
-              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-zinc-600">
-                Quando a agenda estiver disponível, os próximos eventos da banda aparecerão aqui.
-              </p>
-            </div>
+            <article className="min-w-0 rounded-2xl border border-violet-100 bg-white p-5 shadow-[0_12px_36px_-28px_rgba(54,36,104,0.35)] sm:p-6">
+              <p className="text-sm font-medium text-zinc-600">Tarefas</p>
+              {cardStates.tasks === "loading" ? <p className="mt-4 text-sm text-zinc-500">Carregando tarefas...</p> : cardStates.tasks === "error" ? <p role="status" className="mt-4 text-sm text-red-700">Não foi possível carregar as tarefas.</p> : <>
+                <p className="mt-4 text-2xl font-semibold tracking-tight text-zinc-900">{summary.tasks?.total} no total</p>
+                <p className="mt-2 text-sm text-zinc-600">{summary.tasks?.pending} pendentes</p>
+                <p className="mt-1 text-sm text-zinc-600">{summary.tasks?.completed} concluídas</p>
+              </>}
+              <Link href={`/bandas/${band.id}/tarefas`} className="mt-5 inline-flex min-h-11 items-center text-sm font-semibold text-violet-800 hover:text-violet-950">Ver tarefas <span aria-hidden="true" className="ml-1">→</span></Link>
+            </article>
+            <article className="min-w-0 rounded-2xl border border-violet-100 bg-white p-5 shadow-[0_12px_36px_-28px_rgba(54,36,104,0.35)] sm:p-6">
+              <p className="text-sm font-medium text-zinc-600">Próximos eventos</p>
+              {cardStates.event === "loading" ? <p className="mt-4 text-sm text-zinc-500">Carregando agenda...</p> : cardStates.event === "error" ? <p role="status" className="mt-4 text-sm text-red-700">Não foi possível carregar a agenda.</p> : summary.event ? <>
+                <h2 className="mt-4 break-words text-lg font-semibold text-zinc-900">{summary.event.title}</h2>
+                <p className="mt-1 text-xs font-semibold tracking-wide text-violet-700 uppercase">{getEventTypeLabel(summary.event.event_type)}</p>
+                <p className="mt-3 text-sm text-zinc-700">{formatEventDate(summary.event.start_at)} às {formatEventTime(summary.event.start_at)}</p>
+                {summary.event.location?.trim() && <p className="mt-1 break-words text-sm text-zinc-600">{summary.event.location}</p>}
+              </> : <p className="mt-4 text-sm text-zinc-600">Nenhum próximo evento</p>}
+              <Link href={`/bandas/${band.id}/agenda`} className="mt-5 inline-flex min-h-11 items-center text-sm font-semibold text-violet-800 hover:text-violet-950">Ver agenda <span aria-hidden="true" className="ml-1">→</span></Link>
+            </article>
+            <article className="min-w-0 rounded-2xl border border-violet-100 bg-white p-5 shadow-[0_12px_36px_-28px_rgba(54,36,104,0.35)] sm:p-6">
+              <p className="text-sm font-medium text-zinc-600">Membros</p>
+              {cardStates.members === "loading" ? <p className="mt-4 text-sm text-zinc-500">Carregando integrantes...</p> : cardStates.members === "error" ? <p role="status" className="mt-4 text-sm text-red-700">Não foi possível carregar os integrantes.</p> : <p className="mt-4 text-3xl font-semibold tracking-tight text-zinc-900">{summary.members} {summary.members === 1 ? "integrante" : "integrantes"}</p>}
+              <Link href={`/bandas/${band.id}/membros`} className="mt-5 inline-flex min-h-11 items-center text-sm font-semibold text-violet-800 hover:text-violet-950">Ver membros <span aria-hidden="true" className="ml-1">→</span></Link>
+            </article>
           </section>
         </div>
       </div>

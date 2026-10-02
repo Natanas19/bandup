@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -23,6 +23,49 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    let authStateChanged = false;
+    const supabase = getSupabaseBrowserClient();
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      authStateChanged = true;
+      if (!isMounted) return;
+
+      if (session) {
+        router.replace("/dashboard");
+      } else if (event === "INITIAL_SESSION" || event === "SIGNED_OUT") {
+        setIsCheckingSession(false);
+      }
+    });
+
+    void supabase.auth.getSession().then(({ data, error: sessionError }) => {
+      if (!isMounted || authStateChanged) return;
+
+      if (sessionError) {
+        setError("Não foi possível verificar sua sessão. Tente novamente.");
+        setIsCheckingSession(false);
+        return;
+      }
+
+      if (data.session) {
+        router.replace("/dashboard");
+        return;
+      }
+
+      setIsCheckingSession(false);
+    }).catch(() => {
+      if (!isMounted || authStateChanged) return;
+      setError("Não foi possível verificar sua sessão. Tente novamente.");
+      setIsCheckingSession(false);
+    });
+
+    return () => {
+      isMounted = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, [router]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -52,6 +95,14 @@ export default function LoginPage() {
     } finally {
       setIsLoading(false);
     }
+  }
+
+  if (isCheckingSession) {
+    return (
+      <main className="flex flex-1 items-center justify-center px-5 py-12 sm:px-8">
+        <p role="status" className="text-sm text-zinc-600">Verificando sua sessão...</p>
+      </main>
+    );
   }
 
   return (

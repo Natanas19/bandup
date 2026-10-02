@@ -78,9 +78,31 @@ function getLocalDateTimeMinimum(now: number) {
   return localValue.toISOString().slice(0, 16);
 }
 
+function parseLocalDateTime(value: string) {
+  const [datePart, timePart] = value.split("T");
+  if (!datePart || !timePart) return new Date(Number.NaN);
+
+  const [year, month, day] = datePart.split("-").map(Number);
+  const [hour, minute] = timePart.split(":").map(Number);
+  if ([year, month, day, hour, minute].some(Number.isNaN)) return new Date(Number.NaN);
+
+  const localDate = new Date(year, month - 1, day, hour, minute);
+  if (
+    localDate.getFullYear() !== year ||
+    localDate.getMonth() !== month - 1 ||
+    localDate.getDate() !== day ||
+    localDate.getHours() !== hour ||
+    localDate.getMinutes() !== minute
+  ) {
+    return new Date(Number.NaN);
+  }
+
+  return localDate;
+}
+
 function validateEventSchedule(startValue: string, endValue: string, now: number) {
-  const startDate = new Date(startValue);
-  const endDate = endValue ? new Date(endValue) : null;
+  const startDate = parseLocalDateTime(startValue);
+  const endDate = endValue ? parseLocalDateTime(endValue) : null;
 
   if (!startValue || Number.isNaN(startDate.getTime()) || (endDate && Number.isNaN(endDate.getTime()))) {
     return "Informe uma data e horário válidos.";
@@ -277,8 +299,8 @@ export default function BandAgendaPage() {
         return;
       }
 
-      const startDate = new Date(submittedStartAt);
-      const endDate = submittedEndAt ? new Date(submittedEndAt) : null;
+      const startDate = parseLocalDateTime(submittedStartAt);
+      const endDate = submittedEndAt ? parseLocalDateTime(submittedEndAt) : null;
 
       const { data: createdEvent, error } = await supabase
         .from("events")
