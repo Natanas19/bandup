@@ -135,7 +135,11 @@ export default function DashboardPage() {
               </div>
               <ul className="mt-4 space-y-3">
                 {bands.map(({ band, role }, index) => band && (
-                  <li key={band.id ?? index} className="rounded-2xl border border-violet-100 p-5">
+                  <li key={band.id ?? index}>
+                    <Link
+                      href={`/bandas/${band.id}`}
+                      className="block rounded-2xl border border-violet-100 p-5 transition hover:border-violet-300 hover:bg-violet-50/50 focus:outline-none focus:ring-4 focus:ring-violet-100"
+                    >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <h3 className="text-lg font-semibold text-zinc-900">{band.name}</h3>
                       <span className="rounded-full bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700">
@@ -145,6 +149,7 @@ export default function DashboardPage() {
                     <p className="mt-2 text-sm leading-6 text-zinc-600">
                       {band.description?.trim() || "Nenhuma descrição informada."}
                     </p>
+                    </Link>
                   </li>
                 ))}
               </ul>
