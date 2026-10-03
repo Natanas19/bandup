@@ -26,6 +26,17 @@ type BandEvent = {
   created_at: string;
 };
 
+type TaskStatus = "todo" | "in_progress" | "done";
+type TaskPriority = "low" | "medium" | "high";
+
+type RelatedTask = {
+  id: string;
+  event_id: string;
+  title: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+};
+
 type PageState = "loading" | "unauthenticated" | "unavailable" | "error" | "ready";
 
 const eventTypes: { value: EventType; label: string }[] = [
@@ -38,6 +49,26 @@ const eventTypes: { value: EventType; label: string }[] = [
   { value: "livestream", label: "Livestream" },
   { value: "other", label: "Outro" },
 ];
+
+const statusOptions: { value: TaskStatus; label: string }[] = [
+  { value: "todo", label: "A fazer" },
+  { value: "in_progress", label: "Em andamento" },
+  { value: "done", label: "Concluída" },
+];
+
+const priorityOptions: { value: TaskPriority; label: string }[] = [
+  { value: "low", label: "Baixa" },
+  { value: "medium", label: "Média" },
+  { value: "high", label: "Alta" },
+];
+
+function getStatusLabel(status: TaskStatus) {
+  return statusOptions.find((option) => option.value === status)?.label ?? status;
+}
+
+function getPriorityLabel(priority: TaskPriority) {
+  return priorityOptions.find((option) => option.value === priority)?.label ?? priority;
+}
 
 function sortEvents(events: BandEvent[], now = Date.now()) {
   return [...events].sort((first, second) => {
@@ -124,6 +155,7 @@ export default function BandAgendaPage() {
   const [bandName, setBandName] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [events, setEvents] = useState<BandEvent[]>([]);
+  const [tasksByEvent, setTasksByEvent] = useState<Record<string, RelatedTask[]>>({});
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [minimumStartAt, setMinimumStartAt] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -218,9 +250,37 @@ export default function BandAgendaPage() {
           return;
         }
 
+        const loadedEvents = (data ?? []) as unknown as BandEvent[];
+        const eventIds = loadedEvents.map((bandEvent) => bandEvent.id);
+        let relatedTasks: RelatedTask[] = [];
+
+        if (eventIds.length > 0) {
+          const { data: taskRows, error: tasksError } = await supabase
+            .from("tasks")
+            .select("id, event_id, title, status, priority")
+            .eq("band_id", bandId)
+            .in("event_id", eventIds);
+
+          if (!isMounted) return;
+          if (tasksError) {
+            setPageState("error");
+            setLoadError("Não foi possível carregar as tarefas dos eventos. Tente novamente.");
+            return;
+          }
+
+          relatedTasks = (taskRows ?? []) as unknown as RelatedTask[];
+        }
+
+        const groupedTasks = relatedTasks.reduce<Record<string, RelatedTask[]>>((groups, task) => {
+          if (!task.event_id) return groups;
+          groups[task.event_id] = [...(groups[task.event_id] ?? []), task];
+          return groups;
+        }, {});
+
         setBandName(band.name);
         setIsAdmin(membership.role === "admin");
-        setEvents(sortEvents((data ?? []) as unknown as BandEvent[]));
+        setEvents(sortEvents(loadedEvents));
+        setTasksByEvent(groupedTasks);
         setCurrentTime(Date.now());
         setPageState("ready");
       } catch {
@@ -565,6 +625,22 @@ export default function BandAgendaPage() {
                     <p className="mt-4 border-t border-zinc-100 pt-3 text-sm text-zinc-600">
                       <span className="font-medium text-zinc-800">Local:</span> {bandEvent.location}
                     </p>
+                  )}
+                  {(tasksByEvent[bandEvent.id]?.length ?? 0) > 0 && (
+                    <div className="mt-4 border-t border-zinc-100 pt-4">
+                      <h3 className="text-sm font-semibold text-zinc-800">Tarefas relacionadas</h3>
+                      <ul className="mt-3 space-y-2">
+                        {tasksByEvent[bandEvent.id].map((task) => (
+                          <li key={task.id} className="flex min-w-0 flex-col gap-2 rounded-xl bg-zinc-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                            <span className="break-words text-sm font-medium text-zinc-800">{task.title}</span>
+                            <span className="flex flex-wrap gap-2">
+                              <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">{getStatusLabel(task.status)}</span>
+                              <span className="rounded-full bg-zinc-200 px-2.5 py-1 text-xs font-semibold text-zinc-700">Prioridade: {getPriorityLabel(task.priority)}</span>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   )}
                   {isAdmin && (
                     <div className="mt-4 flex justify-end border-t border-zinc-100 pt-3">

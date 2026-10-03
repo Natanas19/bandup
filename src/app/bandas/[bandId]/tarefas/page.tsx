@@ -8,6 +8,12 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 type TaskStatus = "todo" | "in_progress" | "done";
 type TaskPriority = "low" | "medium" | "high";
 
+type BandEvent = {
+  id: string;
+  title: string;
+  start_at: string;
+};
+
 type Task = {
   id: string;
   title: string;
@@ -67,6 +73,22 @@ function formatDate(value: string) {
   return new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(new Date(value));
 }
 
+function formatEventDate(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function formatEventTime(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(new Date(value));
+}
+
 function getStatusLabel(status: TaskStatus) {
   return statusOptions.find((option) => option.value === status)?.label ?? status;
 }
@@ -81,6 +103,7 @@ export default function BandTasksPage() {
   const [bandName, setBandName] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [events, setEvents] = useState<BandEvent[]>([]);
   const [members, setMembers] = useState<BandMember[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -94,6 +117,7 @@ export default function BandTasksPage() {
   const [priority, setPriority] = useState<TaskPriority>("medium");
   const [dueDate, setDueDate] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
+  const [relatedEventId, setRelatedEventId] = useState("");
 
   useEffect(() => {
     let isMounted = true;
@@ -168,6 +192,19 @@ export default function BandTasksPage() {
           label: member.user_id === user.id ? "Você" : `Integrante ${index + 1}`,
         }));
 
+        const { data: eventRows, error: eventsError } = await supabase
+          .from("events")
+          .select("id, title, start_at")
+          .eq("band_id", bandId)
+          .order("start_at", { ascending: true });
+
+        if (!isMounted) return;
+        if (eventsError) {
+          setPageState("error");
+          setLoadError("Não foi possível carregar os eventos da banda. Tente novamente.");
+          return;
+        }
+
         const { data: taskRows, error: tasksError } = await supabase
           .from("tasks")
           .select("id, title, description, status, priority, due_date, assigned_to, created_at")
@@ -185,6 +222,7 @@ export default function BandTasksPage() {
         setBandName(band.name);
         setIsAdmin(membership.role === "admin");
         setMembers(bandMembers);
+        setEvents((eventRows ?? []) as BandEvent[]);
         setTasks(sortTasks((taskRows ?? []) as unknown as Task[]));
         setPageState("ready");
       } catch {
@@ -208,6 +246,7 @@ export default function BandTasksPage() {
     setPriority("medium");
     setDueDate("");
     setAssignedTo("");
+    setRelatedEventId("");
     setFormError("");
   }
 
@@ -260,6 +299,7 @@ export default function BandTasksPage() {
           priority,
           due_date: dueDateValue,
           assigned_to: assignedTo || null,
+          event_id: relatedEventId || null,
         })
         .select("id, title, description, status, priority, due_date, assigned_to, created_at")
         .single();
@@ -417,6 +457,23 @@ export default function BandTasksPage() {
                   className="w-full resize-y rounded-xl border border-zinc-200 px-4 py-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
                   placeholder="Adicione detalhes para a banda"
                 />
+              </div>
+
+              <div>
+                <label htmlFor="task-event" className="mb-2 block text-sm font-medium text-zinc-700">Evento relacionado (opcional)</label>
+                <select
+                  id="task-event"
+                  value={relatedEventId}
+                  onChange={(event) => setRelatedEventId(event.target.value)}
+                  className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
+                >
+                  <option value="">Nenhum evento</option>
+                  {events.map((bandEvent) => (
+                    <option key={bandEvent.id} value={bandEvent.id}>
+                      {bandEvent.title} — {formatEventDate(bandEvent.start_at)} às {formatEventTime(bandEvent.start_at)}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
