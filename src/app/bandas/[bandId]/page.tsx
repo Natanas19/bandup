@@ -15,7 +15,7 @@ type Band = {
 type PageState = "loading" | "unauthenticated" | "unavailable" | "error" | "ready";
 type CardState = "loading" | "error" | "ready";
 type SummaryData = {
-  tasks: { total: number; pending: number; completed: number } | null;
+  tasks: { total: number; pending: number; completed: number; overdue: number } | null;
   event: { title: string; event_type: string; start_at: string; location: string | null } | null;
   members: number | null;
 };
@@ -179,7 +179,7 @@ export default function BandPage() {
 
         const now = new Date().toISOString();
         const [tasksResult, eventResult, membersResult] = await Promise.allSettled([
-          supabase.from("tasks").select("status").eq("band_id", bandId),
+          supabase.from("tasks").select("status, due_date").eq("band_id", bandId),
           supabase.from("events").select("title, event_type, start_at, location")
             .eq("band_id", bandId).gte("start_at", now).order("start_at", { ascending: true }).limit(1).maybeSingle(),
           supabase.from("band_members").select("user_id", { count: "exact", head: true }).eq("band_id", bandId),
@@ -189,10 +189,14 @@ export default function BandPage() {
         if (tasksResult.status === "fulfilled" && !tasksResult.value.error) {
           const tasks = tasksResult.value.data ?? [];
           const completed = tasks.filter((task) => task.status === "done").length;
+          const overdue = tasks.filter((task) =>
+            task.status !== "done" && task.due_date !== null && Date.parse(task.due_date) < Date.now()
+          ).length;
           setSummary((current) => ({ ...current, tasks: {
             total: tasks.length,
             pending: tasks.filter((task) => task.status === "todo" || task.status === "in_progress").length,
             completed,
+            overdue,
           } }));
           setCardStates((current) => ({ ...current, tasks: "ready" }));
         } else setCardStates((current) => ({ ...current, tasks: "error" }));
@@ -349,6 +353,7 @@ export default function BandPage() {
                 <p className="mt-4 text-2xl font-semibold tracking-tight text-zinc-900">{summary.tasks?.total} no total</p>
                 <p className="mt-2 text-sm text-zinc-600">{summary.tasks?.pending} pendentes</p>
                 <p className="mt-1 text-sm text-zinc-600">{summary.tasks?.completed} concluídas</p>
+                <p className="mt-1 text-sm font-medium text-red-700">{summary.tasks?.overdue ?? 0} atrasadas</p>
               </>}
               <Link href={`/bandas/${band.id}/tarefas`} className="mt-5 inline-flex min-h-11 items-center text-sm font-semibold text-violet-800 hover:text-violet-950">Ver tarefas <span aria-hidden="true" className="ml-1">→</span></Link>
             </article>
