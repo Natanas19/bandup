@@ -22,6 +22,7 @@ type Task = {
   priority: TaskPriority;
   due_date: string | null;
   assigned_to: string | null;
+  event_id: string | null;
   created_at: string;
 };
 
@@ -106,9 +107,11 @@ export default function BandTasksPage() {
   const [events, setEvents] = useState<BandEvent[]>([]);
   const [members, setMembers] = useState<BandMember[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [formError, setFormError] = useState("");
+  const [formSuccess, setFormSuccess] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -207,7 +210,7 @@ export default function BandTasksPage() {
 
         const { data: taskRows, error: tasksError } = await supabase
           .from("tasks")
-          .select("id, title, description, status, priority, due_date, assigned_to, created_at")
+          .select("id, title, description, status, priority, due_date, assigned_to, event_id, created_at")
           .eq("band_id", bandId)
           .order("due_date", { ascending: true, nullsFirst: false })
           .order("created_at", { ascending: false });
@@ -248,6 +251,31 @@ export default function BandTasksPage() {
     setAssignedTo("");
     setRelatedEventId("");
     setFormError("");
+    setFormSuccess("");
+  }
+
+  function cancelEditing() {
+    setEditingTaskId(null);
+    resetForm();
+    setIsFormOpen(false);
+  }
+
+  function startEditing(task: Task) {
+    setEditingTaskId(task.id);
+    setTitle(task.title);
+    setDescription(task.description ?? "");
+    setStatus(task.status);
+    setPriority(task.priority);
+    if (task.due_date) {
+      const date = new Date(task.due_date);
+      setDueDate(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`);
+    } else setDueDate("");
+    setAssignedTo(task.assigned_to ?? "");
+    setRelatedEventId(task.event_id ?? "");
+    setFormError("");
+    setFormSuccess("");
+    setIsFormOpen(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function handleCreateTask(event: FormEvent<HTMLFormElement>) {
@@ -255,6 +283,7 @@ export default function BandTasksPage() {
     if (isSubmitting) return;
 
     setFormError("");
+    setFormSuccess("");
     setIsSubmitting(true);
 
     try {
@@ -263,7 +292,7 @@ export default function BandTasksPage() {
       const user = sessionData.session?.user;
 
       if (sessionError || !user) {
-        setFormError("Sua sessão expirou. Entre novamente para criar uma tarefa.");
+        setFormError("Sessao expirada. Entre novamente para continuar.");
         return;
       }
 
@@ -284,28 +313,61 @@ export default function BandTasksPage() {
         return;
       }
 
+      if (relatedEventId && !events.some((bandEvent) => bandEvent.id === relatedEventId)) {
+        setFormError("Selecione um evento que pertença a esta banda.");
+        return;
+      }
+
       const dueDateValue = dueDate
         ? new Date(`${dueDate}T12:00:00`).toISOString()
         : null;
+
+      const taskValues = {
+        title: title.trim(),
+        description: description.trim() || null,
+        status,
+        priority,
+        due_date: dueDateValue,
+        assigned_to: assignedTo || null,
+        event_id: relatedEventId || null,
+      };
+
+      if (editingTaskId) {
+        const { data: updatedTask, error } = await supabase
+          .from("tasks")
+          .update({ ...taskValues, updated_at: new Date().toISOString() })
+          .eq("id", editingTaskId)
+          .eq("band_id", bandId)
+          .select("id, title, description, status, priority, due_date, assigned_to, event_id, created_at")
+          .maybeSingle();
+
+        if (error || !updatedTask) {
+          setFormError("Nao foi possivel salvar as alteracoes. Confira os dados e tente novamente.");
+          return;
+        }
+
+        setTasks((currentTasks) => sortTasks(currentTasks.map((task) =>
+          task.id === editingTaskId ? updatedTask as unknown as Task : task
+        )));
+        setEditingTaskId(null);
+        resetForm();
+        setFormSuccess("Tarefa atualizada com sucesso.");
+        setIsFormOpen(false);
+        return;
+      }
 
       const { data: createdTask, error } = await supabase
         .from("tasks")
         .insert({
           band_id: bandId,
           created_by: user.id,
-          title: title.trim(),
-          description: description.trim() || null,
-          status,
-          priority,
-          due_date: dueDateValue,
-          assigned_to: assignedTo || null,
-          event_id: relatedEventId || null,
+          ...taskValues,
         })
-        .select("id, title, description, status, priority, due_date, assigned_to, created_at")
+        .select("id, title, description, status, priority, due_date, assigned_to, event_id, created_at")
         .single();
 
       if (error || !createdTask) {
-        setFormError("Não foi possível criar a tarefa. Confira os dados e tente novamente.");
+          setFormError("Nao foi possivel salvar as alteracoes. Confira os dados e tente novamente.");
         return;
       }
 
@@ -313,7 +375,7 @@ export default function BandTasksPage() {
       resetForm();
       setIsFormOpen(false);
     } catch {
-      setFormError("Não foi possível criar a tarefa agora. Tente novamente.");
+      setFormError("Não foi possível salvar a tarefa agora. Tente novamente.");
     } finally {
       setIsSubmitting(false);
     }
@@ -416,8 +478,15 @@ export default function BandTasksPage() {
           <button
             type="button"
             onClick={() => {
-              setFormError("");
-              setIsFormOpen((isOpen) => !isOpen);
+              if (editingTaskId) cancelEditing();
+              else if (isFormOpen) {
+                resetForm();
+                setIsFormOpen(false);
+              } else {
+                setFormError("");
+                setFormSuccess("");
+                setIsFormOpen(true);
+              }
             }}
             className="inline-flex min-h-11 w-full shrink-0 items-center justify-center rounded-xl bg-violet-700 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-700/15 transition hover:bg-violet-800 focus:outline-none focus:ring-4 focus:ring-violet-200 sm:w-auto"
           >
@@ -428,7 +497,7 @@ export default function BandTasksPage() {
         {isFormOpen && (
           <section className="mt-6 rounded-2xl border border-violet-100 bg-white p-5 shadow-[0_16px_48px_-32px_rgba(54,36,104,0.35)] sm:p-7">
             <div className="mb-5">
-              <h2 className="text-lg font-semibold text-zinc-900">Nova tarefa</h2>
+              <h2 className="text-lg font-semibold text-zinc-900">{editingTaskId ? "Editar tarefa" : "Nova tarefa"}</h2>
               <p className="mt-1 text-sm text-zinc-500">Os campos com * são obrigatórios.</p>
             </div>
             <form onSubmit={handleCreateTask} className="space-y-5">
@@ -505,17 +574,18 @@ export default function BandTasksPage() {
               {formError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{formError}</p>}
 
               <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row sm:justify-end">
-                <button type="button" disabled={isSubmitting} onClick={() => { resetForm(); setIsFormOpen(false); }} className="min-h-11 rounded-xl border border-violet-200 px-5 py-3 text-sm font-semibold text-violet-800 transition hover:bg-violet-50 disabled:opacity-60">
-                  Cancelar
+                <button type="button" disabled={isSubmitting} onClick={cancelEditing} className="min-h-11 rounded-xl border border-violet-200 px-5 py-3 text-sm font-semibold text-violet-800 transition hover:bg-violet-50 disabled:opacity-60">
+                  {editingTaskId ? "Cancelar edição" : "Cancelar"}
                 </button>
                 <button type="submit" disabled={isSubmitting} className="min-h-11 rounded-xl bg-violet-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-70">
-                  {isSubmitting ? "Criando tarefa..." : "Criar tarefa"}
+                  {isSubmitting ? (editingTaskId ? "Salvando alterações..." : "Criando tarefa...") : editingTaskId ? "Salvar alterações" : "Criar tarefa"}
                 </button>
               </div>
             </form>
           </section>
         )}
 
+        {formSuccess && <p role="status" className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{formSuccess}</p>}
         {deleteError && <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{deleteError}</p>}
 
         {tasks.length === 0 ? (
@@ -556,8 +626,17 @@ export default function BandTasksPage() {
                       {assignee && <p>Responsável: <span className="font-medium text-zinc-700">{assignee}</span></p>}
                     </div>
                   )}
-                  {isAdmin && (
-                    <div className="mt-4 flex justify-end border-t border-zinc-100 pt-3">
+                  {task.event_id && <p className="mt-2 text-xs text-zinc-500">Evento: <span className="font-medium text-zinc-700">{events.find((bandEvent) => bandEvent.id === task.event_id)?.title ?? "Evento da banda"}</span></p>}
+                  <div className="mt-4 flex flex-col-reverse gap-2 border-t border-zinc-100 pt-3 sm:flex-row sm:justify-end">
+                    <button
+                      type="button"
+                      onClick={() => startEditing(task)}
+                      disabled={isSubmitting || deletingTaskId !== null}
+                      className="inline-flex min-h-10 items-center justify-center rounded-xl border border-violet-200 px-4 py-2 text-sm font-semibold text-violet-800 transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Editar
+                    </button>
+                    {isAdmin && (
                       <button
                         type="button"
                         onClick={() => void handleDeleteTask(task)}
@@ -566,8 +645,8 @@ export default function BandTasksPage() {
                       >
                         {deletingTaskId === task.id ? "Excluindo..." : "Excluir"}
                       </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </article>
               );
             })}
