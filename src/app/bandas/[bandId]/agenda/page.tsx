@@ -109,6 +109,12 @@ function getLocalDateTimeMinimum(now: number) {
   return localValue.toISOString().slice(0, 16);
 }
 
+function toLocalDateTimeInput(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
 function parseLocalDateTime(value: string) {
   const [datePart, timePart] = value.split("T");
   if (!datePart || !timePart) return new Date(Number.NaN);
@@ -157,10 +163,12 @@ export default function BandAgendaPage() {
   const [events, setEvents] = useState<BandEvent[]>([]);
   const [tasksByEvent, setTasksByEvent] = useState<Record<string, RelatedTask[]>>({});
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [minimumStartAt, setMinimumStartAt] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [formError, setFormError] = useState("");
+  const [formSuccess, setFormSuccess] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -298,6 +306,7 @@ export default function BandAgendaPage() {
   }, [bandId]);
 
   function resetForm() {
+    setEditingEventId(null);
     setTitle("");
     setDescription("");
     setEventType("show");
@@ -306,6 +315,22 @@ export default function BandAgendaPage() {
     setEndAt("");
     setLocation("");
     setFormError("");
+  }
+
+  function startEditingEvent(bandEvent: BandEvent) {
+    setEditingEventId(bandEvent.id);
+    setTitle(bandEvent.title);
+    setDescription(bandEvent.description ?? "");
+    const isStandardType = eventTypes.some((type) => type.value !== "other" && type.value === bandEvent.event_type);
+    setEventType(isStandardType ? bandEvent.event_type as EventType : "other");
+    setCustomEventType(isStandardType ? "" : bandEvent.event_type);
+    setStartAt(toLocalDateTimeInput(bandEvent.start_at));
+    setEndAt(bandEvent.end_at ? toLocalDateTimeInput(bandEvent.end_at) : "");
+    setLocation(bandEvent.location ?? "");
+    setMinimumStartAt(getLocalDateTimeMinimum(currentTime));
+    setFormError("");
+    setFormSuccess("");
+    setIsFormOpen(true);
   }
 
   function openForm() {
@@ -317,6 +342,7 @@ export default function BandAgendaPage() {
   function toggleForm() {
     if (isSubmitting) return;
     if (isFormOpen) {
+      resetForm();
       setIsFormOpen(false);
       return;
     }
@@ -350,7 +376,7 @@ export default function BandAgendaPage() {
       const user = sessionData.session?.user;
 
       if (sessionError || !user) {
-        setFormError("Sua sessão expirou. Entre novamente para criar um evento.");
+        setFormError(`Sua sessão expirou. Entre novamente para ${editingEventId ? "editar" : "criar"} um evento.`);
         return;
       }
 
@@ -375,32 +401,36 @@ export default function BandAgendaPage() {
       const startDate = parseLocalDateTime(submittedStartAt);
       const endDate = submittedEndAt ? parseLocalDateTime(submittedEndAt) : null;
 
-      const { data: createdEvent, error } = await supabase
-        .from("events")
-        .insert({
-          band_id: bandId,
-          created_by: user.id,
-          title: title.trim(),
-          description: description.trim() || null,
-          event_type: normalizedEventType,
-          start_at: startDate.toISOString(),
-          end_at: endDate ? endDate.toISOString() : null,
-          location: location.trim() || null,
-        })
-        .select("id, title, description, event_type, start_at, end_at, location, created_at")
-        .single();
+      const eventValues = {
+        title: title.trim(),
+        description: description.trim() || null,
+        event_type: normalizedEventType,
+        start_at: startDate.toISOString(),
+        end_at: endDate ? endDate.toISOString() : null,
+        location: location.trim() || null,
+      };
 
-      if (error || !createdEvent) {
-        setFormError("Não foi possível criar o evento. Confira os dados e tente novamente.");
+      const result = editingEventId
+        ? await supabase.from("events").update({ ...eventValues, updated_at: new Date().toISOString() }).eq("id", editingEventId).eq("band_id", bandId).select("id, title, description, event_type, start_at, end_at, location, created_at").maybeSingle()
+        : await supabase.from("events").insert({ ...eventValues, band_id: bandId, created_by: user.id }).select("id, title, description, event_type, start_at, end_at, location, created_at").single();
+      const savedEvent = result.data;
+      const error = result.error;
+
+      if (error || !savedEvent) {
+        setFormError(editingEventId ? "Não foi possível salvar as alterações. Confira os dados e tente novamente." : "Não foi possível criar o evento. Confira os dados e tente novamente.");
         return;
       }
 
-      setEvents((currentEvents) => sortEvents([...currentEvents, createdEvent as unknown as BandEvent]));
+      const savedBandEvent = savedEvent as unknown as BandEvent;
+      setEvents((currentEvents) => sortEvents(editingEventId
+        ? currentEvents.map((currentEvent) => currentEvent.id === editingEventId ? savedBandEvent : currentEvent)
+        : [...currentEvents, savedBandEvent]));
       setCurrentTime(Date.now());
+      setFormSuccess(editingEventId ? "Evento atualizado com sucesso." : "Evento criado com sucesso.");
       resetForm();
       setIsFormOpen(false);
     } catch {
-      setFormError("Não foi possível criar o evento agora. Tente novamente.");
+      setFormError(editingEventId ? "Não foi possível atualizar o evento agora. Tente novamente." : "Não foi possível criar o evento agora. Tente novamente.");
     } finally {
       setIsSubmitting(false);
     }
@@ -510,11 +540,13 @@ export default function BandAgendaPage() {
           </button>
         </header>
 
+        {formSuccess && <p role="status" className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{formSuccess}</p>}
+
         {isFormOpen && (
           <section className="mt-6 rounded-2xl border border-violet-100 bg-white p-5 shadow-[0_16px_48px_-32px_rgba(54,36,104,0.35)] sm:p-7">
             <div className="mb-5">
-              <h2 className="text-lg font-semibold text-zinc-900">Novo evento</h2>
-              <p className="mt-1 text-sm text-zinc-500">Informe os detalhes para adicionar à agenda da banda.</p>
+              <h2 className="text-lg font-semibold text-zinc-900">{editingEventId ? "Editar evento" : "Novo evento"}</h2>
+              <p className="mt-1 text-sm text-zinc-500">{editingEventId ? "Atualize os detalhes deste evento." : "Informe os detalhes para adicionar à agenda da banda."}</p>
             </div>
             <form onSubmit={handleCreateEvent} className="space-y-5">
               <div>
@@ -571,11 +603,11 @@ export default function BandAgendaPage() {
               {formError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{formError}</p>}
 
               <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row sm:justify-end">
-                <button type="button" disabled={isSubmitting} onClick={() => { resetForm(); setIsFormOpen(false); }} className="min-h-11 rounded-xl border border-violet-200 px-5 py-3 text-sm font-semibold text-violet-800 transition hover:bg-violet-50 disabled:opacity-60">
-                  Cancelar
+                <button type="button" disabled={isSubmitting} onClick={() => { resetForm(); setFormSuccess(""); setIsFormOpen(false); }} className="min-h-11 rounded-xl border border-violet-200 px-5 py-3 text-sm font-semibold text-violet-800 transition hover:bg-violet-50 disabled:opacity-60">
+                  {editingEventId ? "Cancelar edição" : "Cancelar"}
                 </button>
                 <button type="submit" disabled={isSubmitting} className="min-h-11 rounded-xl bg-violet-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-70">
-                  {isSubmitting ? "Salvando evento..." : "Criar evento"}
+                  {isSubmitting ? (editingEventId ? "Salvando alterações..." : "Salvando evento...") : (editingEventId ? "Salvar alterações" : "Criar evento")}
                 </button>
               </div>
             </form>
@@ -642,8 +674,17 @@ export default function BandAgendaPage() {
                       </ul>
                     </div>
                   )}
-                  {isAdmin && (
-                    <div className="mt-4 flex justify-end border-t border-zinc-100 pt-3">
+                  <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-zinc-100 pt-3">
+                    <button
+                      type="button"
+                      onClick={() => startEditingEvent(bandEvent)}
+                      disabled={isSubmitting || deletingEventId !== null}
+                      className="inline-flex min-h-10 items-center rounded-xl border border-violet-200 px-4 py-2 text-sm font-semibold text-violet-800 transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Editar
+                    </button>
+                    {isAdmin && (
+                      <div>
                       <button
                         type="button"
                         onClick={() => void handleDeleteEvent(bandEvent)}
@@ -652,8 +693,9 @@ export default function BandAgendaPage() {
                       >
                         {deletingEventId === bandEvent.id ? "Excluindo..." : "Excluir"}
                       </button>
-                    </div>
-                  )}
+                      </div>
+                    )}
+                  </div>
                 </article>
               );
             })}
