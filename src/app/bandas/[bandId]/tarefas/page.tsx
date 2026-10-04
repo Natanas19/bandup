@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { LinkifiedText } from "@/components/linkified-text";
 
 type TaskStatus = "todo" | "in_progress" | "done";
 type TaskPriority = "low" | "medium" | "high";
@@ -613,7 +614,7 @@ export default function BandTasksPage() {
                   <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                       <h2 className="break-words text-base font-semibold text-zinc-900 sm:text-lg">{task.title}</h2>
-                      {task.description?.trim() && <p className="mt-2 break-words whitespace-pre-wrap text-sm leading-6 text-zinc-600">{task.description}</p>}
+                      {task.description?.trim() && <p className="mt-2 break-words whitespace-pre-wrap text-sm leading-6 text-zinc-600"><LinkifiedText text={task.description} /></p>}
                     </div>
                     <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
                       <span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusStyles[task.status]}`}>{getStatusLabel(task.status)}</span>

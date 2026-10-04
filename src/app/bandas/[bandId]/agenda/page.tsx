@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { LinkifiedText } from "@/components/linkified-text";
 
 type EventType =
   | "show"
@@ -643,7 +644,7 @@ export default function BandAgendaPage() {
                         {isUpcoming && <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-700">Próximo</span>}
                       </div>
                       <p className="mt-2 text-xs font-semibold tracking-wide text-violet-700 uppercase">{getEventTypeLabel(bandEvent.event_type)}</p>
-                      {bandEvent.description?.trim() && <p className="mt-3 break-words whitespace-pre-wrap text-sm leading-6 text-zinc-600">{bandEvent.description}</p>}
+                      {bandEvent.description?.trim() && <p className="mt-3 break-words whitespace-pre-wrap text-sm leading-6 text-zinc-600"><LinkifiedText text={bandEvent.description} /></p>}
                     </div>
                     <div className={`w-full shrink-0 rounded-xl px-4 py-3 sm:w-auto sm:min-w-44 ${isUpcoming ? "bg-violet-50" : "bg-zinc-50"}`}>
                       <p className="text-sm font-semibold text-zinc-900">{formatEventDate(bandEvent.start_at)}</p>
