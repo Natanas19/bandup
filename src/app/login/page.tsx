@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
+type AuthDebugEntry = { time: string; message: string };
+
 function getFriendlyError(message: string) {
   if (message.toLowerCase().includes("invalid login credentials")) {
     return "E-mail ou senha incorretos. Confira seus dados e tente novamente.";
@@ -24,39 +26,64 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const [isAuthDebugEnabled, setIsAuthDebugEnabled] = useState(false);
+  const [authDebugEntries, setAuthDebugEntries] = useState<AuthDebugEntry[]>([]);
 
   useEffect(() => {
     let isMounted = true;
     let authStateChanged = false;
+    const debugEnabled = new URLSearchParams(window.location.search).get("debug") === "auth";
+    setIsAuthDebugEnabled(debugEnabled);
+
+    const logAuthDebug = (message: string) => {
+      if (!debugEnabled) return;
+      const time = new Date().toLocaleTimeString();
+      console.info(`[BandUp auth debug ${time}] ${message}`);
+      setAuthDebugEntries((entries) => [...entries, { time, message }]);
+    };
+
+    logAuthDebug("Inicialização da autenticação iniciada.");
     const supabase = getSupabaseBrowserClient();
+    logAuthDebug("Registrando onAuthStateChange.");
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       authStateChanged = true;
+      logAuthDebug(`onAuthStateChange recebeu ${event}, ${session ? "com sessão" : "sem sessão"}.`);
       if (!isMounted) return;
 
       if (session) {
         router.replace("/dashboard");
       } else if (event === "INITIAL_SESSION" || event === "SIGNED_OUT") {
         setIsCheckingSession(false);
+        logAuthDebug("Carregamento marcado como concluído pelo evento de autenticação.");
       }
     });
 
+    logAuthDebug("onAuthStateChange registrado.");
+    logAuthDebug("getSession() chamado; estado: pendente.");
     void supabase.auth.getSession().then(({ data, error: sessionError }) => {
+      logAuthDebug(`getSession() resolveu ${data.session ? "com sessão" : "sem sessão"}${sessionError ? `; erro: ${sessionError.message}` : ""}.`);
       if (!isMounted || authStateChanged) return;
 
       if (sessionError) {
+        logAuthDebug("Carregamento marcado como concluído após erro retornado por getSession().");
         setError("Não foi possível verificar sua sessão. Tente novamente.");
         setIsCheckingSession(false);
         return;
       }
 
       if (data.session) {
+        logAuthDebug("getSession() encontrou sessão; redirecionando para /dashboard.");
         router.replace("/dashboard");
         return;
       }
 
       setIsCheckingSession(false);
-    }).catch(() => {
+      logAuthDebug("Carregamento marcado como concluído após getSession() sem sessão.");
+    }).catch((sessionError: unknown) => {
+      const message = sessionError instanceof Error ? sessionError.message : String(sessionError);
+      logAuthDebug(`getSession() rejeitou; erro: ${message}.`);
       if (!isMounted || authStateChanged) return;
+      logAuthDebug("Carregamento marcado como concluído após rejeição de getSession().");
       setError("Não foi possível verificar sua sessão. Tente novamente.");
       setIsCheckingSession(false);
     });
@@ -66,6 +93,21 @@ export default function LoginPage() {
       authListener.subscription.unsubscribe();
     };
   }, [router]);
+
+  const authDebugPanel = isAuthDebugEnabled && (
+    <section className="fixed inset-x-3 bottom-3 z-50 max-h-[45vh] overflow-auto rounded-xl border border-amber-300 bg-white/95 p-3 text-xs text-zinc-800 shadow-xl sm:inset-x-auto sm:right-4 sm:w-[min(32rem,calc(100vw-2rem))]">
+      <h2 className="mb-2 font-semibold">Diagnóstico de autenticação</h2>
+      {authDebugEntries.length === 0 ? (
+        <p>Aguardando inicialização...</p>
+      ) : (
+        <ol className="space-y-1 font-mono">
+          {authDebugEntries.map((entry, index) => (
+            <li key={`${entry.time}-${index}`}><span className="text-zinc-500">[{entry.time}]</span> {entry.message}</li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -100,6 +142,7 @@ export default function LoginPage() {
   if (isCheckingSession) {
     return (
       <main className="flex flex-1 items-center justify-center px-5 py-12 sm:px-8">
+        {authDebugPanel}
         <p role="status" className="text-sm text-zinc-600">Verificando sua sessão...</p>
       </main>
     );
@@ -107,6 +150,7 @@ export default function LoginPage() {
 
   return (
     <main className="flex flex-1 items-center justify-center px-5 py-12 sm:px-8">
+      {authDebugPanel}
       <div className="grid w-full max-w-5xl overflow-hidden rounded-[2rem] bg-white shadow-[0_24px_80px_-32px_rgba(54,36,104,0.3)] md:grid-cols-[0.9fr_1.1fr]">
         <section className="relative flex min-h-64 flex-col justify-between overflow-hidden bg-gradient-to-br from-violet-700 via-violet-800 to-indigo-950 p-8 text-white sm:p-10 md:min-h-[600px]">
           <div aria-hidden="true" className="absolute -right-20 -top-24 h-72 w-72 rounded-full border border-white/15" />
