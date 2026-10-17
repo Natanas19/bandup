@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import BandNavigation from "@/components/band-navigation";
 import { useParams } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -19,15 +20,6 @@ type SummaryData = {
   event: { title: string; event_type: string; start_at: string; location: string | null } | null;
   members: number | null;
 };
-
-const navigationItems = [
-  { label: "Visão geral", active: true },
-  { label: "Tarefas", active: false },
-  { label: "Agenda", active: false },
-  { label: "Membros", active: false },
-  { label: "Links", active: false },
-  { label: "Configurações", active: false },
-];
 
 const eventTypes = [
   { value: "show", label: "Show" },
@@ -50,71 +42,10 @@ function formatEventTime(value: string) {
   return new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(value));
 }
 
-function BandNavigation({
-  bandId,
-  mobile = false,
-  onNavigate,
-}: {
-  bandId: string;
-  mobile?: boolean;
-  onNavigate?: () => void;
-}) {
-  return (
-    <nav aria-label="Navegação da banda">
-      <ul className={mobile ? "grid grid-cols-2 gap-2" : "space-y-1"}>
-        {navigationItems.map((item) => (
-          <li key={item.label}>
-            {item.active || item.label === "Tarefas" || item.label === "Agenda" || item.label === "Membros" || item.label === "Links" ? (
-              <Link
-                href={item.active
-                  ? `/bandas/${bandId}`
-                  : item.label === "Tarefas"
-                    ? `/bandas/${bandId}/tarefas`
-                    : item.label === "Agenda"
-                      ? `/bandas/${bandId}/agenda`
-                      : item.label === "Membros"
-                        ? `/bandas/${bandId}/membros`
-                        : `/bandas/${bandId}/links`}
-                onClick={onNavigate}
-                aria-current={item.active ? "page" : undefined}
-                className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold ${
-                  item.active
-                    ? mobile
-                      ? "bg-violet-700 text-white"
-                      : "bg-violet-50 text-violet-800"
-                    : mobile
-                      ? "border border-violet-200 bg-white text-violet-800"
-                      : "text-zinc-600 transition hover:bg-violet-50 hover:text-violet-800"
-                }`}
-              >
-                <span aria-hidden="true" className={`h-2 w-2 rounded-full ${item.active ? "bg-violet-500" : "bg-zinc-300"}`} />
-                {item.label}
-              </Link>
-            ) : (
-              <span
-                aria-disabled="true"
-                className={`flex min-h-11 items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-sm text-zinc-500 ${
-                  mobile ? "border border-zinc-200 bg-white" : ""
-                }`}
-              >
-                {item.label}
-                <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-[9px] font-semibold tracking-wide text-zinc-500 uppercase">
-                  Em breve
-                </span>
-              </span>
-            )}
-          </li>
-        ))}
-      </ul>
-    </nav>
-  );
-}
-
 export default function BandPage() {
   const { bandId } = useParams<{ bandId: string }>();
   const [band, setBand] = useState<Band | null>(null);
   const [pageState, setPageState] = useState<PageState>("loading");
-  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [summary, setSummary] = useState<SummaryData>({ tasks: null, event: null, members: null });
   const [cardStates, setCardStates] = useState<Record<"tasks" | "event" | "members", CardState>>({ tasks: "loading", event: "loading", members: "loading" });
 
@@ -278,7 +209,7 @@ export default function BandPage() {
 
         <div className="mt-8">
           <p className="mb-3 px-3 text-[11px] font-semibold tracking-[0.16em] text-zinc-400 uppercase">Workspace</p>
-          <BandNavigation bandId={band.id} />
+          <BandNavigation bandId={band.id} activeSection="overview" variant="sidebar" />
         </div>
 
         <Link
@@ -290,7 +221,7 @@ export default function BandPage() {
       </aside>
 
       <div className="min-w-0 flex-1">
-        <header className="sticky top-0 z-20 border-b border-violet-100 bg-white/95 px-4 py-3 backdrop-blur md:hidden">
+        <header className="border-b border-violet-100 bg-white px-4 py-3 md:hidden">
           <div className="flex min-w-0 items-center justify-between gap-3">
             <div className="min-w-0">
               <Link href="/dashboard" className="text-lg font-bold tracking-tight text-zinc-900">
@@ -298,34 +229,10 @@ export default function BandPage() {
               </Link>
               <p className="truncate text-xs text-zinc-500">{band.name}</p>
             </div>
-            <button
-              type="button"
-              aria-expanded={isMobileNavOpen}
-              aria-controls="mobile-band-navigation"
-              aria-label={isMobileNavOpen ? "Fechar navegação da banda" : "Abrir navegação da banda"}
-              onClick={() => setIsMobileNavOpen((isOpen) => !isOpen)}
-              className="flex min-h-11 shrink-0 items-center gap-2 rounded-xl border border-violet-200 px-3 text-sm font-semibold text-violet-800 transition hover:bg-violet-50 focus:outline-none focus:ring-4 focus:ring-violet-100"
-            >
-              <span aria-hidden="true" className="text-lg leading-none">{isMobileNavOpen ? "×" : "☰"}</span>
-              <span>{isMobileNavOpen ? "Fechar" : "Menu"}</span>
-            </button>
           </div>
-          {isMobileNavOpen && (
-            <div id="mobile-band-navigation" className="mt-3 border-t border-violet-100 pt-3">
-              <BandNavigation
-                bandId={band.id}
-                mobile
-                onNavigate={() => setIsMobileNavOpen(false)}
-              />
-              <Link
-                href="/dashboard"
-                onClick={() => setIsMobileNavOpen(false)}
-                className="mt-2 flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-zinc-600 transition hover:bg-violet-50 hover:text-violet-800"
-              >
-                ← Voltar para minhas bandas
-              </Link>
-            </div>
-          )}
+          <div className="mt-3">
+            <BandNavigation bandId={band.id} activeSection="overview" />
+          </div>
         </header>
 
         <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10">
