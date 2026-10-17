@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
+import BandNavigation from "@/components/band-navigation";
 import { useParams } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { LinkifiedText } from "@/components/linkified-text";
@@ -466,9 +467,7 @@ export default function BandTasksPage() {
   return (
     <main className="flex flex-1 justify-center px-4 py-6 sm:px-6 sm:py-10">
       <div className="w-full max-w-5xl min-w-0">
-        <Link href={`/bandas/${bandId}`} className="inline-flex min-h-11 items-center rounded-xl border border-violet-200 px-4 py-2.5 text-sm font-semibold text-violet-800 transition hover:bg-violet-50 focus:outline-none focus:ring-4 focus:ring-violet-100">
-          ← Voltar para a visão geral
-        </Link>
+        <BandNavigation bandId={bandId} activeSection="tarefas" />
 
         <header className="mt-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
