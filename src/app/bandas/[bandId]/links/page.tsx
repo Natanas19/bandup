@@ -304,7 +304,7 @@ export default function BandLinksPage() {
                       if (selectedPlatform !== "other") setCustomPlatform("");
                     }}
                     disabled={isSubmitting}
-                    className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
+                    className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-base md:text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
                   >
                     {platforms.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
@@ -321,13 +321,13 @@ export default function BandLinksPage() {
                       onChange={(event) => setCustomPlatform(event.target.value)}
                       disabled={isSubmitting}
                       placeholder="Ex.: SoundCloud"
-                      className="min-h-11 w-full rounded-xl border border-zinc-200 px-4 py-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
+                      className="min-h-11 w-full rounded-xl border border-zinc-200 px-4 py-3 text-base md:text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
                     />
                   </div>
                 )}
                 <div>
                   <label htmlFor="link-url" className="mb-2 block text-sm font-medium text-zinc-700">URL *</label>
-                  <input id="link-url" type="url" required maxLength={2000} value={url} onChange={(event) => setUrl(event.target.value)} disabled={isSubmitting} placeholder="https://..." className="min-h-11 w-full rounded-xl border border-zinc-200 px-4 py-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100" />
+                  <input id="link-url" type="url" required maxLength={2000} value={url} onChange={(event) => setUrl(event.target.value)} disabled={isSubmitting} placeholder="https://..." className="min-h-11 w-full rounded-xl border border-zinc-200 px-4 py-3 text-base md:text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100" />
                 </div>
               </div>
 
