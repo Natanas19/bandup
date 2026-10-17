@@ -93,21 +93,21 @@ export default function DashboardPage() {
   }, []);
 
   return (
-    <main className="flex flex-1 items-center justify-center px-6 py-16">
-      <section className="w-full max-w-3xl rounded-3xl border border-violet-100 bg-white p-8 shadow-[0_20px_60px_-32px_rgba(54,36,104,0.28)] sm:p-12">
+    <main className="flex flex-1 items-center justify-center px-4 py-6 sm:px-6 sm:py-16">
+      <section className="w-full max-w-3xl rounded-3xl border border-violet-100 bg-white p-5 shadow-[0_20px_60px_-32px_rgba(54,36,104,0.28)] sm:p-12">
         <div className="text-center">
           <p className="text-sm font-semibold tracking-widest text-violet-700 uppercase">BandUp</p>
-          <h1 className="mt-4 text-4xl font-semibold tracking-tight text-zinc-900">Dashboard</h1>
+          <h1 className="mt-3 text-3xl sm:mt-4 sm:text-4xl font-semibold tracking-tight text-zinc-900">Dashboard</h1>
           {isLoading ? (
             <p className="mt-4 text-zinc-600">Verificando sua sessão...</p>
           ) : loadError ? (
             <p role="alert" className="mt-5 text-sm text-red-700">{loadError}</p>
           ) : user ? (
-            <p className="mt-3 text-sm text-zinc-500">{user.email}</p>
+            <p className="mt-3 break-words text-sm text-zinc-500 sm:break-normal">{user.email}</p>
           ) : (
             <div className="mt-5">
               <p className="text-zinc-600">Nenhuma sessão autenticada foi encontrada.</p>
-              <Link href="/login" className="mt-5 inline-flex rounded-xl bg-violet-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-violet-800">
+              <Link href="/login" className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-violet-700 sm:w-auto px-5 py-3 text-sm font-semibold text-white transition hover:bg-violet-800">
                 Ir para o login
               </Link>
             </div>
@@ -116,20 +116,20 @@ export default function DashboardPage() {
 
         {!isLoading && !loadError && user && (
           bands.length === 0 ? (
-            <div className="mt-10 rounded-2xl bg-violet-50 px-6 py-8 text-center">
+            <div className="mt-6 rounded-2xl bg-violet-50 px-4 py-6 text-center sm:mt-10 sm:px-6 sm:py-8">
               <h2 className="text-xl font-semibold text-zinc-900">Sua jornada começa com uma banda</h2>
               <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-zinc-600">
                 Você ainda não participa de nenhuma banda. Crie a primeira para organizar tudo em um só lugar.
               </p>
-              <Link href="/bandas/nova" className="mt-6 inline-flex rounded-xl bg-violet-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-violet-800">
+              <Link href="/bandas/nova" className="mt-6 inline-flex w-full items-center justify-center rounded-xl bg-violet-700 sm:w-auto px-5 py-3 text-sm font-semibold text-white transition hover:bg-violet-800">
                 Criar minha banda
               </Link>
             </div>
           ) : (
-            <div className="mt-10">
-              <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="mt-6 sm:mt-10">
+              <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
                 <h2 className="text-xl font-semibold text-zinc-900">Suas bandas</h2>
-                <Link href="/bandas/nova" className="text-sm font-semibold text-violet-700 hover:text-violet-900">
+                <Link href="/bandas/nova" className="inline-flex min-h-11 items-center justify-center rounded-xl border border-violet-200 px-3 text-sm font-semibold text-violet-700 hover:text-violet-900 sm:inline sm:min-h-0 sm:rounded-none sm:border-0 sm:px-0">
                   Criar outra banda
                 </Link>
               </div>
@@ -138,15 +138,15 @@ export default function DashboardPage() {
                   <li key={band.id ?? index}>
                     <Link
                       href={`/bandas/${band.id}`}
-                      className="block rounded-2xl border border-violet-100 p-5 transition hover:border-violet-300 hover:bg-violet-50/50 focus:outline-none focus:ring-4 focus:ring-violet-100"
+                      className="block rounded-2xl border border-violet-100 p-4 sm:p-5 transition hover:border-violet-300 hover:bg-violet-50/50 focus:outline-none focus:ring-4 focus:ring-violet-100"
                     >
                     <div className="flex flex-wrap items-start justify-between gap-3">
-                      <h3 className="text-lg font-semibold text-zinc-900">{band.name}</h3>
+                      <h3 className="break-words text-lg font-semibold text-zinc-900 sm:break-normal">{band.name}</h3>
                       <span className="rounded-full bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700">
                         {role === "admin" ? "Administrador" : "Membro"}
                       </span>
                     </div>
-                    <p className="mt-2 text-sm leading-6 text-zinc-600">
+                    <p className="mt-2 break-words text-sm leading-6 text-zinc-600 sm:break-normal">
                       {band.description?.trim() || "Nenhuma descrição informada."}
                     </p>
                     </Link>
@@ -159,12 +159,12 @@ export default function DashboardPage() {
 
         {logoutError && <p role="alert" className="mt-5 text-center text-sm text-red-700">{logoutError}</p>}
         {user && !isLoading && (
-          <div className="mt-8 text-center">
+          <div className="mt-6 text-center sm:mt-8">
             <button
               type="button"
               onClick={handleSignOut}
               disabled={isLoggingOut}
-              className="inline-flex rounded-xl border border-violet-200 px-5 py-3 text-sm font-semibold text-violet-800 transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-70"
+              className="inline-flex w-full items-center justify-center rounded-xl border border-violet-200 px-5 py-3 text-sm font-semibold text-violet-800 transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
             >
               {isLoggingOut ? "Saindo..." : "Sair"}
             </button>
