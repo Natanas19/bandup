@@ -552,7 +552,7 @@ export default function BandAgendaPage() {
             <form onSubmit={handleCreateEvent} className="space-y-5">
               <div>
                 <label htmlFor="event-title" className="mb-2 block text-sm font-medium text-zinc-700">Título *</label>
-                <input id="event-title" type="text" required maxLength={200} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex.: Ensaio no estúdio" className="min-h-11 w-full rounded-xl border border-zinc-200 px-4 py-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100" />
+                <input id="event-title" type="text" required maxLength={200} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex.: Ensaio no estúdio" className="min-h-11 w-full rounded-xl border border-zinc-200 px-4 py-3 text-base md:text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100" />
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -562,7 +562,7 @@ export default function BandAgendaPage() {
                     const selectedEventType = event.target.value as EventType;
                     setEventType(selectedEventType);
                     if (selectedEventType !== "other") setCustomEventType("");
-                  }} className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100">
+                  }} className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-base md:text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100">
                     {eventTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
                   </select>
                 </div>
@@ -578,27 +578,27 @@ export default function BandAgendaPage() {
                       onChange={(event) => setCustomEventType(event.target.value)}
                       disabled={isSubmitting}
                       placeholder="Ex.: Podcast"
-                      className="min-h-11 w-full rounded-xl border border-zinc-200 px-4 py-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
+                      className="min-h-11 w-full rounded-xl border border-zinc-200 px-4 py-3 text-base md:text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
                     />
                   </div>
                 )}
                 <div>
                   <label htmlFor="event-location" className="mb-2 block text-sm font-medium text-zinc-700">Local <span className="font-normal text-zinc-400">(opcional)</span></label>
-                  <input id="event-location" type="text" maxLength={300} value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Ex.: Estúdio central" className="min-h-11 w-full rounded-xl border border-zinc-200 px-4 py-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100" />
+                  <input id="event-location" type="text" maxLength={300} value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Ex.: Estúdio central" className="min-h-11 w-full rounded-xl border border-zinc-200 px-4 py-3 text-base md:text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100" />
                 </div>
                 <div>
                   <label htmlFor="event-start" className="mb-2 block text-sm font-medium text-zinc-700">Início *</label>
-                  <input id="event-start" type="datetime-local" required min={minimumStartAt || undefined} value={startAt} disabled={isSubmitting} onChange={(event) => setStartAt(event.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100" />
+                  <input id="event-start" type="datetime-local" required min={minimumStartAt || undefined} value={startAt} disabled={isSubmitting} onChange={(event) => setStartAt(event.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-base md:text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100" />
                 </div>
                 <div>
                   <label htmlFor="event-end" className="mb-2 block text-sm font-medium text-zinc-700">Término <span className="font-normal text-zinc-400">(opcional)</span></label>
-                  <input id="event-end" type="datetime-local" min={endAtMinimum} value={endAt} disabled={isSubmitting} onChange={(event) => setEndAt(event.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100" />
+                  <input id="event-end" type="datetime-local" min={endAtMinimum} value={endAt} disabled={isSubmitting} onChange={(event) => setEndAt(event.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-base md:text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100" />
                 </div>
               </div>
 
               <div>
                 <label htmlFor="event-description" className="mb-2 block text-sm font-medium text-zinc-700">Descrição <span className="font-normal text-zinc-400">(opcional)</span></label>
-                <textarea id="event-description" rows={3} maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Adicione informações úteis para os integrantes" className="w-full resize-y rounded-xl border border-zinc-200 px-4 py-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100" />
+                <textarea id="event-description" rows={3} maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Adicione informações úteis para os integrantes" className="w-full resize-y rounded-xl border border-zinc-200 px-4 py-3 text-base md:text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100" />
               </div>
 
               {formError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{formError}</p>}

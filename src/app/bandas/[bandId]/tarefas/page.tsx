@@ -511,7 +511,7 @@ export default function BandTasksPage() {
                   maxLength={200}
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
-                  className="min-h-11 w-full rounded-xl border border-zinc-200 px-4 py-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
+                  className="min-h-11 w-full rounded-xl border border-zinc-200 px-4 py-3 text-base md:text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
                   placeholder="Ex.: Definir repertório do próximo ensaio"
                 />
               </div>
@@ -524,7 +524,7 @@ export default function BandTasksPage() {
                   maxLength={2000}
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
-                  className="w-full resize-y rounded-xl border border-zinc-200 px-4 py-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
+                  className="w-full resize-y rounded-xl border border-zinc-200 px-4 py-3 text-base md:text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
                   placeholder="Adicione detalhes para a banda"
                 />
               </div>
@@ -535,7 +535,7 @@ export default function BandTasksPage() {
                   id="task-event"
                   value={relatedEventId}
                   onChange={(event) => setRelatedEventId(event.target.value)}
-                  className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
+                  className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-base md:text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
                 >
                   <option value="">Nenhum evento</option>
                   {events.map((bandEvent) => (
@@ -549,23 +549,23 @@ export default function BandTasksPage() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div>
                   <label htmlFor="task-status" className="mb-2 block text-sm font-medium text-zinc-700">Status</label>
-                  <select id="task-status" value={status} onChange={(event) => setStatus(event.target.value as TaskStatus)} className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100">
+                  <select id="task-status" value={status} onChange={(event) => setStatus(event.target.value as TaskStatus)} className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-base md:text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100">
                     {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </div>
                 <div>
                   <label htmlFor="task-priority" className="mb-2 block text-sm font-medium text-zinc-700">Prioridade</label>
-                  <select id="task-priority" value={priority} onChange={(event) => setPriority(event.target.value as TaskPriority)} className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100">
+                  <select id="task-priority" value={priority} onChange={(event) => setPriority(event.target.value as TaskPriority)} className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-base md:text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100">
                     {priorityOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </div>
                 <div>
                   <label htmlFor="task-due-date" className="mb-2 block text-sm font-medium text-zinc-700">Prazo <span className="font-normal text-zinc-400">(opcional)</span></label>
-                  <input id="task-due-date" type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100" />
+                  <input id="task-due-date" type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-base md:text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100" />
                 </div>
                 <div>
                   <label htmlFor="task-assignee" className="mb-2 block text-sm font-medium text-zinc-700">Responsável <span className="font-normal text-zinc-400">(opcional)</span></label>
-                  <select id="task-assignee" value={assignedTo} onChange={(event) => setAssignedTo(event.target.value)} className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100">
+                  <select id="task-assignee" value={assignedTo} onChange={(event) => setAssignedTo(event.target.value)} className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-base md:text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100">
                     <option value="">Sem responsável</option>
                     {members.map((member) => <option key={member.userId} value={member.userId}>{member.label}</option>)}
                   </select>

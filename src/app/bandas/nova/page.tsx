@@ -119,7 +119,7 @@ export default function NewBandPage() {
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 placeholder="Ex.: Os Ensaios"
-                className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
+                className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-base md:text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
               />
             </div>
 
@@ -135,7 +135,7 @@ export default function NewBandPage() {
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 placeholder="Conte um pouco sobre a banda"
-                className="w-full resize-y rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
+                className="w-full resize-y rounded-xl border border-zinc-200 bg-white px-4 py-3 text-base md:text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
               />
             </div>
 
