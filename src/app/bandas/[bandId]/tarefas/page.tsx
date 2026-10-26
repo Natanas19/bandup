@@ -6,6 +6,8 @@ import BandNavigation from "@/components/band-navigation";
 import { useParams } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { LinkifiedText } from "@/components/linkified-text";
+import { requiredTextError } from "@/lib/form-validation";
+import { canEditTask, canReassignTask, canSaveTask, getBandAccess, recordWriteError } from "@/lib/record-permissions";
 
 type TaskStatus = "todo" | "in_progress" | "done";
 type TaskPriority = "low" | "medium" | "high";
@@ -26,6 +28,7 @@ type Task = {
   assigned_to: string | null;
   event_id: string | null;
   created_at: string;
+  created_by: string;
 };
 
 type BandMember = {
@@ -123,12 +126,17 @@ export default function BandTasksPage() {
   const [dueDate, setDueDate] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
   const [relatedEventId, setRelatedEventId] = useState("");
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const access = getBandAccess(currentUserId, isAdmin ? "admin" : "member");
+  const editingTask = tasks.find((task) => task.id === editingTaskId);
+  const canChangeAssignee = !editingTaskId || (!!editingTask && canReassignTask(access, editingTask));
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadTasksPage() {
       setPageState("loading");
+      setCurrentUserId(null);
       setLoadError("");
 
       try {
@@ -212,7 +220,7 @@ export default function BandTasksPage() {
 
         const { data: taskRows, error: tasksError } = await supabase
           .from("tasks")
-          .select("id, title, description, status, priority, due_date, assigned_to, event_id, created_at")
+          .select("id, title, description, status, priority, due_date, assigned_to, event_id, created_at, created_by")
           .eq("band_id", bandId)
           .order("due_date", { ascending: true, nullsFirst: false })
           .order("created_at", { ascending: false });
@@ -226,6 +234,7 @@ export default function BandTasksPage() {
 
         setBandName(band.name);
         setIsAdmin(membership.role === "admin");
+        setCurrentUserId(user.id);
         setMembers(bandMembers);
         setEvents((eventRows ?? []) as BandEvent[]);
         setTasks(sortTasks((taskRows ?? []) as unknown as Task[]));
@@ -263,6 +272,7 @@ export default function BandTasksPage() {
   }
 
   function startEditing(task: Task) {
+    if (!canEditTask(access, task) || isSubmitting || deletingTaskId) return;
     setEditingTaskId(task.id);
     setTitle(task.title);
     setDescription(task.description ?? "");
@@ -282,10 +292,16 @@ export default function BandTasksPage() {
 
   async function handleCreateTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isSubmitting) return;
+    if (isSubmitting || deletingTaskId) return;
 
     setFormError("");
     setFormSuccess("");
+    const normalizedTitle = title.trim();
+    const titleError = requiredTextError(normalizedTitle, "o título da tarefa");
+    if (titleError) {
+      setFormError(titleError);
+      return;
+    }
     setIsSubmitting(true);
 
     try {
@@ -300,7 +316,7 @@ export default function BandTasksPage() {
 
       const { data: membership, error: membershipError } = await supabase
         .from("band_members")
-        .select("user_id")
+        .select("role")
         .eq("band_id", bandId)
         .eq("user_id", user.id)
         .maybeSingle();
@@ -308,6 +324,25 @@ export default function BandTasksPage() {
       if (membershipError || !membership) {
         setFormError("Você não tem mais acesso a esta banda.");
         return;
+      }
+
+      const freshAccess = getBandAccess(user.id, membership.role);
+      if (!freshAccess) {
+        setFormError("Você não tem permissão para salvar tarefas nesta banda.");
+        return;
+      }
+      if (editingTaskId) {
+        const { data: currentTask, error: currentError } = await supabase
+          .from("tasks").select("created_by, assigned_to")
+          .eq("id", editingTaskId).eq("band_id", bandId).maybeSingle();
+        if (currentError || !currentTask) {
+          setFormError(recordWriteError(currentError, "editar esta tarefa"));
+          return;
+        }
+        if (!canSaveTask(freshAccess, currentTask, assignedTo || null)) {
+          setFormError("Você não tem permissão para salvar esta tarefa com o responsável selecionado. Recarregue a página para atualizar seu acesso.");
+          return;
+        }
       }
 
       if (assignedTo && !members.some((member) => member.userId === assignedTo)) {
@@ -325,7 +360,7 @@ export default function BandTasksPage() {
         : null;
 
       const taskValues = {
-        title: title.trim(),
+        title: normalizedTitle,
         description: description.trim() || null,
         status,
         priority,
@@ -340,11 +375,11 @@ export default function BandTasksPage() {
           .update({ ...taskValues, updated_at: new Date().toISOString() })
           .eq("id", editingTaskId)
           .eq("band_id", bandId)
-          .select("id, title, description, status, priority, due_date, assigned_to, event_id, created_at")
+          .select("id, title, description, status, priority, due_date, assigned_to, event_id, created_at, created_by")
           .maybeSingle();
 
         if (error || !updatedTask) {
-          setFormError("Nao foi possivel salvar as alteracoes. Confira os dados e tente novamente.");
+          setFormError(recordWriteError(error, "salvar esta tarefa"));
           return;
         }
 
@@ -365,11 +400,11 @@ export default function BandTasksPage() {
           created_by: user.id,
           ...taskValues,
         })
-        .select("id, title, description, status, priority, due_date, assigned_to, event_id, created_at")
+        .select("id, title, description, status, priority, due_date, assigned_to, event_id, created_at, created_by")
         .single();
 
       if (error || !createdTask) {
-          setFormError("Nao foi possivel salvar as alteracoes. Confira os dados e tente novamente.");
+          setFormError(recordWriteError(error, "salvar esta tarefa"));
         return;
       }
 
@@ -384,7 +419,7 @@ export default function BandTasksPage() {
   }
 
   async function handleDeleteTask(task: Task) {
-    if (deletingTaskId || !window.confirm(`Excluir a tarefa "${task.title}"? Esta ação não pode ser desfeita.`)) return;
+    if (isSubmitting || deletingTaskId || !window.confirm(`Excluir a tarefa "${task.title}"? Esta ação não pode ser desfeita.`)) return;
 
     setDeleteError("");
     setDeletingTaskId(task.id);
@@ -420,7 +455,7 @@ export default function BandTasksPage() {
         .maybeSingle();
 
       if (deleteTaskError || !deletedTask) {
-        setDeleteError("Não foi possível excluir a tarefa. Tente novamente.");
+        setDeleteError(recordWriteError(deleteTaskError, "excluir esta tarefa"));
         return;
       }
 
@@ -564,10 +599,11 @@ export default function BandTasksPage() {
                 </div>
                 <div>
                   <label htmlFor="task-assignee" className="mb-2 block text-sm font-medium text-zinc-700">Responsável <span className="font-normal text-zinc-400">(opcional)</span></label>
-                  <select id="task-assignee" value={assignedTo} onChange={(event) => setAssignedTo(event.target.value)} className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-base md:text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100">
+                  <select id="task-assignee" disabled={!canChangeAssignee || isSubmitting} aria-describedby={!canChangeAssignee ? "task-assignee-help" : undefined} value={assignedTo} onChange={(event) => setAssignedTo(event.target.value)} className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-base md:text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100">
                     <option value="">Sem responsável</option>
                     {members.map((member) => <option key={member.userId} value={member.userId}>{member.label}</option>)}
                   </select>
+                  {!canChangeAssignee && <p id="task-assignee-help" className="mt-2 text-sm text-zinc-500">Somente o autor ou um administrador pode alterar o responsável.</p>}
                 </div>
               </div>
 
@@ -627,26 +663,26 @@ export default function BandTasksPage() {
                     </div>
                   )}
                   {task.event_id && <p className="mt-2 text-xs text-zinc-500">Evento: <span className="font-medium text-zinc-700">{events.find((bandEvent) => bandEvent.id === task.event_id)?.title ?? "Evento da banda"}</span></p>}
-                  <div className="mt-4 flex flex-col-reverse gap-2 border-t border-zinc-100 pt-3 sm:flex-row sm:justify-end">
-                    <button
+                  {(canEditTask(access, task) || isAdmin) && <div className="mt-4 flex flex-col-reverse gap-2 border-t border-zinc-100 pt-3 sm:flex-row sm:justify-end">
+                    {canEditTask(access, task) && <button
                       type="button"
                       onClick={() => startEditing(task)}
                       disabled={isSubmitting || deletingTaskId !== null}
                       className="inline-flex min-h-10 items-center justify-center rounded-xl border border-violet-200 px-4 py-2 text-sm font-semibold text-violet-800 transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Editar
-                    </button>
+                    </button>}
                     {isAdmin && (
                       <button
                         type="button"
                         onClick={() => void handleDeleteTask(task)}
-                        disabled={deletingTaskId !== null}
+                        disabled={isSubmitting || deletingTaskId !== null}
                         className="inline-flex min-h-10 items-center rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {deletingTaskId === task.id ? "Excluindo..." : "Excluir"}
                       </button>
                     )}
-                  </div>
+                  </div>}
                 </article>
               );
             })}

@@ -5,17 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-
-function createSlug(name: string) {
-  const normalizedName = name
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-
-  return `${normalizedName || "banda"}-${crypto.randomUUID().slice(0, 8)}`;
-}
+import { createBandSlug } from "@/lib/band-slug";
+import { requiredTextError } from "@/lib/form-validation";
 
 export default function NewBandPage() {
   const router = useRouter();
@@ -58,6 +49,12 @@ export default function NewBandPage() {
     if (isCreating) return;
 
     setErrorMessage("");
+    const normalizedName = name.trim();
+    const nameError = requiredTextError(normalizedName, "o nome da banda");
+    if (nameError) {
+      setErrorMessage(nameError);
+      return;
+    }
     setIsCreating(true);
 
     try {
@@ -70,8 +67,8 @@ export default function NewBandPage() {
       }
 
       const { error } = await supabase.from("bands").insert({
-        name: name.trim(),
-        slug: createSlug(name.trim()),
+        name: normalizedName,
+        slug: createBandSlug(normalizedName),
         description: description.trim() || null,
       });
 
