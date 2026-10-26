@@ -6,6 +6,7 @@ import BandNavigation from "@/components/band-navigation";
 import { useParams } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { LinkifiedText } from "@/components/linkified-text";
+import { calendarDay, formatTaskDate, taskDeadlinePatch } from "@/lib/date-time";
 import { requiredTextError } from "@/lib/form-validation";
 import { canEditTask, canReassignTask, canSaveTask, getBandAccess, recordWriteError } from "@/lib/record-permissions";
 
@@ -67,8 +68,8 @@ function sortTasks(tasks: Task[]) {
     const completedOrder = Number(first.status === "done") - Number(second.status === "done");
     if (completedOrder !== 0) return completedOrder;
 
-    const firstDueDate = first.due_date ? Date.parse(first.due_date) : Number.POSITIVE_INFINITY;
-    const secondDueDate = second.due_date ? Date.parse(second.due_date) : Number.POSITIVE_INFINITY;
+    const firstDueDate = first.due_date ? Number(calendarDay(first.due_date).replaceAll("-", "")) : Number.POSITIVE_INFINITY;
+    const secondDueDate = second.due_date ? Number(calendarDay(second.due_date).replaceAll("-", "")) : Number.POSITIVE_INFINITY;
     if (firstDueDate !== secondDueDate) return firstDueDate - secondDueDate;
 
     return Date.parse(second.created_at) - Date.parse(first.created_at);
@@ -76,7 +77,7 @@ function sortTasks(tasks: Task[]) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(new Date(value));
+  return formatTaskDate(value);
 }
 
 function formatEventDate(value: string) {
@@ -278,10 +279,7 @@ export default function BandTasksPage() {
     setDescription(task.description ?? "");
     setStatus(task.status);
     setPriority(task.priority);
-    if (task.due_date) {
-      const date = new Date(task.due_date);
-      setDueDate(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`);
-    } else setDueDate("");
+    setDueDate(task.due_date ? calendarDay(task.due_date) : "");
     setAssignedTo(task.assigned_to ?? "");
     setRelatedEventId(task.event_id ?? "");
     setFormError("");
@@ -355,16 +353,24 @@ export default function BandTasksPage() {
         return;
       }
 
-      const dueDateValue = dueDate
-        ? new Date(`${dueDate}T12:00:00`).toISOString()
-        : null;
+      if (editingTaskId && !editingTask) {
+        setFormError("Não foi possível recuperar o prazo original. Recarregue a página.");
+        return;
+      }
+      let deadlineValues: { due_date?: string | null };
+      try {
+        deadlineValues = taskDeadlinePatch(dueDate, editingTaskId ? editingTask?.due_date : undefined);
+      } catch {
+        setFormError("Informe um prazo válido.");
+        return;
+      }
 
       const taskValues = {
         title: normalizedTitle,
         description: description.trim() || null,
         status,
         priority,
-        due_date: dueDateValue,
+        ...deadlineValues,
         assigned_to: assignedTo || null,
         event_id: relatedEventId || null,
       };

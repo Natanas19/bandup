@@ -6,6 +6,7 @@ import BandNavigation from "@/components/band-navigation";
 import { useParams } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { LinkifiedText } from "@/components/linkified-text";
+import { differentLocalEventDays, eventSchedulePatch, toLocalDateTimeInput, validateEventSchedule, watchPageClock } from "@/lib/date-time";
 import { requiredTextError } from "@/lib/form-validation";
 import { canEditEvent, getBandAccess, recordWriteError } from "@/lib/record-permissions";
 
@@ -114,51 +115,6 @@ function getLocalDateTimeMinimum(now: number) {
   return localValue.toISOString().slice(0, 16);
 }
 
-function toLocalDateTimeInput(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
-}
-
-function parseLocalDateTime(value: string) {
-  const [datePart, timePart] = value.split("T");
-  if (!datePart || !timePart) return new Date(Number.NaN);
-
-  const [year, month, day] = datePart.split("-").map(Number);
-  const [hour, minute] = timePart.split(":").map(Number);
-  if ([year, month, day, hour, minute].some(Number.isNaN)) return new Date(Number.NaN);
-
-  const localDate = new Date(year, month - 1, day, hour, minute);
-  if (
-    localDate.getFullYear() !== year ||
-    localDate.getMonth() !== month - 1 ||
-    localDate.getDate() !== day ||
-    localDate.getHours() !== hour ||
-    localDate.getMinutes() !== minute
-  ) {
-    return new Date(Number.NaN);
-  }
-
-  return localDate;
-}
-
-function validateEventSchedule(startValue: string, endValue: string, now: number) {
-  const startDate = parseLocalDateTime(startValue);
-  const endDate = endValue ? parseLocalDateTime(endValue) : null;
-
-  if (!startValue || Number.isNaN(startDate.getTime()) || (endDate && Number.isNaN(endDate.getTime()))) {
-    return "Informe uma data e horário válidos.";
-  }
-  if (startDate.getTime() < now) {
-    return "O início do evento não pode estar no passado.";
-  }
-  if (endDate && endDate < startDate) {
-    return "O término não pode ser anterior ao início.";
-  }
-
-  return null;
-}
-
 export default function BandAgendaPage() {
   const { bandId } = useParams<{ bandId: string }>();
   const [pageState, setPageState] = useState<PageState>("loading");
@@ -185,7 +141,10 @@ export default function BandAgendaPage() {
   const [location, setLocation] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const access = getBandAccess(currentUserId, isAdmin ? "admin" : "member");
+  const originalEvent = events.find((item) => item.id === editingEventId);
   const endAtMinimum = startAt || undefined;
+
+  useEffect(() => watchPageClock(setCurrentTime), []);
 
   useEffect(() => {
     if (!isFormOpen) return;
@@ -380,7 +339,11 @@ export default function BandAgendaPage() {
 
     const submittedStartAt = startAt;
     const submittedEndAt = endAt;
-    const scheduleError = validateEventSchedule(submittedStartAt, submittedEndAt, Date.now());
+    if (editingEventId && !originalEvent) {
+      setFormError("Não foi possível recuperar as datas originais. Recarregue a página.");
+      return;
+    }
+    const scheduleError = validateEventSchedule(submittedStartAt, submittedEndAt, Date.now(), originalEvent);
     if (scheduleError) {
       setFormError(scheduleError);
       return;
@@ -414,35 +377,35 @@ export default function BandAgendaPage() {
         setFormError("Você não tem permissão para salvar eventos nesta banda.");
         return;
       }
+      let currentSchedule = originalEvent;
       if (editingEventId) {
         const { data: currentEvent, error: currentError } = await supabase
-          .from("events").select("created_by")
+          .from("events").select("created_by, start_at, end_at")
           .eq("id", editingEventId).eq("band_id", bandId).maybeSingle();
         if (currentError || !currentEvent) {
           setFormError(recordWriteError(currentError, "editar este evento"));
           return;
         }
+        currentSchedule = { ...originalEvent!, ...currentEvent };
         if (!canEditEvent(freshAccess, currentEvent)) {
           setFormError("Você não tem permissão para editar este evento. Recarregue a página para atualizar seu acesso.");
           return;
         }
       }
 
-      const finalScheduleError = validateEventSchedule(submittedStartAt, submittedEndAt, Date.now());
+      const finalScheduleError = validateEventSchedule(submittedStartAt, submittedEndAt, Date.now(), originalEvent, currentSchedule);
       if (finalScheduleError) {
         setFormError(finalScheduleError);
         return;
       }
 
-      const startDate = parseLocalDateTime(submittedStartAt);
-      const endDate = submittedEndAt ? parseLocalDateTime(submittedEndAt) : null;
+      const scheduleValues = eventSchedulePatch(submittedStartAt, submittedEndAt, originalEvent);
 
       const eventValues = {
         title: normalizedTitle,
         description: description.trim() || null,
         event_type: normalizedEventType,
-        start_at: startDate.toISOString(),
-        end_at: endDate ? endDate.toISOString() : null,
+        ...scheduleValues,
         location: location.trim() || null,
       };
 
@@ -621,7 +584,7 @@ export default function BandAgendaPage() {
                 </div>
                 <div>
                   <label htmlFor="event-start" className="mb-2 block text-sm font-medium text-zinc-700">Início *</label>
-                  <input id="event-start" type="datetime-local" required min={minimumStartAt || undefined} value={startAt} disabled={isSubmitting} onChange={(event) => setStartAt(event.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-base md:text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100" />
+                  <input id="event-start" type="datetime-local" required min={editingEventId ? undefined : minimumStartAt || undefined} value={startAt} disabled={isSubmitting} onChange={(event) => setStartAt(event.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-base md:text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100" />
                 </div>
                 <div>
                   <label htmlFor="event-end" className="mb-2 block text-sm font-medium text-zinc-700">Término <span className="font-normal text-zinc-400">(opcional)</span></label>
@@ -665,7 +628,7 @@ export default function BandAgendaPage() {
           </section>
         ) : (
           <section aria-label="Lista de eventos" className="mt-6 space-y-3">
-            {events.map((bandEvent) => {
+            {sortEvents(events, currentTime).map((bandEvent) => {
               const isUpcoming = Date.parse(bandEvent.start_at) >= currentTime;
 
               return (
@@ -683,7 +646,7 @@ export default function BandAgendaPage() {
                       <p className="text-sm font-semibold text-zinc-900">{formatEventDate(bandEvent.start_at)}</p>
                       <p className="mt-1 text-sm tabular-nums text-zinc-600">
                         {formatEventTime(bandEvent.start_at)}
-                        {bandEvent.end_at && <> – {formatEventTime(bandEvent.end_at)}</>}
+                        {bandEvent.end_at && <> – {differentLocalEventDays(bandEvent.start_at, bandEvent.end_at) && <>{formatEventDate(bandEvent.end_at)} às </>}{formatEventTime(bandEvent.end_at)}</>}
                       </p>
                     </div>
                   </div>

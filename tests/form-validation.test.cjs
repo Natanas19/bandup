@@ -126,7 +126,10 @@ for (const form of forms) {
     });
 
     test(`${form.name} ${editing ? "edit" : "create"}: valid text is trimmed only at submission`, async () => {
-      const f = fixture({ ...form.initial, [form.title]: "  São João 🎵  ", ...(editing ? { [form.editing]: "existing" } : {}) });
+      const originals = editing ? (form.name === "task"
+        ? { 3: [{ id: "existing", due_date: null }] }
+        : { 4: [{ id: "existing", start_at: "2099-12-31T18:00:00Z", end_at: null }] }) : {};
+      const f = fixture({ ...form.initial, ...originals, [form.title]: "  São João 🎵  ", ...(editing ? { [form.editing]: "existing" } : {}) });
       const Component = f.load(form.file).default;
       await findForm(f.render(Component)).props.onSubmit({ preventDefault() {} });
       const write = f.calls.find((call) => call[0] === (editing ? "update" : "insert"));
@@ -297,4 +300,68 @@ test("task assignee cannot bypass disabled reassignment field", async () => {
   await findForm(f.render(f.load(forms[1].file).default)).props.onSubmit({ preventDefault() {} });
   assert.equal(f.calls.some((call) => call[0] === "update"), false);
   assert.ok(f.states[10].includes("responsável selecionado"));
+});
+
+// Full form regressions: all writes below go only to the in-memory Supabase stub.
+for (const phase of ["future", "started", "ended"]) {
+  test(`event ${phase}: edit text without rewriting either timestamp`, async () => {
+    const now = Date.now();
+    const start = new Date(now + (phase === "future" ? 86_400_000 : -86_400_000)).toISOString().replace(/\.\d{3}Z$/, ".123456Z");
+    const end = new Date(now + (phase === "ended" ? -43_200_000 : 172_800_000)).toISOString().replace(/\.\d{3}Z$/, ".654321Z");
+    const record = { ...eventRecord, created_by: "user", start_at: start, end_at: end };
+    const f = fixture({ 0: "ready", 1: now, 3: true, 4: [record], 22: "user" }, undefined, { record });
+    const Component = f.load(forms[2].file).default;
+    actionButton(f.render(Component), "Editar").props.onClick();
+    let tree = f.render(Component);
+    const input = nodes(tree, (node) => node.props?.id === "event-start")[0];
+    assert.equal(input.props.min, undefined, "native min must not block editing old events");
+    nodes(tree, (node) => node.props?.id === "event-title")[0].props.onChange({ target: { value: "Local atualizado" } });
+    tree = f.render(Component);
+    await findForm(tree).props.onSubmit({ preventDefault() {} });
+    const write = f.calls.find((call) => call[0] === "update");
+    assert.ok(write, f.states[11]);
+    assert.equal(write[2].title, "Local atualizado");
+    assert.equal("start_at" in write[2], false);
+    assert.equal("end_at" in write[2], false);
+    assert.equal(f.states[4][0].start_at, start);
+    assert.equal(f.states[4][0].end_at, end);
+  });
+}
+
+test("event form: changing original start to a different past date never writes", async () => {
+  const record = { ...eventRecord, created_by: "user", start_at: "2020-01-01T18:00:30.123Z" };
+  const f = fixture({ 0: "ready", 3: true, 4: [record], 22: "user" }, undefined, { record });
+  const Component = f.load(forms[2].file).default;
+  actionButton(f.render(Component), "Editar").props.onClick();
+  const tree = f.render(Component);
+  nodes(tree, (node) => node.props?.id === "event-start")[0].props.onChange({ target: { value: "2020-01-02T12:00" } });
+  await findForm(f.render(Component)).props.onSubmit({ preventDefault() {} });
+  assert.equal(f.calls.some((call) => call[0] === "update"), false);
+  assert.match(f.states[11], /passado/);
+});
+
+test("event form: creating a new event in the past never writes", async () => {
+  const f = fixture({ 0: "ready", 6: true, 15: "Evento", 19: "2020-01-01T12:00" });
+  const Component = f.load(forms[2].file).default;
+  await findForm(f.render(Component)).props.onSubmit({ preventDefault() {} });
+  assert.equal(f.calls.length, 0);
+  assert.match(f.states[11], /passado/);
+});
+
+test("task form: text-only edit and completion preserve original deadline precision", async () => {
+  const due = "2020-01-01T00:00:30.123456Z";
+  const record = { ...taskRecord, created_by: "user", due_date: due };
+  const f = fixture({ 0: "ready", 2: true, 3: [record], 21: "user", 5: [{ userId: "assignee", label: "Integrante" }] }, undefined, { record });
+  const Component = f.load(forms[1].file).default;
+  actionButton(f.render(Component), "Editar").props.onClick();
+  let tree = f.render(Component);
+  assert.equal(nodes(tree, (node) => node.props?.id === "task-due-date")[0].props.value, "2019-12-31");
+  nodes(tree, (node) => node.props?.id === "task-status")[0].props.onChange({ target: { value: "done" } });
+  tree = f.render(Component);
+  await findForm(tree).props.onSubmit({ preventDefault() {} });
+  const write = f.calls.find((call) => call[0] === "update");
+  assert.ok(write, f.states[10]);
+  assert.equal("due_date" in write[2], false);
+  assert.equal(write[2].status, "done");
+  assert.equal(f.states[3][0].due_date, due);
 });

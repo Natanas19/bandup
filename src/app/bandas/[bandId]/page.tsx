@@ -5,6 +5,7 @@ import Link from "next/link";
 import BandNavigation from "@/components/band-navigation";
 import BandPublicProfileSettings from "@/components/band-public-profile-settings";
 import { useParams } from "next/navigation";
+import { isTaskOverdue, watchPageClock } from "@/lib/date-time";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type Band = {
@@ -52,12 +53,18 @@ export default function BandPage() {
   const [summary, setSummary] = useState<SummaryData>({ tasks: null, event: null, members: null });
   const [cardStates, setCardStates] = useState<Record<"tasks" | "event" | "members", CardState>>({ tasks: "loading", event: "loading", members: "loading" });
 
+  const [deadlineTasks, setDeadlineTasks] = useState<{ status: string; due_date: string | null }[]>([]);
+  const [currentTime, setCurrentTime] = useState(0);
+
+  useEffect(() => watchPageClock(setCurrentTime), []);
+
   useEffect(() => {
     let isMounted = true;
 
     async function loadBand() {
       setPageState("loading");
       setBand(null);
+      setDeadlineTasks([]);
 
       try {
         const supabase = getSupabaseBrowserClient();
@@ -122,9 +129,10 @@ export default function BandPage() {
         if (!isMounted) return;
         if (tasksResult.status === "fulfilled" && !tasksResult.value.error) {
           const tasks = tasksResult.value.data ?? [];
+          setDeadlineTasks(tasks);
           const completed = tasks.filter((task) => task.status === "done").length;
           const overdue = tasks.filter((task) =>
-            task.status !== "done" && task.due_date !== null && Date.parse(task.due_date) < Date.now()
+            isTaskOverdue(task, Date.now())
           ).length;
           setSummary((current) => ({ ...current, tasks: {
             total: tasks.length,
@@ -279,7 +287,7 @@ export default function BandPage() {
                 <p className="mt-4 text-2xl font-semibold tracking-tight text-zinc-900">{summary.tasks?.total} no total</p>
                 <p className="mt-2 text-sm text-zinc-600">{summary.tasks?.pending} pendentes</p>
                 <p className="mt-1 text-sm text-zinc-600">{summary.tasks?.completed} concluídas</p>
-                <p className="mt-1 text-sm font-medium text-red-700">{summary.tasks?.overdue ?? 0} atrasadas</p>
+                <p className="mt-1 text-sm font-medium text-red-700">{deadlineTasks.filter((task) => isTaskOverdue(task, currentTime)).length} atrasadas</p>
               </>}
               <Link href={`/bandas/${band.id}/tarefas`} className="mt-5 inline-flex min-h-11 items-center text-sm font-semibold text-violet-800 hover:text-violet-950">Ver tarefas <span aria-hidden="true" className="ml-1">→</span></Link>
             </article>
