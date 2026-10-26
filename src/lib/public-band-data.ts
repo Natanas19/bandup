@@ -69,7 +69,10 @@ export function toPublicBand(
     const platform: SocialPlatform = Object.prototype.hasOwnProperty.call(socialPlatforms, entry.platform)
       ? entry.platform as SocialPlatform
       : "other";
-    links.push({ id: `public-link-${links.length}`, platform, url });
+    const customLabel = platform === "other" && entry.platform !== "other"
+      ? entry.platform.trim() : "";
+    links.push({ id: `public-link-${links.length}`, platform, url,
+      ...(customLabel ? { label: customLabel } : {}) });
   }
   const src = safeImage(value.logo_url as string | null, imageOrigin);
   return {

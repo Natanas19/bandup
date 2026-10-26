@@ -142,6 +142,21 @@ test("images require approved HTTPS origin and public storage path", () => {
   assert.equal(transform(row({ logo_url: image }), "magijos", origin).image.src, image);
 });
 
+test("custom platform names survive public projection and unsafe URLs remain omitted", () => {
+  const transform = fixture().load("src/lib/public-band-data.ts").toPublicBand;
+  const band = transform(row({ name: "B".repeat(400), description: null, links: [
+    { platform: " SoundCloud ", url: "https://soundcloud.com/band" },
+    { platform: "SoundCloud", url: "javascript:alert(1)" },
+    { platform: "instagram", url: "https://instagram.com/band" },
+  ] }), "magijos", origin);
+  assert.equal(band.name.length, 400);
+  assert.equal(band.description, "");
+  assert.equal(band.links.length, 2);
+  assert.equal(band.links[0].label, "SoundCloud");
+  assert.equal(band.links[0].platform, "other");
+  assert.equal(band.links[1].platform, "instagram");
+});
+
 test("query failures expose only a generic error", async () => {
   for (const config of [{ error: { message: "PRIVATE", code: "secret" } }, { transportThrows: true }]) {
     const f = fixture(config);

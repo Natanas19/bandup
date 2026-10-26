@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import BandNavigation from "@/components/band-navigation";
 import { useParams } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { BandPublicationError, getPublicProfilePath, updateLinkPublication, verifyBandAdmin } from "@/lib/band-publication";
 
 type Platform = "instagram" | "spotify" | "youtube" | "tiktok" | "facebook" | "website" | "other";
-type SocialLink = { id: string; platform: string; url: string; created_at: string };
+type SocialLink = { id: string; platform: string; url: string; created_at: string; is_public: boolean };
 type PageState = "loading" | "unauthenticated" | "unavailable" | "error" | "ready";
 
 const platforms: { value: Platform; label: string }[] = [
@@ -38,6 +39,14 @@ export default function BandLinksPage() {
   const { bandId } = useParams<{ bandId: string }>();
   const [pageState, setPageState] = useState<PageState>("loading");
   const [bandName, setBandName] = useState("");
+  const [bandSlug, setBandSlug] = useState<string | null>(null);
+  const [bandIsPublic, setBandIsPublic] = useState(false);
+  const [publishNewLink, setPublishNewLink] = useState(false);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
+  const [publicationError, setPublicationError] = useState("");
+  const [publicationSuccess, setPublicationSuccess] = useState("");
+  const publicationLock = useRef(false);
+  const activeBand = useRef<string | null>(bandId);
   const [isAdmin, setIsAdmin] = useState(false);
   const [links, setLinks] = useState<SocialLink[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -52,10 +61,16 @@ export default function BandLinksPage() {
 
   useEffect(() => {
     let isMounted = true;
+    activeBand.current = bandId;
 
     async function loadLinksPage() {
       setPageState("loading");
       setLoadError("");
+      setPublicationError("");
+      setPublicationSuccess("");
+      setPublishNewLink(false);
+      setPublishingId(null);
+      setIsAdmin(false);
 
       try {
         const supabase = getSupabaseBrowserClient();
@@ -94,7 +109,7 @@ export default function BandLinksPage() {
 
         const { data: band, error: bandError } = await supabase
           .from("bands")
-          .select("name")
+          .select("name, slug, is_public")
           .eq("id", bandId)
           .maybeSingle();
 
@@ -107,7 +122,7 @@ export default function BandLinksPage() {
 
         const { data, error: linksError } = await supabase
           .from("social_links")
-          .select("id, platform, url, created_at")
+          .select("id, platform, url, created_at, is_public")
           .eq("band_id", bandId)
           .order("created_at", { ascending: true });
 
@@ -119,6 +134,8 @@ export default function BandLinksPage() {
         }
 
         setBandName(band.name);
+        setBandSlug(band.slug);
+        setBandIsPublic(band.is_public);
         setIsAdmin(membership.role === "admin");
         setLinks((data ?? []) as SocialLink[]);
         setPageState("ready");
@@ -133,31 +150,25 @@ export default function BandLinksPage() {
     void loadLinksPage();
     return () => {
       isMounted = false;
+      activeBand.current = null;
     };
   }, [bandId]);
 
   async function verifyAdmin() {
-    const supabase = getSupabaseBrowserClient();
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-    const user = sessionData.session?.user;
-    if (sessionError || !user) return null;
-
-    const { data: membership, error: membershipError } = await supabase
-      .from("band_members")
-      .select("role")
-      .eq("band_id", bandId)
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (membershipError || membership?.role !== "admin") return null;
-    return { supabase, user };
+    return verifyBandAdmin(bandId);
   }
 
   async function handleAddLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isSubmitting) return;
+    if (isSubmitting || publishingId !== null || deletingId !== null) return;
 
     setFormError("");
+    setPublicationSuccess("");
+    setPublicationError("");
+    if (publishNewLink && !getPublicProfilePath(bandSlug)) {
+      setFormError("A banda precisa de um endereço válido para selecionar links públicos.");
+      return;
+    }
     const normalizedPlatform = customPlatform.trim();
     if (platform === "other" && !normalizedPlatform) {
       setFormError("Informe o nome da plataforma.");
@@ -180,11 +191,11 @@ export default function BandLinksPage() {
 
       const { data, error } = await access.supabase
         .from("social_links")
-        .insert({ band_id: bandId, platform: platform === "other" ? normalizedPlatform : platform, url: normalizedUrl })
-        .select("id, platform, url, created_at")
+        .insert({ band_id: bandId, platform: platform === "other" ? normalizedPlatform : platform, url: normalizedUrl, is_public: publishNewLink })
+        .select("id, platform, url, created_at, is_public")
         .single();
 
-      if (error || !data) {
+      if (error || !data || data.is_public !== publishNewLink) {
         setFormError("Não foi possível adicionar o link. Confira a URL e tente novamente.");
         return;
       }
@@ -193,7 +204,9 @@ export default function BandLinksPage() {
       setUrl("");
       setPlatform("instagram");
       setCustomPlatform("");
+      setPublishNewLink(false);
       setIsFormOpen(false);
+      setPublicationSuccess("Link cadastrado e visibilidade confirmada.");
     } catch {
       setFormError("Não foi possível adicionar o link agora. Tente novamente.");
     } finally {
@@ -201,8 +214,35 @@ export default function BandLinksPage() {
     }
   }
 
+  async function handlePublicationChange(link: SocialLink) {
+    if (!isAdmin || publicationLock.current || isSubmitting || deletingId) return;
+    const nextValue = !link.is_public;
+    if (nextValue && !getPublicProfilePath(bandSlug)) return;
+    publicationLock.current = true;
+    setPublishingId(link.id);
+    setPublicationError("");
+    setPublicationSuccess("");
+    try {
+      const confirmed = await updateLinkPublication(bandId, link.id, link.is_public, nextValue);
+      if (activeBand.current !== bandId) return;
+      setLinks((currentLinks) => currentLinks.map((currentLink) =>
+        currentLink.id === link.id ? { ...currentLink, is_public: confirmed.is_public } : currentLink
+      ));
+      setPublicationSuccess(confirmed.is_public
+        ? "Link selecionado para o perfil público. Ele aparece quando o perfil da banda está ativado."
+        : "Link removido do perfil público. Ele continua disponível aos integrantes.");
+    } catch (cause) {
+      if (activeBand.current === bandId) setPublicationError(
+        cause instanceof BandPublicationError ? cause.message : "Não foi possível confirmar a visibilidade. Recarregue a página.",
+      );
+    } finally {
+      publicationLock.current = false;
+      if (activeBand.current === bandId) setPublishingId(null);
+    }
+  }
+
   async function handleDeleteLink(link: SocialLink) {
-    if (deletingId || !window.confirm(`Excluir o link ${getPlatformLabel(link.platform)}?`)) return;
+    if (deletingId || publishingId !== null || isSubmitting || !window.confirm(`Excluir o link ${getPlatformLabel(link.platform)}?`)) return;
 
     setDeleteError("");
     setDeletingId(link.id);
@@ -273,19 +313,29 @@ export default function BandLinksPage() {
           <div className="min-w-0">
             <p className="text-xs font-semibold tracking-[0.16em] text-violet-700 uppercase">{bandName}</p>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-900 sm:text-4xl">Links</h1>
-            <p className="mt-2 text-sm leading-6 text-zinc-600">Acesse os links públicos da banda.</p>
+            <p className="mt-2 text-sm leading-6 text-zinc-600">Gerencie os links da banda e escolha quais aparecem no perfil público.</p>
           </div>
           {isAdmin && (
             <button
               type="button"
               onClick={() => { setFormError(""); setIsFormOpen((isOpen) => !isOpen); }}
-              disabled={isSubmitting}
+              disabled={isSubmitting || publishingId !== null || deletingId !== null}
               className="inline-flex min-h-11 w-full shrink-0 items-center justify-center rounded-xl bg-violet-700 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-700/15 transition hover:bg-violet-800 focus:outline-none focus:ring-4 focus:ring-violet-200 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
             >
               {isFormOpen ? "Fechar formulário" : "+ Adicionar link"}
             </button>
           )}
         </header>
+
+        <section aria-label="Visibilidade dos links" className="mt-5 rounded-2xl border border-violet-100 bg-violet-50/50 p-4 text-sm leading-6 text-zinc-700">
+          <p>{bandIsPublic
+            ? "O perfil da banda está ativado. Somente os links selecionados abaixo aparecem publicamente."
+            : "O perfil da banda está desativado. A seleção dos links fica guardada, mas nenhum é exibido publicamente."}</p>
+          {!getPublicProfilePath(bandSlug) && <p className="mt-2 text-amber-900">A banda não possui um endereço público válido. Você pode ocultar links já selecionados, mas não selecionar novos.</p>}
+          {!isAdmin && <p className="mt-2 text-zinc-500">Somente administradores podem alterar a visibilidade dos links.</p>}
+        </section>
+        <p role="status" aria-live="polite" className="mt-3 text-sm text-violet-800">{publicationSuccess}</p>
+        {publicationError && <p role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{publicationError}</p>}
 
         {isAdmin && isFormOpen && (
           <section className="mt-6 rounded-2xl border border-violet-100 bg-white p-5 shadow-[0_16px_48px_-32px_rgba(54,36,104,0.35)] sm:p-7">
@@ -330,6 +380,20 @@ export default function BandLinksPage() {
                 </div>
               </div>
 
+              <div className="rounded-xl border border-violet-100 bg-violet-50/50 p-4">
+                <label className="flex min-h-11 items-center gap-3 text-sm font-medium text-zinc-800">
+                  <input type="checkbox" checked={publishNewLink}
+                    onChange={(event) => setPublishNewLink(event.target.checked)}
+                    disabled={isSubmitting || !getPublicProfilePath(bandSlug)}
+                    aria-describedby="new-link-publication-help"
+                    className="h-5 w-5 shrink-0 accent-violet-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-violet-700" />
+                  Exibir no perfil público
+                </label>
+                <p id="new-link-publication-help" className="mt-2 text-sm leading-6 text-zinc-600">
+                  Novos links ficam privados por padrão. Um link selecionado só aparece publicamente quando o perfil da banda está ativado.
+                </p>
+              </div>
+
               {formError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{formError}</p>}
 
               <div className="flex justify-end">
@@ -347,7 +411,7 @@ export default function BandLinksPage() {
         {links.length === 0 ? (
           <section className="mt-7 rounded-2xl border border-dashed border-violet-200 bg-white px-5 py-10 text-center sm:py-14">
             <h2 className="text-lg font-semibold text-zinc-900">Ainda não há links cadastrados.</h2>
-            <p className="mt-2 text-sm text-zinc-600">Os links públicos da banda aparecerão aqui.</p>
+            <p className="mt-2 text-sm text-zinc-600">Cadastre um link para começar. A publicação de cada link é opcional e fica desativada por padrão.</p>
           </section>
         ) : (
           <section aria-label="Links da banda" className="mt-7 space-y-3">
@@ -360,11 +424,24 @@ export default function BandLinksPage() {
                   ) : (
                     <p className="mt-1 break-all text-sm text-zinc-700 sm:text-base">{link.url}</p>
                   )}
+                  <span className="mt-2 inline-flex w-fit rounded-full bg-violet-50 px-3 py-1 text-xs font-medium text-violet-800">
+                    {link.is_public ? bandIsPublic ? "Exibido no perfil público" : "Selecionado · perfil desativado" : "Somente integrantes"}
+                  </span>
                 </div>
                 {isAdmin && (
-                  <button type="button" onClick={() => void handleDeleteLink(link)} disabled={deletingId !== null} className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60">
-                    {deletingId === link.id ? "Excluindo..." : "Excluir"}
-                  </button>
+                  <div className="flex w-full flex-col gap-2 sm:w-auto sm:shrink-0">
+                    <button type="button" role="switch" aria-checked={link.is_public}
+                      aria-label={`Exibir no perfil público: ${getPlatformLabel(link.platform)} — ${link.url}`}
+                      aria-busy={publishingId === link.id}
+                      onClick={() => void handlePublicationChange(link)}
+                      disabled={publishingId !== null || deletingId !== null || isSubmitting || (!link.is_public && !getPublicProfilePath(bandSlug))}
+                      className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-violet-200 px-4 py-2.5 text-sm font-semibold text-violet-800 transition hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-violet-200 disabled:cursor-not-allowed disabled:opacity-60">
+                      {publishingId === link.id ? "Salvando..." : link.is_public ? "Ocultar do perfil" : "Exibir no perfil"}
+                    </button>
+                    <button type="button" onClick={() => void handleDeleteLink(link)} disabled={deletingId !== null || publishingId !== null || isSubmitting} className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60">
+                      {deletingId === link.id ? "Excluindo..." : "Excluir"}
+                    </button>
+                  </div>
                 )}
               </article>
             ))}

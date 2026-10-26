@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import BandNavigation from "@/components/band-navigation";
+import BandPublicProfileSettings from "@/components/band-public-profile-settings";
 import { useParams } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -10,6 +11,8 @@ type Band = {
   id: string;
   name: string;
   description: string | null;
+  slug: string | null;
+  is_public: boolean;
   role: string;
 };
 
@@ -91,7 +94,7 @@ export default function BandPage() {
 
         const { data: bandData, error: bandError } = await supabase
           .from("bands")
-          .select("id, name, description")
+          .select("id, name, description, slug, is_public")
           .eq("id", bandId)
           .maybeSingle();
 
@@ -235,13 +238,21 @@ export default function BandPage() {
           </div>
         </header>
 
-        <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10">
+        <div className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6 sm:py-8 lg:px-10 lg:py-10">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
+            <div className="min-w-0 sm:flex-1">
               <p className="text-xs font-semibold tracking-[0.16em] text-violet-700 uppercase">Visão geral</p>
-              <h1 className="mt-2 break-words text-3xl font-semibold tracking-tight text-zinc-900 sm:text-4xl">
+              <h1 title={band.name} className="mt-2 line-clamp-2 break-words text-2xl font-semibold tracking-tight text-zinc-900 [overflow-wrap:anywhere] sm:line-clamp-none sm:text-4xl sm:[overflow-wrap:normal]">
                 {band.name}
               </h1>
+              {band.name.length > 32 && (
+                <details className="mt-2 text-sm text-zinc-600 sm:hidden">
+                  <summary className="w-fit cursor-pointer rounded-lg py-2 font-medium text-violet-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-700">
+                    Ver nome completo
+                  </summary>
+                  <p className="mt-1 select-text rounded-xl bg-violet-50 p-3 [overflow-wrap:anywhere]">{band.name}</p>
+                </details>
+              )}
               {band.description?.trim() && (
                 <p className="mt-3 max-w-2xl break-words text-sm leading-6 text-zinc-600 sm:text-base">
                   {band.description}
@@ -253,8 +264,16 @@ export default function BandPage() {
             </span>
           </div>
 
-          <section aria-label="Resumo da banda" className="mt-7 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4">
-            <article className="min-w-0 rounded-2xl border border-violet-100 bg-white p-5 shadow-[0_12px_36px_-28px_rgba(54,36,104,0.35)] sm:p-6">
+          <BandPublicProfileSettings
+            key={band.id}
+            bandId={band.id}
+            initialSlug={band.slug}
+            initiallyPublic={band.is_public}
+            isAdmin={band.role === "admin"}
+          />
+
+          <section aria-label="Resumo da banda" className="mt-5 grid grid-cols-1 gap-3 sm:mt-7 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4">
+            <article className="min-w-0 rounded-2xl border border-violet-100 bg-white p-4 shadow-[0_12px_36px_-28px_rgba(54,36,104,0.35)] sm:p-6">
               <p className="text-sm font-medium text-zinc-600">Tarefas</p>
               {cardStates.tasks === "loading" ? <p className="mt-4 text-sm text-zinc-500">Carregando tarefas...</p> : cardStates.tasks === "error" ? <p role="status" className="mt-4 text-sm text-red-700">Não foi possível carregar as tarefas.</p> : <>
                 <p className="mt-4 text-2xl font-semibold tracking-tight text-zinc-900">{summary.tasks?.total} no total</p>
@@ -264,7 +283,7 @@ export default function BandPage() {
               </>}
               <Link href={`/bandas/${band.id}/tarefas`} className="mt-5 inline-flex min-h-11 items-center text-sm font-semibold text-violet-800 hover:text-violet-950">Ver tarefas <span aria-hidden="true" className="ml-1">→</span></Link>
             </article>
-            <article className="min-w-0 rounded-2xl border border-violet-100 bg-white p-5 shadow-[0_12px_36px_-28px_rgba(54,36,104,0.35)] sm:p-6">
+            <article className="min-w-0 rounded-2xl border border-violet-100 bg-white p-4 shadow-[0_12px_36px_-28px_rgba(54,36,104,0.35)] sm:p-6">
               <p className="text-sm font-medium text-zinc-600">Próximos eventos</p>
               {cardStates.event === "loading" ? <p className="mt-4 text-sm text-zinc-500">Carregando agenda...</p> : cardStates.event === "error" ? <p role="status" className="mt-4 text-sm text-red-700">Não foi possível carregar a agenda.</p> : summary.event ? <>
                 <h2 className="mt-4 break-words text-lg font-semibold text-zinc-900">{summary.event.title}</h2>
@@ -274,7 +293,7 @@ export default function BandPage() {
               </> : <p className="mt-4 text-sm text-zinc-600">Nenhum próximo evento</p>}
               <Link href={`/bandas/${band.id}/agenda`} className="mt-5 inline-flex min-h-11 items-center text-sm font-semibold text-violet-800 hover:text-violet-950">Ver agenda <span aria-hidden="true" className="ml-1">→</span></Link>
             </article>
-            <article className="min-w-0 rounded-2xl border border-violet-100 bg-white p-5 shadow-[0_12px_36px_-28px_rgba(54,36,104,0.35)] sm:p-6">
+            <article className="min-w-0 rounded-2xl border border-violet-100 bg-white p-4 shadow-[0_12px_36px_-28px_rgba(54,36,104,0.35)] sm:p-6">
               <p className="text-sm font-medium text-zinc-600">Membros</p>
               {cardStates.members === "loading" ? <p className="mt-4 text-sm text-zinc-500">Carregando integrantes...</p> : cardStates.members === "error" ? <p role="status" className="mt-4 text-sm text-red-700">Não foi possível carregar os integrantes.</p> : <p className="mt-4 text-3xl font-semibold tracking-tight text-zinc-900">{summary.members} {summary.members === 1 ? "integrante" : "integrantes"}</p>}
               <Link href={`/bandas/${band.id}/membros`} className="mt-5 inline-flex min-h-11 items-center text-sm font-semibold text-violet-800 hover:text-violet-950">Ver membros <span aria-hidden="true" className="ml-1">→</span></Link>
