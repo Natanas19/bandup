@@ -1,0 +1,518 @@
+[
+  {
+    "input": "https://example.com",
+    "sql": true,
+    "javascript": true,
+    "note": ""
+  },
+  {
+    "input": "http://example.com/path?q=one#listen",
+    "sql": true,
+    "javascript": true,
+    "note": ""
+  },
+  {
+    "input": "HTTPS://Example.COM:443/Path",
+    "sql": true,
+    "javascript": true,
+    "note": ""
+  },
+  {
+    "input": "  https://example.com/path  ",
+    "sql": true,
+    "javascript": true,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a@b?q=user@host#@",
+    "sql": true,
+    "javascript": true,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a b",
+    "sql": true,
+    "javascript": true,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/%40user",
+    "sql": true,
+    "javascript": true,
+    "note": ""
+  },
+  {
+    "input": "http://127.0.0.1:3002",
+    "sql": true,
+    "javascript": true,
+    "note": ""
+  },
+  {
+    "input": "https://example.com.",
+    "sql": true,
+    "javascript": true,
+    "note": ""
+  },
+  {
+    "input": "http://[::1]:80/path",
+    "sql": true,
+    "javascript": true,
+    "note": ""
+  },
+  {
+    "input": "https://[2001:db8::1]:65535",
+    "sql": true,
+    "javascript": true,
+    "note": ""
+  },
+  {
+    "input": "http://[::ffff:192.0.2.1]",
+    "sql": true,
+    "javascript": true,
+    "note": ""
+  },
+  {
+    "input": "http://localhost",
+    "sql": true,
+    "javascript": true,
+    "note": ""
+  },
+  {
+    "input": "http://a:0",
+    "sql": true,
+    "javascript": true,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/path%20name",
+    "sql": true,
+    "javascript": true,
+    "note": ""
+  },
+  {
+    "input": null,
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": " ",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "not a URL",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "//example.com",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https:example.com",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https:/example.com",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "ftp://example.com",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "javascript:alert(1)",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "data:text/html,x",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "file:///tmp/a",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "http://:80",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://user:secret@example.com",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://user@example.com",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://:secret@example.com",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://u%73er:p%40ss@example.com",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com:65536",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com:abc",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "http://[::1",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "http://[not-ipv6]",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "http://256.0.0.1",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "http://example.123",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "http://example..com",
+    "sql": false,
+    "javascript": true,
+    "note": "WHATWG accepts empty internal DNS labels; SQL requires nonempty labels."
+  },
+  {
+    "input": "https://exam\nple.com",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "\thttps://example.com",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com\r",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/\u007f",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\u0001",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\u0002",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\u0003",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\u0004",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\u0005",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\u0006",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\u0007",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\b",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\t",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\n",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\u000b",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\f",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\r",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\u000e",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\u000f",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\u0010",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\u0011",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\u0012",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\u0013",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\u0014",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\u0015",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\u0016",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\u0017",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\u0018",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\u0019",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\u001a",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\u001b",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\u001c",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\u001d",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\u001e",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://example.com/a\u001f",
+    "sql": false,
+    "javascript": false,
+    "note": ""
+  },
+  {
+    "input": "https://b\u00fccher.example",
+    "sql": false,
+    "javascript": true,
+    "note": "Unicode hostname"
+  },
+  {
+    "input": "https://xn--bcher-kva.example",
+    "sql": false,
+    "javascript": true,
+    "note": "IDNA/Punycode hostname"
+  },
+  {
+    "input": "http://127.1",
+    "sql": false,
+    "javascript": true,
+    "note": "abbreviated IPv4"
+  },
+  {
+    "input": "http://010.0.0.1",
+    "sql": false,
+    "javascript": true,
+    "note": "octal IPv4"
+  },
+  {
+    "input": "http://0x7f000001",
+    "sql": false,
+    "javascript": true,
+    "note": "hex IPv4"
+  },
+  {
+    "input": "http://under_score.example",
+    "sql": false,
+    "javascript": true,
+    "note": "non-DNS host syntax"
+  },
+  {
+    "input": "http://-host.example",
+    "sql": false,
+    "javascript": true,
+    "note": "non-DNS hyphen placement"
+  },
+  {
+    "input": "http://example.com:",
+    "sql": false,
+    "javascript": true,
+    "note": "empty port"
+  },
+  {
+    "input": "http://example.com:000080",
+    "sql": false,
+    "javascript": true,
+    "note": "noncanonical long port"
+  },
+  {
+    "input": "\ufeffhttps://example.com",
+    "sql": false,
+    "javascript": true,
+    "note": "Unicode trim"
+  },
+  {
+    "input": "https://example.com/\\path",
+    "sql": false,
+    "javascript": true,
+    "note": "WHATWG backslash repair"
+  },
+  {
+    "input": "https://example.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sql": false,
+    "javascript": true,
+    "note": "length limit"
+  }
+]

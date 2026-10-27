@@ -1,5 +1,12 @@
 # Public band profiles: migration and local regression validation
 
+> Current URL-safety test procedure: see [sql_test_execution.md](sql_test_execution.md).
+> The revised suite is prepared, not executed. It now requires the approved URL
+> safety database and effective harness capabilities, not the role name postgres.
+> Earlier execution reports and commands below are historical, not instructions
+> to access those environments or evidence that this revision passed.
+
+
 ## Status and scope
 
 The seven local BandUp migrations were applied successfully to the disposable

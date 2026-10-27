@@ -1,6 +1,8 @@
--- DISPOSABLE LOCAL DATABASE ONLY. Apply migrations first, then run as postgres
+-- DISPOSABLE LOCAL DATABASE ONLY. Apply migrations first, then use a capable administrative harness
 -- with psql -v ON_ERROR_STOP=1. No extensions required. Never use production.
+\set ON_ERROR_STOP on
 BEGIN;
+\ir sql_test_capabilities.sql
 
 CREATE FUNCTION pg_temp.assert_true(ok BOOLEAN, label TEXT)
 RETURNS VOID LANGUAGE PLPGSQL SECURITY INVOKER SET search_path = '' AS $$

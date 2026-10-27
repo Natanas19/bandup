@@ -1,5 +1,12 @@
 # Record ownership guards: validation and reversal
 
+> Current URL-safety test procedure: see [sql_test_execution.md](sql_test_execution.md).
+> The revised suite is prepared, not executed. It now requires the approved URL
+> safety database and effective harness capabilities, not the role name postgres.
+> Earlier execution reports and commands below are historical, not instructions
+> to access those environments or evidence that this revision passed.
+
+
 ## Scope
 
 Migration: `20261017180000_record_ownership_guards.sql`.

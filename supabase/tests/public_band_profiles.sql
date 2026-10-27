@@ -1,18 +1,18 @@
 -- PREPARED, NOT EXECUTED. Disposable local Supabase-compatible database ONLY.
--- Plain psql regression suite, not pgTAP. Start as postgres after all migrations.
+-- Plain psql regression suite, not pgTAP. Start as a capable administrative harness after all migrations.
 -- This script does not create a database or apply any migration.
 \set ON_ERROR_STOP on
 BEGIN;
+\ir sql_test_capabilities.sql
 
 DO $prerequisites$
 BEGIN
-  IF CURRENT_USER <> 'postgres'
-     OR pg_catalog.to_regclass('public.public_band_profiles') IS NULL
+  IF pg_catalog.to_regclass('public.public_band_profiles') IS NULL
      OR pg_catalog.to_regprocedure('private.guard_band_publication()') IS NULL
      OR pg_catalog.to_regprocedure('private.guard_social_link_publication()') IS NULL
      OR pg_catalog.to_regprocedure('private.guard_event_ownership()') IS NULL
      OR pg_catalog.to_regprocedure('private.guard_band_member_band()') IS NULL THEN
-    RAISE EXCEPTION 'Use postgres in an approved disposable local database after all migrations';
+    RAISE EXCEPTION 'Required public profile objects are missing in the approved disposable database';
   END IF;
 END;
 $prerequisites$;
@@ -74,7 +74,7 @@ BEGIN
 END;
 $function$;
 
--- Catalog checks run as postgres, before switching to application roles.
+-- Catalog checks run as the administrative harness, before switching to application roles.
 SELECT pg_temp.public_profile_assert((
   SELECT pg_catalog.array_agg(column_name::text ORDER BY ordinal_position)
     = ARRAY['name', 'slug', 'description', 'logo_url', 'links']::text[]
@@ -369,7 +369,7 @@ SELECT pg_temp.public_profile_assert(
 );
 
 -- Exercise the triggers independently of RLS, using the privileged test harness.
--- These are not application access paths: postgres remains trusted infrastructure.
+-- These are not application access paths: the administrative harness remains trusted infrastructure.
 RESET ROLE;
 SELECT pg_temp.public_profile_actor('71000000-0000-0000-0000-000000000003');
 SELECT pg_temp.public_profile_expect_error($q$
