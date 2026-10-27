@@ -2,6 +2,7 @@
 
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { isValidPublicSlug } from "@/lib/public-band-data";
+import { getSafeExternalUrl } from "@/lib/social-links";
 
 export class BandPublicationError extends Error {}
 
@@ -45,6 +46,16 @@ export async function updateBandPublication(bandId: string, isPublic: boolean) {
     throw new BandPublicationError("A banda precisa de um endereço válido antes de ativar o perfil público.");
   }
 
+  if (isPublic) {
+    // Legacy selected links must be repaired or hidden before re-publication.
+    const { data: selected, error: linksError } = await access.supabase
+      .from("social_links").select("url").eq("band_id", bandId).eq("is_public", true);
+    if (linksError || !Array.isArray(selected)) throw unconfirmed();
+    if (selected.some((link) => !getSafeExternalUrl(link.url))) {
+      throw new BandPublicationError("Corrija ou oculte os links com URL insegura antes de ativar o perfil p\u00fablico.");
+    }
+  }
+
   const { data: updated, error } = await access.supabase
     .from("bands")
     .update({ is_public: isPublic })
@@ -79,14 +90,27 @@ export async function updateLinkPublication(
     }
   }
 
-  const { data: updated, error } = await access.supabase
+  let publishUrl: string | null = null;
+  if (isPublic) {
+    // Validate the stored row, not a potentially stale value supplied by the UI.
+    const { data: current, error: currentError } = await access.supabase
+      .from("social_links").select("url").eq("id", linkId).eq("band_id", bandId).maybeSingle();
+    if (currentError || !current) throw unconfirmed();
+    if (!getSafeExternalUrl(current.url)) {
+      throw new BandPublicationError("Corrija a URL insegura antes de publicar este link.");
+    }
+    publishUrl = current.url;
+  }
+
+  let update = access.supabase
     .from("social_links")
     .update({ is_public: isPublic })
     .eq("id", linkId)
     .eq("band_id", bandId)
-    .eq("is_public", previousValue)
-    .select("id, band_id, is_public")
-    .maybeSingle();
+    .eq("is_public", previousValue);
+  // If the URL changed since validation, fail instead of publishing another URL.
+  if (publishUrl !== null) update = update.eq("url", publishUrl);
+  const { data: updated, error } = await update.select("id, band_id, is_public").maybeSingle();
 
   if (error || !updated || updated.id !== linkId || updated.band_id !== bandId || updated.is_public !== isPublic) throw unconfirmed();
 

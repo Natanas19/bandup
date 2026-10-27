@@ -20,7 +20,9 @@ export type PublicSocialLink = {
 export function getSafeExternalUrl(value: string): string | null {
   if (/[\u0000-\u001f\u007f]/.test(value)) return null;
   try {
-    const url = new URL(value.trim());
+    const trimmed = value.trim();
+    if (!/^https?:\/\//i.test(trimmed)) return null;
+    const url = new URL(trimmed);
     if (
       !["https:", "http:"].includes(url.protocol) ||
       !url.hostname ||

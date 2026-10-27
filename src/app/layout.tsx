@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import PrivateSessionBoundary from "@/components/private-session-boundary";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -24,7 +25,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="pt-BR" className="h-full antialiased">
-      <body className="flex min-h-full flex-col">{children}</body>
+      <body className="flex min-h-full flex-col"><PrivateSessionBoundary>{children}</PrivateSessionBoundary></body>
     </html>
   );
 }
