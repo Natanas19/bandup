@@ -1,3 +1,4 @@
+import { isLaboratoryHttpOrigin } from "./development-lab";
 import {
   getSafeExternalUrl,
   socialPlatforms,
@@ -31,8 +32,9 @@ function safeImage(value: string | null, origin: string): string | null {
   if (!safe) return null;
   try {
     const url = new URL(safe);
+    const labHttp = isLaboratoryHttpOrigin(url.origin);
     if (
-      url.protocol !== "https:" ||
+      (url.protocol !== "https:" && !labHttp) ||
       url.origin !== new URL(origin).origin ||
       !url.pathname.startsWith("/storage/v1/object/public/") ||
       url.pathname.toLowerCase().endsWith(".svg") ||

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createClient } from "@supabase/supabase-js";
+import { isLaboratoryHttpOrigin } from "../development-lab";
 
 const unavailable = () => new Error("Não foi possível carregar a página pública.");
 
@@ -10,12 +11,21 @@ function publicConfiguration() {
   if (!value || !key) throw unavailable();
 
   try {
-    const url = new URL(value);
-    const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
-    if (
-      url.username || url.password || url.search || url.hash ||
-      (url.protocol !== "https:" && !(local && url.protocol === "http:"))
-    ) throw unavailable();
+    const validateUrl = (input: string, endpoint: "public" | "internal") => {
+      const url = new URL(input);
+      const labHttp = isLaboratoryHttpOrigin(url.origin, endpoint);
+      if (
+        /[\u0000-\u0020\u007f]/.test(input) ||
+        url.username || url.password || url.search || url.hash ||
+        (url.protocol !== "https:" && !labHttp)
+      ) throw unavailable();
+      return url.origin;
+    };
+    const origin = validateUrl(value, "public");
+    const internalValue = process.env.SUPABASE_INTERNAL_URL;
+    const internalOrigin = internalValue === undefined
+      ? origin
+      : validateUrl(internalValue, "internal");
 
     // Accept publishable keys or legacy anon JWTs; never a privileged key.
     if (key === "sb_publishable_") throw unavailable();
@@ -25,7 +35,7 @@ function publicConfiguration() {
       const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
       if (payload.role !== "anon") throw unavailable();
     }
-    return { origin: url.origin, key };
+    return { origin, internalOrigin, key };
   } catch {
     throw unavailable();
   }
@@ -35,8 +45,8 @@ export async function readPublicBandRow(slug: string): Promise<{
   data: unknown;
   imageOrigin: string;
 }> {
-  const { origin, key } = publicConfiguration();
-  const client = createClient(origin, key, {
+  const { origin, internalOrigin, key } = publicConfiguration();
+  const client = createClient(internalOrigin, key, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,

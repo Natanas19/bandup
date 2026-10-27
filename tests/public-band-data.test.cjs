@@ -157,6 +157,38 @@ test("custom platform names survive public projection and unsafe URLs remain omi
   assert.equal(band.links[1].platform, "instagram");
 });
 
+test("centralized laboratory settings preserve exact origins and reject non-development modes", () => {
+  for (const mode of ["development", "production", "test", undefined]) {
+    const f = fixture({ env: { NODE_ENV: mode } });
+    const { laboratory, isLaboratoryHttpOrigin } = f.load("src/lib/development-lab.ts");
+    const config = f.load("next.config.ts").default;
+    assert.deepEqual(config.allowedDevOrigins, laboratory.allowedDevOrigins);
+    assert.equal(isLaboratoryHttpOrigin(laboratory.publicOrigin, "public"), mode === "development");
+    assert.equal(isLaboratoryHttpOrigin(laboratory.internalOrigin, "internal"), mode === "development");
+    assert.equal(isLaboratoryHttpOrigin(laboratory.publicOrigin, "internal"), false);
+    assert.equal(isLaboratoryHttpOrigin(laboratory.internalOrigin, "public"), false);
+    assert.equal(isLaboratoryHttpOrigin("http://remote.example"), false);
+  }
+});
+
+test("local HTTP images require development, exact approved origin and public storage path", () => {
+  for (const mode of ["development", "production", "test"]) {
+    const transform = fixture({ env: { NODE_ENV: mode } }).load("src/lib/public-band-data.ts").toPublicBand;
+    for (const host of ["http://192.168.0.6:55321", "http://127.0.0.1:55321",
+      "http://192.168.0.7:55321", "http://192.168.0.6:55322", "http://localhost:55321",
+      "http://remote.example"]) {
+      const logo_url = host + "/storage/v1/object/public/bands/a.png";
+      const allowed = mode === "development" && ["http://192.168.0.6:55321", "http://127.0.0.1:55321"].includes(host);
+      assert.equal(transform(row({ logo_url }), "magijos", host).image?.src ?? null, allowed ? logo_url : null);
+    }
+    const lan = "http://192.168.0.6:55321";
+    for (const suffix of ["/private/a.png", "/storage/v1/object/public/a.svg", "/storage/v1/object/public/a.png?token=x"]) {
+      assert.equal(transform(row({ logo_url: lan + suffix }), "magijos", lan).image, null);
+    }
+    assert.equal(transform(row({ logo_url: "http://127.0.0.1:55321/storage/v1/object/public/a.png" }), "magijos", lan).image, null);
+  }
+});
+
 test("query failures expose only a generic error", async () => {
   for (const config of [{ error: { message: "PRIVATE", code: "secret" } }, { transportThrows: true }]) {
     const f = fixture(config);
@@ -236,4 +268,42 @@ test("backend configuration paths are normalized like the existing browser clien
   const f = fixture({ env: { NEXT_PUBLIC_SUPABASE_URL: origin + "/rest/v1" } });
   await f.load("src/lib/public-bands.ts").getPublicBandBySlug("magijos");
   assert.equal(f.calls.find((c) => c[0] === "client")[1], origin);
+});
+
+test("laboratory server queries loopback but returns the public LAN image origin", async () => {
+  const f = fixture({ env: {
+    NODE_ENV: "development",
+    NEXT_PUBLIC_SUPABASE_URL: "http://192.168.0.6:55321",
+    SUPABASE_INTERNAL_URL: "http://127.0.0.1:55321",
+  } });
+  const result = await f.load("src/lib/supabase/public-server.ts").readPublicBandRow("magijos");
+  assert.equal(f.calls.find((c) => c[0] === "client")[1], "http://127.0.0.1:55321");
+  assert.equal(result.imageOrigin, "http://192.168.0.6:55321");
+});
+
+test("HTTP exceptions are limited to exact laboratory endpoints in development", async () => {
+  const base = { NODE_ENV: "development", NEXT_PUBLIC_SUPABASE_URL: "http://192.168.0.6:55321",
+    SUPABASE_INTERNAL_URL: "http://127.0.0.1:55321" };
+  const jwt = (role) => "header." + Buffer.from(JSON.stringify({ role })).toString("base64url") + ".signature";
+  for (const change of [
+    { NODE_ENV: "production" },
+    { NEXT_PUBLIC_SUPABASE_URL: "http://192.168.0.7:55321" },
+    { NEXT_PUBLIC_SUPABASE_URL: "http://192.168.0.6:55322" },
+    { NEXT_PUBLIC_SUPABASE_URL: "http://user:pass@192.168.0.6:55321" },
+    { NEXT_PUBLIC_SUPABASE_URL: "http://192.168.0.6:55321?token=x" },
+    { SUPABASE_INTERNAL_URL: "http://192.168.0.6:55321" },
+    { SUPABASE_INTERNAL_URL: "http://127.0.0.1:55322" },
+    { SUPABASE_INTERNAL_URL: "http://localhost:55321" },
+    { SUPABASE_INTERNAL_URL: "http://127.0.0.1:55321#x" },
+    { SUPABASE_INTERNAL_URL: "" },
+    { NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_secret_test" },
+    { NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: jwt("service_role") },
+  ]) {
+    const f = fixture({ env: { ...base, ...change } });
+    await assert.rejects(f.load("src/lib/supabase/public-server.ts").readPublicBandRow("magijos"));
+    assert.equal(f.calls.length, 0);
+  }
+  const f = fixture({ env: { ...base, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: jwt("anon") } });
+  await f.load("src/lib/supabase/public-server.ts").readPublicBandRow("magijos");
+  assert.ok(f.calls.length);
 });
