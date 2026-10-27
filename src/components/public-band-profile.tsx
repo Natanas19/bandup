@@ -12,12 +12,12 @@ export default function PublicBandProfile({ band }: { band: PublicBand }) {
   const visibleLinks = band.links.filter((link) => getSafeExternalUrl(link.url));
   return (
     <main className="relative isolate min-w-0 flex-1 overflow-hidden px-4 py-10 sm:px-6 sm:py-16">
-      <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-96 bg-gradient-to-b from-violet-100 via-violet-50 to-transparent" />
-      <div aria-hidden="true" className="pointer-events-none absolute -right-24 top-20 -z-10 h-64 w-64 rounded-full bg-fuchsia-100/60 blur-3xl" />
+      <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-96 bg-gradient-to-b from-decorative-start via-decorative-end to-transparent" />
+      <div aria-hidden="true" className="pointer-events-none absolute -right-24 top-20 -z-10 h-64 w-64 rounded-full bg-decorative-glow/60 blur-3xl" />
 
       <div className="mx-auto w-full max-w-[480px]">
         <header className="text-center">
-          <div className="mx-auto flex h-28 w-28 items-center justify-center overflow-hidden rounded-full border-4 border-white bg-violet-100 text-4xl font-bold text-violet-700 shadow-xl shadow-violet-900/10">
+          <div className="mx-auto flex h-28 w-28 items-center justify-center overflow-hidden rounded-full border-4 border-surface bg-decorative-start text-4xl font-bold text-accent shadow-xl shadow-shadow-tint/10">
             {band.image && failedImage !== band.image.src ? (
               <Image
                 src={band.image.src}
@@ -35,16 +35,16 @@ export default function PublicBandProfile({ band }: { band: PublicBand }) {
               </span>
             )}
           </div>
-          <h1 className="mt-5 text-3xl font-bold leading-tight tracking-tight text-zinc-900 [overflow-wrap:anywhere] sm:text-5xl">{band.name}</h1>
-          {band.description.trim() && <p className="mx-auto mt-4 max-w-sm whitespace-pre-wrap break-words text-base leading-7 text-zinc-600">
-            <LinkifiedText text={band.description} />
+          <h1 className="mt-5 text-3xl font-bold leading-tight tracking-tight text-content [overflow-wrap:anywhere] sm:text-5xl">{band.name}</h1>
+          {band.description.trim() && <p className="mx-auto mt-4 max-w-sm whitespace-pre-wrap break-words text-base leading-7 text-content-muted">
+            <LinkifiedText text={band.description} variant="themed" />
           </p>}
         </header>
 
         <section aria-labelledby="band-links-title" className="mt-9">
           <h2 id="band-links-title" className="sr-only">Acompanhe {band.name}</h2>
-          {visibleLinks.length > 0 ? <p className="mb-3 text-center text-xs text-zinc-500">Os links abrem em uma nova aba.</p> : (
-            <p className="rounded-2xl border border-violet-100 bg-white/70 px-5 py-6 text-center text-sm leading-6 text-zinc-600">Ainda não há links públicos para acompanhar esta banda.</p>
+          {visibleLinks.length > 0 ? <p className="mb-3 text-center text-xs text-content-subtle">Os links abrem em uma nova aba.</p> : (
+            <p className="rounded-2xl border border-nav-border bg-surface/70 px-5 py-6 text-center text-sm leading-6 text-content-muted">Ainda não há links públicos para acompanhar esta banda.</p>
           )}
           <ul className="space-y-3">
             {visibleLinks.map((link) => {
@@ -57,13 +57,13 @@ export default function PublicBandProfile({ band }: { band: PublicBand }) {
                     href={href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="group flex min-h-[64px] min-w-0 items-center gap-4 rounded-2xl border border-violet-100 bg-white px-4 py-3 text-zinc-900 shadow-[0_12px_36px_-28px_rgba(54,36,104,0.35)] transition hover:border-violet-300 hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-violet-300 motion-reduce:transition-none sm:px-5"
+                    className="group flex min-h-[64px] min-w-0 items-center gap-4 rounded-2xl border border-nav-border bg-surface px-4 py-3 text-content shadow-app-card transition hover:border-accent-outline-hover hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent-outline-hover motion-reduce:transition-none sm:px-5"
                   >
-                    <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-lg font-bold text-violet-700 group-hover:bg-white">
+                    <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-lg font-bold text-accent group-hover:bg-surface">
                       <SocialPlatformIcon platform={link.platform} />
                     </span>
                     <span className="min-w-0 flex-1 [overflow-wrap:anywhere] text-sm font-semibold sm:text-base">{link.label || socialPlatforms[link.platform]}</span>
-                    <span aria-hidden="true" className="shrink-0 text-lg text-violet-500">↗</span>
+                    <span aria-hidden="true" className="shrink-0 text-lg text-brand-highlight">↗</span>
                   </a>
                 </li>
               );
@@ -71,8 +71,8 @@ export default function PublicBandProfile({ band }: { band: PublicBand }) {
           </ul>
         </section>
 
-        <footer className="mt-10 text-center text-xs text-zinc-500">
-          Feito com <span className="font-semibold text-violet-700">BandUp</span>
+        <footer className="mt-10 text-center text-xs text-content-subtle">
+          Feito com <span className="font-semibold text-accent">BandUp</span>
         </footer>
       </div>
     </main>

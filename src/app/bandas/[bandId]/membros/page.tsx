@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import BandNavigation from "@/components/band-navigation";
+import { BandWorkspaceInfo } from "@/components/band-workspace";
 import { useParams } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -116,25 +117,25 @@ export default function BandMembersPage() {
     return (
       <main className="flex flex-1 justify-center px-4 py-8 sm:px-6 sm:py-12">
         <section className="w-full max-w-2xl">
-          <Link href={`/bandas/${bandId}`} className="inline-flex min-h-11 items-center rounded-xl border border-violet-200 px-4 py-2.5 text-sm font-semibold text-violet-800 transition hover:bg-violet-50 focus:outline-none focus:ring-4 focus:ring-violet-100">
+          <Link href={`/bandas/${bandId}`} className="inline-flex min-h-11 items-center rounded-xl border border-accent-border px-4 py-2.5 text-sm font-semibold text-brand transition hover:bg-accent-soft focus:outline-none focus:ring-4 focus:ring-input-ring">
             ← Voltar para a visão geral
           </Link>
-          <div className="mt-6 rounded-3xl border border-violet-100 bg-white p-8 text-center shadow-[0_20px_60px_-32px_rgba(54,36,104,0.28)] sm:p-10">
+          <div className="mt-6 rounded-3xl border border-nav-border bg-surface p-8 text-center shadow-app-dashboard sm:p-10">
             {pageState === "loading" ? (
-              <p className="text-zinc-600">Carregando integrantes...</p>
+              <p className="text-content-muted">Carregando integrantes...</p>
             ) : pageState === "unauthenticated" ? (
               <>
-                <h1 className="text-2xl font-semibold text-zinc-900">Entre para continuar</h1>
-                <p className="mt-3 text-sm text-zinc-600">Faça login para acessar os integrantes da banda.</p>
-                <Link href="/login" className="mt-6 inline-flex min-h-11 items-center rounded-xl bg-violet-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-violet-800">Ir para o login</Link>
+                <h1 className="text-2xl font-semibold text-content">Entre para continuar</h1>
+                <p className="mt-3 text-sm text-content-muted">Faça login para acessar os integrantes da banda.</p>
+                <Link href="/login" className="mt-6 inline-flex min-h-11 items-center rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-on-primary transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">Ir para o login</Link>
               </>
             ) : pageState === "unavailable" ? (
               <>
-                <h1 className="text-2xl font-semibold text-zinc-900">Banda não encontrada</h1>
-                <p className="mt-3 text-sm text-zinc-600">Essa banda não existe ou você não tem acesso a ela.</p>
+                <h1 className="text-2xl font-semibold text-content">Banda não encontrada</h1>
+                <p className="mt-3 text-sm text-content-muted">Essa banda não existe ou você não tem acesso a ela.</p>
               </>
             ) : (
-              <p role="alert" className="text-sm text-red-700">Não foi possível carregar os integrantes agora. Tente novamente.</p>
+              <p role="alert" className="text-sm text-danger">Não foi possível carregar os integrantes agora. Tente novamente.</p>
             )}
           </div>
         </section>
@@ -145,35 +146,36 @@ export default function BandMembersPage() {
   return (
     <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10">
       <div className="mx-auto w-full max-w-4xl">
-        <BandNavigation bandId={bandId} activeSection="membros" />
+        <BandWorkspaceInfo name={bandName} />
+        <div className="md:hidden"><BandNavigation bandId={bandId} activeSection="membros" /></div>
 
         <header className="mt-6 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
-            <p className="text-xs font-semibold tracking-[0.16em] text-violet-700 uppercase">Membros</p>
-            <h1 className="mt-2 break-words text-3xl font-semibold tracking-tight text-zinc-900 sm:text-4xl">{bandName}</h1>
-            <p className="mt-2 text-sm text-zinc-600">Integrantes que fazem parte desta banda.</p>
+            <p className="text-xs font-semibold tracking-[0.16em] text-accent uppercase">Membros</p>
+            <h1 className="mt-2 break-words text-3xl font-semibold tracking-tight text-content sm:text-4xl">{bandName}</h1>
+            <p className="mt-2 text-sm text-content-muted">Integrantes que fazem parte desta banda.</p>
           </div>
-          <span className="inline-flex w-fit shrink-0 rounded-full border border-violet-200 bg-violet-50 px-3.5 py-2 text-sm font-semibold text-violet-800">
+          <span className="inline-flex w-fit shrink-0 rounded-full border border-accent-border bg-accent-soft px-3.5 py-2 text-sm font-semibold text-brand">
             {members.length} {members.length === 1 ? "integrante" : "integrantes"}
           </span>
         </header>
 
         {members.length === 0 ? (
-          <section className="mt-7 rounded-2xl border border-dashed border-violet-200 bg-white px-5 py-10 text-center sm:py-14">
-            <h2 className="text-lg font-semibold text-zinc-900">Nenhum integrante encontrado.</h2>
-            <p className="mt-2 text-sm text-zinc-600">Os integrantes da banda aparecerão aqui.</p>
+          <section className="mt-7 rounded-2xl border border-dashed border-accent-border bg-surface px-5 py-10 text-center sm:py-14">
+            <h2 className="text-lg font-semibold text-content">Nenhum integrante encontrado.</h2>
+            <p className="mt-2 text-sm text-content-muted">Os integrantes da banda aparecerão aqui.</p>
           </section>
         ) : (
           <section aria-label="Lista de integrantes" className="mt-7 space-y-3">
             {members.map((member) => (
-              <article key={member.user_id} className="flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-violet-100 bg-white p-4 shadow-[0_12px_36px_-28px_rgba(54,36,104,0.35)] sm:p-5">
+              <article key={member.user_id} className="flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-nav-border bg-surface p-4 shadow-app-card sm:p-5">
                 <div className="flex min-w-0 items-center gap-3">
-                  <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-50 text-sm font-semibold text-violet-700">
+                  <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-soft text-sm font-semibold text-accent">
                     {member.label === "Você" ? "V" : "♪"}
                   </span>
-                  <p className="truncate text-sm font-semibold text-zinc-900 sm:text-base">{member.label}</p>
+                  <p className="truncate text-sm font-semibold text-content sm:text-base">{member.label}</p>
                 </div>
-                <span className="shrink-0 rounded-full bg-zinc-100 px-3 py-1.5 text-xs font-semibold text-zinc-700 sm:text-sm">
+                <span className="shrink-0 rounded-full bg-disabled-surface px-3 py-1.5 text-xs font-semibold text-content-label sm:text-sm">
                   {member.role === "admin" ? "Administrador" : "Membro"}
                 </span>
               </article>

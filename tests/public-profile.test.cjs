@@ -206,3 +206,29 @@ test("members cannot toggle publication and invalid addresses cannot be shared",
   assert.equal(button(tree, "Copiar endereço"), undefined);
   assert.equal(button(tree, "Compartilhar"), undefined);
 });
+
+
+test("publication notifies the Links page only after confirmation and preserves the management anchor", async () => {
+  for (const fail of [false, true]) {
+    const notifications = [];
+    const f = fixture({}, { updateBandPublication: async (id, next) => {
+      if (fail) throw new Error("Publication failed");
+      return { id, slug: "confirmed-band", is_public: next };
+    } });
+    const Settings = f.load("src/components/band-public-profile-settings.tsx").default;
+    const props = { bandId: "1", initialSlug: "band", initiallyPublic: false, isAdmin: true,
+      linksHref: "#band-links", onPublicationChange: (value) => notifications.push(value) };
+    f.render(Settings, props);
+    const tree = f.render(Settings, props);
+    nodes(tree, (n) => n.props?.role === "switch")[0].props.onClick();
+    await new Promise(setImmediate);
+    const updated = f.render(Settings, props);
+    assert.equal(notifications.length, fail ? 0 : 1);
+    if (!fail) {
+      assert.equal(notifications[0].is_public, true);
+      assert.equal(notifications[0].slug, "confirmed-band");
+    }
+    assert.ok(renderToStaticMarkup(updated).includes('href="#band-links"'));
+    assert.equal(nodes(updated, (n) => n.props?.role === "switch")[0].props["aria-checked"], !fail);
+  }
+});

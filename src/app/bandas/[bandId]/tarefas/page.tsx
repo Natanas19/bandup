@@ -3,9 +3,10 @@
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import BandNavigation from "@/components/band-navigation";
+import { BandWorkspaceInfo } from "@/components/band-workspace";
 import { useParams } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { LinkifiedText } from "@/components/linkified-text";
+import CardDetails, { toggleCardDetails } from "@/components/card-details";
 import { calendarDay, formatTaskDate, taskDeadlinePatch } from "@/lib/date-time";
 import { requiredTextError } from "@/lib/form-validation";
 import { canEditTask, canReassignTask, canSaveTask, getBandAccess, recordWriteError } from "@/lib/record-permissions";
@@ -52,15 +53,15 @@ const priorityOptions: { value: TaskPriority; label: string }[] = [
 ];
 
 const statusStyles: Record<TaskStatus, string> = {
-  todo: "bg-zinc-100 text-zinc-700",
-  in_progress: "bg-amber-100 text-amber-800",
-  done: "bg-emerald-100 text-emerald-800",
+  todo: "bg-disabled-surface text-content-label",
+  in_progress: "bg-warning-badge text-warning",
+  done: "bg-success-badge text-success",
 };
 
 const priorityStyles: Record<TaskPriority, string> = {
-  low: "bg-sky-50 text-sky-700",
-  medium: "bg-violet-50 text-violet-700",
-  high: "bg-rose-50 text-rose-700",
+  low: "bg-info-surface text-info",
+  medium: "bg-accent-soft text-accent",
+  high: "bg-danger-soft text-danger-emphasis",
 };
 
 function sortTasks(tasks: Task[]) {
@@ -477,27 +478,27 @@ export default function BandTasksPage() {
     return (
       <main className="flex flex-1 justify-center px-4 py-8 sm:px-6 sm:py-12">
         <section className="w-full max-w-3xl">
-          <Link href={`/bandas/${bandId}`} className="inline-flex min-h-11 items-center rounded-xl border border-violet-200 px-4 py-2.5 text-sm font-semibold text-violet-800 transition hover:bg-violet-50">
+          <Link href={`/bandas/${bandId}`} className="inline-flex min-h-11 items-center rounded-xl border border-accent-border px-4 py-2.5 text-sm font-semibold text-brand transition hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">
             ← Voltar para a banda
           </Link>
-          <div className="mt-6 rounded-3xl border border-violet-100 bg-white p-8 text-center shadow-[0_20px_60px_-32px_rgba(54,36,104,0.28)] sm:p-10">
+          <div className="mt-6 rounded-3xl border border-nav-border bg-surface p-8 text-center shadow-app-dashboard sm:p-10">
             {pageState === "loading" ? (
-              <p className="text-zinc-600">Carregando tarefas...</p>
+              <p className="text-content-muted">Carregando tarefas...</p>
             ) : pageState === "unauthenticated" ? (
               <>
-                <h1 className="text-2xl font-semibold text-zinc-900">Entre para continuar</h1>
-                <p className="mt-3 text-sm text-zinc-600">Faça login para acessar as tarefas da banda.</p>
-                <Link href="/login" className="mt-6 inline-flex min-h-11 items-center rounded-xl bg-violet-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-violet-800">
+                <h1 className="text-2xl font-semibold text-content">Entre para continuar</h1>
+                <p className="mt-3 text-sm text-content-muted">Faça login para acessar as tarefas da banda.</p>
+                <Link href="/login" className="mt-6 inline-flex min-h-11 items-center rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-on-primary transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">
                   Ir para o login
                 </Link>
               </>
             ) : pageState === "unavailable" ? (
               <>
-                <h1 className="text-2xl font-semibold text-zinc-900">Banda não encontrada</h1>
-                <p className="mt-3 text-sm text-zinc-600">Essa banda não existe ou você não tem acesso a ela.</p>
+                <h1 className="text-2xl font-semibold text-content">Banda não encontrada</h1>
+                <p className="mt-3 text-sm text-content-muted">Essa banda não existe ou você não tem acesso a ela.</p>
               </>
             ) : (
-              <p role="alert" className="text-sm text-red-700">{loadError}</p>
+              <p role="alert" className="text-sm text-danger">{loadError}</p>
             )}
           </div>
         </section>
@@ -508,13 +509,14 @@ export default function BandTasksPage() {
   return (
     <main className="flex flex-1 justify-center px-4 py-6 sm:px-6 sm:py-10">
       <div className="w-full max-w-5xl min-w-0">
-        <BandNavigation bandId={bandId} activeSection="tarefas" />
+        <BandWorkspaceInfo name={bandName} role={isAdmin ? "admin" : "member"} />
+        <div className="md:hidden"><BandNavigation bandId={bandId} activeSection="tarefas" /></div>
 
         <header className="mt-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
-            <p className="text-xs font-semibold tracking-[0.16em] text-violet-700 uppercase">{bandName}</p>
-            <h1 className="mt-2 break-words text-3xl font-semibold tracking-tight text-zinc-900 sm:text-4xl">Tarefas</h1>
-            <p className="mt-2 text-sm leading-6 text-zinc-600">Organize o que precisa ser feito pela banda.</p>
+            <p className="text-xs font-semibold tracking-[0.16em] text-accent uppercase">{bandName}</p>
+            <h1 className="mt-2 break-words text-3xl font-semibold tracking-tight text-content sm:text-4xl">Tarefas</h1>
+            <p className="mt-2 text-sm leading-6 text-content-muted">Organize o que precisa ser feito pela banda.</p>
           </div>
           <button
             type="button"
@@ -529,21 +531,21 @@ export default function BandTasksPage() {
                 setIsFormOpen(true);
               }
             }}
-            className="inline-flex min-h-11 w-full shrink-0 items-center justify-center rounded-xl bg-violet-700 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-700/15 transition hover:bg-violet-800 focus:outline-none focus:ring-4 focus:ring-violet-200 sm:w-auto"
+            className="inline-flex min-h-11 w-full shrink-0 items-center justify-center rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-on-primary shadow-lg shadow-primary/15 transition hover:bg-primary-hover focus:outline-none focus:ring-4 focus:ring-focus sm:w-auto"
           >
             {isFormOpen ? "Fechar formulário" : "+ Nova tarefa"}
           </button>
         </header>
 
         {isFormOpen && (
-          <section className="mt-6 rounded-2xl border border-violet-100 bg-white p-5 shadow-[0_16px_48px_-32px_rgba(54,36,104,0.35)] sm:p-7">
+          <section className="mt-6 rounded-2xl border border-nav-border bg-surface p-5 shadow-app-form sm:p-7">
             <div className="mb-5">
-              <h2 className="text-lg font-semibold text-zinc-900">{editingTaskId ? "Editar tarefa" : "Nova tarefa"}</h2>
-              <p className="mt-1 text-sm text-zinc-500">Os campos com * são obrigatórios.</p>
+              <h2 className="text-lg font-semibold text-content">{editingTaskId ? "Editar tarefa" : "Nova tarefa"}</h2>
+              <p className="mt-1 text-sm text-content-subtle">Os campos com * são obrigatórios.</p>
             </div>
             <form onSubmit={handleCreateTask} className="space-y-5">
               <div>
-                <label htmlFor="task-title" className="mb-2 block text-sm font-medium text-zinc-700">Título *</label>
+                <label htmlFor="task-title" className="mb-2 block text-sm font-medium text-content-label">Título *</label>
                 <input
                   id="task-title"
                   type="text"
@@ -551,31 +553,31 @@ export default function BandTasksPage() {
                   maxLength={200}
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
-                  className="min-h-11 w-full rounded-xl border border-zinc-200 px-4 py-3 text-base md:text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
+                  className="min-h-11 w-full rounded-xl border border-outline bg-surface px-4 py-3 text-base md:text-sm text-content outline-none transition placeholder:text-content-faint focus:border-input-focus focus:ring-4 focus:ring-input-ring"
                   placeholder="Ex.: Definir repertório do próximo ensaio"
                 />
               </div>
 
               <div>
-                <label htmlFor="task-description" className="mb-2 block text-sm font-medium text-zinc-700">Descrição <span className="font-normal text-zinc-400">(opcional)</span></label>
+                <label htmlFor="task-description" className="mb-2 block text-sm font-medium text-content-label">Descrição <span className="font-normal text-content-faint">(opcional)</span></label>
                 <textarea
                   id="task-description"
                   rows={3}
                   maxLength={2000}
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
-                  className="w-full resize-y rounded-xl border border-zinc-200 px-4 py-3 text-base md:text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
+                  className="w-full resize-y rounded-xl border border-outline bg-surface px-4 py-3 text-base md:text-sm text-content outline-none transition placeholder:text-content-faint focus:border-input-focus focus:ring-4 focus:ring-input-ring"
                   placeholder="Adicione detalhes para a banda"
                 />
               </div>
 
               <div>
-                <label htmlFor="task-event" className="mb-2 block text-sm font-medium text-zinc-700">Evento relacionado (opcional)</label>
+                <label htmlFor="task-event" className="mb-2 block text-sm font-medium text-content-label">Evento relacionado (opcional)</label>
                 <select
                   id="task-event"
                   value={relatedEventId}
                   onChange={(event) => setRelatedEventId(event.target.value)}
-                  className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-base md:text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
+                  className="min-h-11 w-full rounded-xl border border-outline bg-surface px-3 py-2.5 text-base md:text-sm text-content outline-none focus:border-input-focus focus:ring-4 focus:ring-input-ring"
                 >
                   <option value="">Nenhum evento</option>
                   {events.map((bandEvent) => (
@@ -588,38 +590,38 @@ export default function BandTasksPage() {
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div>
-                  <label htmlFor="task-status" className="mb-2 block text-sm font-medium text-zinc-700">Status</label>
-                  <select id="task-status" value={status} onChange={(event) => setStatus(event.target.value as TaskStatus)} className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-base md:text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100">
+                  <label htmlFor="task-status" className="mb-2 block text-sm font-medium text-content-label">Status</label>
+                  <select id="task-status" value={status} onChange={(event) => setStatus(event.target.value as TaskStatus)} className="min-h-11 w-full rounded-xl border border-outline bg-surface px-3 py-2.5 text-base md:text-sm text-content outline-none focus:border-input-focus focus:ring-4 focus:ring-input-ring">
                     {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="task-priority" className="mb-2 block text-sm font-medium text-zinc-700">Prioridade</label>
-                  <select id="task-priority" value={priority} onChange={(event) => setPriority(event.target.value as TaskPriority)} className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-base md:text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100">
+                  <label htmlFor="task-priority" className="mb-2 block text-sm font-medium text-content-label">Prioridade</label>
+                  <select id="task-priority" value={priority} onChange={(event) => setPriority(event.target.value as TaskPriority)} className="min-h-11 w-full rounded-xl border border-outline bg-surface px-3 py-2.5 text-base md:text-sm text-content outline-none focus:border-input-focus focus:ring-4 focus:ring-input-ring">
                     {priorityOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="task-due-date" className="mb-2 block text-sm font-medium text-zinc-700">Prazo <span className="font-normal text-zinc-400">(opcional)</span></label>
-                  <input id="task-due-date" type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-base md:text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100" />
+                  <label htmlFor="task-due-date" className="mb-2 block text-sm font-medium text-content-label">Prazo <span className="font-normal text-content-faint">(opcional)</span></label>
+                  <input id="task-due-date" type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-outline bg-surface px-3 py-2.5 text-base md:text-sm text-content outline-none focus:border-input-focus focus:ring-4 focus:ring-input-ring" />
                 </div>
                 <div>
-                  <label htmlFor="task-assignee" className="mb-2 block text-sm font-medium text-zinc-700">Responsável <span className="font-normal text-zinc-400">(opcional)</span></label>
-                  <select id="task-assignee" disabled={!canChangeAssignee || isSubmitting} aria-describedby={!canChangeAssignee ? "task-assignee-help" : undefined} value={assignedTo} onChange={(event) => setAssignedTo(event.target.value)} className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-base md:text-sm text-zinc-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100">
+                  <label htmlFor="task-assignee" className="mb-2 block text-sm font-medium text-content-label">Responsável <span className="font-normal text-content-faint">(opcional)</span></label>
+                  <select id="task-assignee" disabled={!canChangeAssignee || isSubmitting} aria-describedby={!canChangeAssignee ? "task-assignee-help" : undefined} value={assignedTo} onChange={(event) => setAssignedTo(event.target.value)} className="min-h-11 w-full rounded-xl border border-outline bg-surface px-3 py-2.5 text-base md:text-sm text-content outline-none focus:border-input-focus focus:ring-4 focus:ring-input-ring">
                     <option value="">Sem responsável</option>
                     {members.map((member) => <option key={member.userId} value={member.userId}>{member.label}</option>)}
                   </select>
-                  {!canChangeAssignee && <p id="task-assignee-help" className="mt-2 text-sm text-zinc-500">Somente o autor ou um administrador pode alterar o responsável.</p>}
+                  {!canChangeAssignee && <p id="task-assignee-help" className="mt-2 text-sm text-content-subtle">Somente o autor ou um administrador pode alterar o responsável.</p>}
                 </div>
               </div>
 
-              {formError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{formError}</p>}
+              {formError && <p role="alert" className="rounded-xl border border-danger-border bg-danger-surface px-4 py-3 text-sm text-danger">{formError}</p>}
 
               <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row sm:justify-end">
-                <button type="button" disabled={isSubmitting} onClick={cancelEditing} className="min-h-11 rounded-xl border border-violet-200 px-5 py-3 text-sm font-semibold text-violet-800 transition hover:bg-violet-50 disabled:opacity-60">
+                <button type="button" disabled={isSubmitting} onClick={cancelEditing} className="min-h-11 rounded-xl border border-accent-border px-5 py-3 text-sm font-semibold text-brand transition hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus disabled:opacity-60">
                   {editingTaskId ? "Cancelar edição" : "Cancelar"}
                 </button>
-                <button type="submit" disabled={isSubmitting} className="min-h-11 rounded-xl bg-violet-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-70">
+                <button type="submit" disabled={isSubmitting} className="min-h-11 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-on-primary transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-70">
                   {isSubmitting ? (editingTaskId ? "Salvando alterações..." : "Criando tarefa...") : editingTaskId ? "Salvar alterações" : "Criar tarefa"}
                 </button>
               </div>
@@ -627,18 +629,18 @@ export default function BandTasksPage() {
           </section>
         )}
 
-        {formSuccess && <p role="status" className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{formSuccess}</p>}
-        {deleteError && <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{deleteError}</p>}
+        {formSuccess && <p role="status" className="mt-5 rounded-xl border border-success-border bg-success-surface px-4 py-3 text-sm text-success">{formSuccess}</p>}
+        {deleteError && <p role="alert" className="mt-5 rounded-xl border border-danger-border bg-danger-surface px-4 py-3 text-sm text-danger">{deleteError}</p>}
 
         {tasks.length === 0 ? (
-          <section className="mt-6 rounded-2xl border border-dashed border-violet-200 bg-white px-5 py-10 text-center sm:py-14">
-            <div aria-hidden="true" className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-violet-50 text-violet-700">
+          <section className="mt-6 rounded-2xl border border-dashed border-accent-border bg-surface px-5 py-10 text-center sm:py-14">
+            <div aria-hidden="true" className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-accent-soft text-accent">
               <span className="text-xl">✓</span>
             </div>
-            <h2 className="mt-4 text-lg font-semibold text-zinc-900">Nenhuma tarefa criada ainda.</h2>
-            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-zinc-600">Crie uma tarefa para combinar o próximo passo da banda.</p>
+            <h2 className="mt-4 text-lg font-semibold text-content">Nenhuma tarefa criada ainda.</h2>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-content-muted">Crie uma tarefa para combinar o próximo passo da banda.</p>
             {!isFormOpen && (
-              <button type="button" onClick={() => setIsFormOpen(true)} className="mt-5 inline-flex min-h-11 items-center rounded-xl bg-violet-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-violet-800">
+              <button type="button" onClick={() => setIsFormOpen(true)} className="mt-5 inline-flex min-h-11 items-center rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-on-primary transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">
                 Criar primeira tarefa
               </button>
             )}
@@ -651,11 +653,10 @@ export default function BandTasksPage() {
                 : null;
 
               return (
-                <article key={task.id} className="min-w-0 rounded-2xl border border-violet-100 bg-white p-5 shadow-[0_12px_36px_-28px_rgba(54,36,104,0.35)] sm:p-6">
+                <article key={task.id} onClick={toggleCardDetails} className="min-w-0 rounded-2xl border border-nav-border bg-surface p-5 shadow-app-card sm:p-6">
                   <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
-                      <h2 className="break-words text-base font-semibold text-zinc-900 sm:text-lg">{task.title}</h2>
-                      {task.description?.trim() && <p className="mt-2 break-words whitespace-pre-wrap text-sm leading-6 text-zinc-600"><LinkifiedText text={task.description} /></p>}
+                      <h2 className="break-words text-base font-semibold text-content sm:text-lg">{task.title}</h2>
                     </div>
                     <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
                       <span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusStyles[task.status]}`}>{getStatusLabel(task.status)}</span>
@@ -663,18 +664,19 @@ export default function BandTasksPage() {
                     </div>
                   </div>
                   {(task.due_date || assignee) && (
-                    <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-zinc-100 pt-3 text-xs text-zinc-500">
-                      {task.due_date && <p>Prazo: <span className="font-medium text-zinc-700">{formatDate(task.due_date)}</span></p>}
-                      {assignee && <p>Responsável: <span className="font-medium text-zinc-700">{assignee}</span></p>}
+                    <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 pt-3 text-xs text-content-subtle">
+                      {task.due_date && <p>Prazo: <span className="font-medium text-content-label">{formatDate(task.due_date)}</span></p>}
+                      {assignee && <p>Responsável: <span className="font-medium text-content-label">{assignee}</span></p>}
                     </div>
                   )}
-                  {task.event_id && <p className="mt-2 text-xs text-zinc-500">Evento: <span className="font-medium text-zinc-700">{events.find((bandEvent) => bandEvent.id === task.event_id)?.title ?? "Evento da banda"}</span></p>}
-                  {(canEditTask(access, task) || isAdmin) && <div className="mt-4 flex flex-col-reverse gap-2 border-t border-zinc-100 pt-3 sm:flex-row sm:justify-end">
+                  {task.event_id && <p className="mt-2 text-xs text-content-subtle">Evento: <span className="font-medium text-content-label">{events.find((bandEvent) => bandEvent.id === task.event_id)?.title ?? "Evento da banda"}</span></p>}
+                  <CardDetails title={task.title} description={task.description} />
+                  {(canEditTask(access, task) || isAdmin) && <div className="mt-4 flex flex-wrap justify-end gap-2 pt-3">
                     {canEditTask(access, task) && <button
                       type="button"
                       onClick={() => startEditing(task)}
                       disabled={isSubmitting || deletingTaskId !== null}
-                      className="inline-flex min-h-10 items-center justify-center rounded-xl border border-violet-200 px-4 py-2 text-sm font-semibold text-violet-800 transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex min-h-10 items-center justify-center rounded-xl border border-accent-border px-4 py-2 text-sm font-semibold text-brand transition hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Editar
                     </button>}
@@ -683,7 +685,7 @@ export default function BandTasksPage() {
                         type="button"
                         onClick={() => void handleDeleteTask(task)}
                         disabled={isSubmitting || deletingTaskId !== null}
-                        className="inline-flex min-h-10 items-center rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="inline-flex min-h-10 items-center rounded-xl border border-danger-border px-4 py-2 text-sm font-semibold text-danger transition hover:bg-danger-surface focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {deletingTaskId === task.id ? "Excluindo..." : "Excluir"}
                       </button>

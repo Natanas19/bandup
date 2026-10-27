@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 type LinkifiedTextProps = {
   text: string;
+  variant?: "default" | "themed";
 };
 
 const urlPattern = /https?:\/\/[^\s<>"']+/gi;
@@ -39,7 +40,7 @@ function trimUrlPunctuation(value: string) {
   return url;
 }
 
-export function LinkifiedText({ text }: LinkifiedTextProps) {
+export function LinkifiedText({ text, variant = "default" }: LinkifiedTextProps) {
   const parts: ReactNode[] = [];
   let lastIndex = 0;
 
@@ -58,7 +59,9 @@ export function LinkifiedText({ text }: LinkifiedTextProps) {
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="break-all font-medium text-violet-700 underline decoration-violet-300 underline-offset-2 hover:text-violet-900 hover:decoration-violet-600"
+        className={`break-all font-medium underline underline-offset-2 ${variant === "themed"
+          ? "text-accent decoration-accent-outline-hover hover:text-accent-hover hover:decoration-accent-strong focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus"
+          : "text-accent decoration-accent-outline-hover hover:text-accent-hover hover:decoration-accent-strong"}`}
       >
         {url}
       </a>,

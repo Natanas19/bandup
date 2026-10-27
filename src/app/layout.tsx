@@ -1,4 +1,6 @@
 import type { Metadata, Viewport } from "next";
+import { THEME_INITIALIZATION_SCRIPT } from "@/lib/theme";
+import { ThemeProvider } from "@/components/theme-provider";
 import PrivateSessionBoundary from "@/components/private-session-boundary";
 import "./globals.css";
 
@@ -24,8 +26,11 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="pt-BR" className="h-full antialiased">
-      <body className="flex min-h-full flex-col"><PrivateSessionBoundary>{children}</PrivateSessionBoundary></body>
+    <html lang="pt-BR" className="h-full antialiased" suppressHydrationWarning>
+      <head>
+        <script id="bandup-theme-init" dangerouslySetInnerHTML={{ __html: THEME_INITIALIZATION_SCRIPT }} />
+      </head>
+      <body className="flex min-h-full flex-col"><ThemeProvider><PrivateSessionBoundary>{children}</PrivateSessionBoundary></ThemeProvider></body>
     </html>
   );
 }
