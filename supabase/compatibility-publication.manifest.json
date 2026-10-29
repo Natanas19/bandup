@@ -1,0 +1,23 @@
+{
+  "status": "lab-success-user-confirmed-production-blocked",
+  "branch": "feature/security-record-ownership",
+  "automaticDbPush": false,
+  "prerequisites": [
+    "Reconcile missing historical 20261004120000 artifact and actual ledger without inventing applied versions",
+    "Initial five local schema contracts and reviewed synthetic or evidenced legacy public layer",
+    "20261017180000_record_ownership_guards.sql already installed and verified",
+    "20261023000000_tasks_ownership_immutable.sql installed and verified BEFORE the bridge"
+  ],
+  "orderedCandidates": [
+    "migrations/20261028000000_legacy_publication_compatibility.sql",
+    "migrations/20261028010000_legacy_external_link_url_safety.sql",
+    "migrations/20261027010000_functional_integrity.sql"
+  ],
+  "excludedOriginalAlternatives": [
+    "migrations/20261020000000_public_band_profiles.sql",
+    "migrations/20261027000000_external_link_url_safety.sql"
+  ],
+  "interstage": "Links remain private; publishing INSERT, UPDATE and UPSERT are rejected until the URL guard is installed atomically with its trigger",
+  "ledger": "Unresolved. This manifest is a review artifact, not an executable runner or authorization to repair history.",
+  "procedure": "../docs/publication-compatibility.md"
+}
