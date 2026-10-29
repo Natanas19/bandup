@@ -1,0 +1,29 @@
+{
+  "version": "20261004120000",
+  "name": "public_read_layer",
+  "source": "Offline supabase_migrations.schema_migrations in bandup-pre-migrations.dump; not the original SQL file",
+  "archive_sha256": "0ce7f630719d36396cfa5336960a92699210c11b5c6f5d805c47bc24a0929e96",
+  "canonical_json_sha256": "51437fbe5bebfd41b6baac17d4be80956d7b952d4a385aa84f52391b50706445",
+  "canonical_json": "UTF-8 JSON.stringify(statements), no BOM or trailing newline; equivalent to Python ensure_ascii=False,separators=(',',':') for these ASCII statements",
+  "statements": [
+    "-- Expose an explicit public projection without granting anon access to the\n-- private source tables. The non-login view owner is subject to these RLS\n-- policies and can read only the columns required by the views.\n\nCREATE ROLE bandup_public_reader NOLOGIN NOINHERIT NOBYPASSRLS",
+    "GRANT bandup_public_reader TO CURRENT_USER",
+    "-- Existing rows receive false from the NOT NULL DEFAULT; publication is\n-- opt-in for every band, including bands created after this migration.\nALTER TABLE public.bands\n  ADD COLUMN is_public BOOLEAN NOT NULL DEFAULT false",
+    "GRANT USAGE, CREATE ON SCHEMA public TO bandup_public_reader",
+    "GRANT SELECT (id, name, slug, description, logo_url, is_public)\n  ON TABLE public.bands TO bandup_public_reader",
+    "GRANT SELECT (band_id, platform, url)\n  ON TABLE public.social_links TO bandup_public_reader",
+    "GRANT SELECT (band_id, title, event_type, start_at, end_at, location)\n  ON TABLE public.events TO bandup_public_reader",
+    "REVOKE ALL PRIVILEGES ON TABLE\n  public.bands,\n  public.social_links,\n  public.events\nFROM anon, PUBLIC",
+    "CREATE POLICY bands_select_for_public_reader\nON public.bands FOR SELECT TO bandup_public_reader\nUSING (is_public IS TRUE)",
+    "CREATE POLICY social_links_select_for_public_reader\nON public.social_links FOR SELECT TO bandup_public_reader\nUSING (\n  EXISTS (\n    SELECT 1\n    FROM public.bands AS band\n    WHERE band.id = social_links.band_id\n      AND band.is_public IS TRUE\n  )\n)",
+    "CREATE POLICY events_select_for_public_reader\nON public.events FOR SELECT TO bandup_public_reader\nUSING (\n  start_at >= now()\n  AND EXISTS (\n    SELECT 1\n    FROM public.bands AS band\n    WHERE band.id = events.band_id\n      AND band.is_public IS TRUE\n  )\n)",
+    "CREATE VIEW public.public_bands\nWITH (security_barrier = true, security_invoker = false)\nAS\nSELECT id, name, slug, description, logo_url\nFROM public.bands\nWHERE is_public IS TRUE",
+    "CREATE VIEW public.public_social_links\nWITH (security_barrier = true, security_invoker = false)\nAS\nSELECT band_id, platform, url\nFROM public.social_links\nWHERE EXISTS (\n  SELECT 1\n  FROM public.bands AS band\n  WHERE band.id = social_links.band_id\n    AND band.is_public IS TRUE\n)",
+    "CREATE VIEW public.public_events\nWITH (security_barrier = true, security_invoker = false)\nAS\nSELECT band_id, title, event_type, start_at, end_at, location\nFROM public.events\nWHERE start_at >= now()\n  AND EXISTS (\n  SELECT 1\n  FROM public.bands AS band\n  WHERE band.id = events.band_id\n    AND band.is_public IS TRUE\n  )",
+    "ALTER VIEW public.public_bands OWNER TO bandup_public_reader",
+    "ALTER VIEW public.public_social_links OWNER TO bandup_public_reader",
+    "ALTER VIEW public.public_events OWNER TO bandup_public_reader",
+    "REVOKE ALL PRIVILEGES ON TABLE\n  public.public_bands,\n  public.public_social_links,\n  public.public_events\nFROM anon, authenticated, service_role, PUBLIC",
+    "GRANT SELECT ON TABLE\n  public.public_bands,\n  public.public_social_links,\n  public.public_events\nTO anon"
+  ]
+}
