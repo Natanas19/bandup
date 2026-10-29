@@ -23,3 +23,10 @@ export function getSupabaseBrowserClient() {
   supabase = createClient(projectUrl.origin, supabasePublishableKey);
   return supabase;
 }
+
+// Match the installed SDK's default namespace without changing persisted sessions.
+export function getSupabaseAuthStorageKey() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!url) throw new Error("Supabase URL is not configured");
+  return `sb-${new URL(url).hostname.split(".")[0]}-auth-token`;
+}

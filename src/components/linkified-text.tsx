@@ -1,7 +1,9 @@
+import { getSafeExternalUrl } from "@/lib/social-links";
 import type { ReactNode } from "react";
 
 type LinkifiedTextProps = {
   text: string;
+  variant?: "default" | "themed";
 };
 
 const urlPattern = /https?:\/\/[^\s<>"']+/gi;
@@ -21,7 +23,7 @@ function trimUrlPunctuation(value: string) {
       continue;
     }
 
-    const lastCharacter = url.at(-1);
+    const lastCharacter = url[url.length - 1];
     const openingCharacter = lastCharacter ? closingPairs[lastCharacter] : undefined;
     if (openingCharacter) {
       const openingCount = [...url].filter((character) => character === openingCharacter).length;
@@ -38,16 +40,7 @@ function trimUrlPunctuation(value: string) {
   return url;
 }
 
-function isHttpUrl(value: string) {
-  try {
-    const url = new URL(value);
-    return (url.protocol === "http:" || url.protocol === "https:") && Boolean(url.hostname);
-  } catch {
-    return false;
-  }
-}
-
-export function LinkifiedText({ text }: LinkifiedTextProps) {
+export function LinkifiedText({ text, variant = "default" }: LinkifiedTextProps) {
   const parts: ReactNode[] = [];
   let lastIndex = 0;
 
@@ -56,16 +49,19 @@ export function LinkifiedText({ text }: LinkifiedTextProps) {
     const url = trimUrlPunctuation(candidate);
     const index = match.index ?? 0;
 
-    if (!url || !isHttpUrl(url)) continue;
+    const href = getSafeExternalUrl(url);
+    if (!href) continue;
 
     if (index > lastIndex) parts.push(text.slice(lastIndex, index));
     parts.push(
       <a
         key={`url-${index}`}
-        href={url}
+        href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="break-all font-medium text-violet-700 underline decoration-violet-300 underline-offset-2 hover:text-violet-900 hover:decoration-violet-600"
+        className={`break-all font-medium underline underline-offset-2 ${variant === "themed"
+          ? "text-accent decoration-accent-outline-hover hover:text-accent-hover hover:decoration-accent-strong focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus"
+          : "text-accent decoration-accent-outline-hover hover:text-accent-hover hover:decoration-accent-strong"}`}
       >
         {url}
       </a>,

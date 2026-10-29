@@ -5,17 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-
-function createSlug(name: string) {
-  const normalizedName = name
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-
-  return `${normalizedName || "banda"}-${crypto.randomUUID().slice(0, 8)}`;
-}
+import { createBandSlug } from "@/lib/band-slug";
+import { requiredTextError } from "@/lib/form-validation";
 
 export default function NewBandPage() {
   const router = useRouter();
@@ -58,6 +49,12 @@ export default function NewBandPage() {
     if (isCreating) return;
 
     setErrorMessage("");
+    const normalizedName = name.trim();
+    const nameError = requiredTextError(normalizedName, "o nome da banda");
+    if (nameError) {
+      setErrorMessage(nameError);
+      return;
+    }
     setIsCreating(true);
 
     try {
@@ -70,8 +67,8 @@ export default function NewBandPage() {
       }
 
       const { error } = await supabase.from("bands").insert({
-        name: name.trim(),
-        slug: createSlug(name.trim()),
+        name: normalizedName,
+        slug: createBandSlug(normalizedName),
         description: description.trim() || null,
       });
 
@@ -90,24 +87,24 @@ export default function NewBandPage() {
 
   return (
     <main className="flex flex-1 items-center justify-center px-6 py-16">
-      <section className="w-full max-w-xl rounded-3xl border border-violet-100 bg-white p-8 shadow-[0_20px_60px_-32px_rgba(54,36,104,0.28)] sm:p-12">
-        <Link href="/dashboard" className="text-sm font-semibold text-violet-700 hover:text-violet-900">
+      <section className="w-full max-w-xl rounded-3xl border border-nav-border bg-surface p-8 shadow-app-dashboard sm:p-12">
+        <Link href="/dashboard" className="text-sm font-semibold text-accent hover:text-accent-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">
           ← Voltar ao dashboard
         </Link>
         <div className="mt-8">
-          <p className="text-sm font-semibold tracking-widest text-violet-700 uppercase">BandUp</p>
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight text-zinc-900">Crie sua banda</h1>
-          <p className="mt-3 text-sm leading-6 text-zinc-600">
+          <p className="text-sm font-semibold tracking-widest text-accent uppercase">BandUp</p>
+          <h1 className="mt-3 text-3xl font-semibold tracking-tight text-content">Crie sua banda</h1>
+          <p className="mt-3 text-sm leading-6 text-content-muted">
             Reúna sua banda no BandUp e comece a organizar tudo em um só lugar.
           </p>
         </div>
 
         {isCheckingSession ? (
-          <p className="mt-8 text-sm text-zinc-600">Verificando sua sessão...</p>
+          <p className="mt-8 text-sm text-content-muted">Verificando sua sessão...</p>
         ) : user ? (
           <form onSubmit={handleSubmit} className="mt-8 space-y-5">
             <div>
-              <label htmlFor="band-name" className="mb-2 block text-sm font-medium text-zinc-700">
+              <label htmlFor="band-name" className="mb-2 block text-sm font-medium text-content-label">
                 Nome da banda
               </label>
               <input
@@ -119,13 +116,13 @@ export default function NewBandPage() {
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 placeholder="Ex.: Os Ensaios"
-                className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-base md:text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
+                className="w-full rounded-xl border border-outline bg-surface px-4 py-3 text-base md:text-sm text-content outline-none transition placeholder:text-content-faint focus:border-input-focus focus:ring-4 focus:ring-input-ring"
               />
             </div>
 
             <div>
-              <label htmlFor="band-description" className="mb-2 block text-sm font-medium text-zinc-700">
-                Descrição <span className="font-normal text-zinc-400">(opcional)</span>
+              <label htmlFor="band-description" className="mb-2 block text-sm font-medium text-content-label">
+                Descrição <span className="font-normal text-content-faint">(opcional)</span>
               </label>
               <textarea
                 id="band-description"
@@ -135,12 +132,12 @@ export default function NewBandPage() {
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 placeholder="Conte um pouco sobre a banda"
-                className="w-full resize-y rounded-xl border border-zinc-200 bg-white px-4 py-3 text-base md:text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
+                className="w-full resize-y rounded-xl border border-outline bg-surface px-4 py-3 text-base md:text-sm text-content outline-none transition placeholder:text-content-faint focus:border-input-focus focus:ring-4 focus:ring-input-ring"
               />
             </div>
 
             {errorMessage && (
-              <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-5 text-red-700">
+              <p role="alert" className="rounded-xl border border-danger-border bg-danger-surface px-4 py-3 text-sm leading-5 text-danger">
                 {errorMessage}
               </p>
             )}
@@ -148,7 +145,7 @@ export default function NewBandPage() {
             <button
               type="submit"
               disabled={isCreating}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-violet-700/20 transition hover:bg-violet-800 focus:outline-none focus:ring-4 focus:ring-violet-200 disabled:cursor-not-allowed disabled:opacity-70"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3.5 text-sm font-semibold text-on-primary shadow-lg shadow-primary/20 transition hover:bg-primary-hover focus:outline-none focus:ring-4 focus:ring-focus disabled:cursor-not-allowed disabled:opacity-70"
             >
               {isCreating ? "Criando banda..." : "Criar banda"}
             </button>

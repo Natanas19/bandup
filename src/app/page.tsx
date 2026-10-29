@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import ThemeSelector from "@/components/theme-selector";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -52,33 +53,36 @@ export default function Home() {
   }
 
   return (
-    <main className="flex flex-1 items-center justify-center px-6 py-16">
-      <div className="w-full max-w-sm text-center">
-        <h1 className="text-4xl font-bold tracking-tight text-violet-800 sm:text-5xl">
-          Band<span className="text-violet-500">Up</span>
-        </h1>
-        <p className="mt-4 text-base text-zinc-600">Sua banda, em sintonia.</p>
-        {error ? (
-          <div className="mt-8">
-            <p role="alert" className="text-sm leading-6 text-red-700">{error}</p>
-            <button
-              type="button"
-              onClick={retry}
-              className="mt-5 rounded-xl bg-violet-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-violet-800 focus:outline-none focus:ring-4 focus:ring-violet-200"
-            >
-              Tentar novamente
-            </button>
-          </div>
-        ) : (
-          <p role="status" className="mt-8 flex items-center justify-center gap-2 text-sm text-zinc-500">
-            <span
-              aria-hidden="true"
-              className="h-4 w-4 animate-spin rounded-full border-2 border-violet-200 border-t-violet-700 motion-reduce:animate-none"
-            />
-            Verificando sua sessão...
-          </p>
-        )}
-      </div>
-    </main>
+    <>
+      <main className="flex flex-1 items-center justify-center px-6 py-16">
+        <div className="w-full max-w-sm text-center">
+          <h1 className="text-4xl font-bold tracking-tight text-brand sm:text-5xl">
+            Band<span className="text-brand-highlight">Up</span>
+          </h1>
+          <p className="mt-4 text-base text-content-muted">Sua banda, em sintonia.</p>
+          {error ? (
+            <div className="mt-8">
+              <p role="alert" className="text-sm leading-6 text-danger">{error}</p>
+              <button
+                type="button"
+                onClick={retry}
+                className="mt-5 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-on-primary transition hover:bg-primary-hover focus:outline-none focus:ring-4 focus:ring-focus"
+              >
+                Tentar novamente
+              </button>
+            </div>
+          ) : (
+            <p role="status" className="mt-8 flex items-center justify-center gap-2 text-sm text-content-subtle">
+              <span
+                aria-hidden="true"
+                className="h-4 w-4 animate-spin rounded-full border-2 border-accent-border border-t-primary motion-reduce:animate-none"
+              />
+              Verificando sua sessão...
+            </p>
+          )}
+        </div>
+      </main>
+      <footer className="flex justify-center px-5 pb-6"><ThemeSelector /></footer>
+    </>
   );
 }

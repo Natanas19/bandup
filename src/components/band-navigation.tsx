@@ -2,13 +2,16 @@
 
 import { useId, useRef, useState } from "react";
 import Link from "next/link";
+import ThemeSelector from "@/components/theme-selector";
+import NavigationIcon from "@/components/navigation-icon";
 
 const navigationItems = [
-  { section: "overview", label: "Visão geral", suffix: "" },
-  { section: "tarefas", label: "Tarefas", suffix: "/tarefas" },
-  { section: "agenda", label: "Agenda", suffix: "/agenda" },
-  { section: "membros", label: "Membros", suffix: "/membros" },
-  { section: "links", label: "Links", suffix: "/links" },
+  { icon: "LayoutDashboard", section: "overview", label: "Visão geral", suffix: "" },
+  { icon: "ListTodo", section: "tarefas", label: "Tarefas", suffix: "/tarefas" },
+  { icon: "CalendarDays", section: "agenda", label: "Agenda", suffix: "/agenda" },
+  { icon: "Users", section: "membros", label: "Membros", suffix: "/membros" },
+  { icon: "Link", section: "links", label: "Links", suffix: "/links" },
+  { icon: "Globe", section: "perfil-publico", label: "Perfil Público", suffix: "/perfil-publico" },
 ] as const;
 
 type BandSection = (typeof navigationItems)[number]["section"];
@@ -19,7 +22,7 @@ type BandNavigationProps = {
   variant?: "sidebar" | "expandable";
 };
 
-const focusStyles = "focus:outline-none focus:ring-4 focus:ring-violet-200";
+const focusStyles = "focus:outline-none focus:ring-4 focus:ring-focus";
 
 export default function BandNavigation({
   bandId,
@@ -54,14 +57,14 @@ export default function BandNavigation({
           aria-expanded={isOpen}
           aria-controls={panelId}
           onClick={() => setIsOpen((open) => !open)}
-          className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border border-violet-200 bg-white px-4 py-3 text-left text-sm font-semibold text-violet-800 transition hover:bg-violet-50 ${focusStyles}`}
+          className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border border-accent-border bg-surface px-4 py-3 text-left text-sm font-semibold text-brand transition hover:bg-accent-soft ${focusStyles}`}
         >
           <span>{activeLabel} <span aria-hidden="true">·</span> Menu da banda</span>
           <span aria-hidden="true" className="shrink-0 text-lg leading-none">{isOpen ? "×" : "☰"}</span>
         </button>
       )}
 
-      <div id={panelId} hidden={!isSidebar && !isOpen} className={isSidebar ? "" : "mt-3 rounded-2xl border border-violet-100 bg-white p-3"}>
+      <div id={panelId} hidden={!isSidebar && !isOpen} className={isSidebar ? "" : "mt-3 rounded-2xl border border-nav-border bg-surface p-3"}>
         <ul className={isSidebar ? "space-y-1" : "grid grid-cols-1 gap-2 sm:grid-cols-2"}>
           {navigationItems.map((item) => {
             const active = item.section === activeSection;
@@ -73,28 +76,29 @@ export default function BandNavigation({
                   aria-current={active ? "page" : undefined}
                   className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${focusStyles} ${
                     active
-                      ? isSidebar ? "bg-violet-50 text-violet-800" : "bg-violet-700 text-white"
-                      : isSidebar ? "text-zinc-600 hover:bg-violet-50 hover:text-violet-800" : "border border-violet-200 text-violet-800 hover:bg-violet-50"
+                      ? isSidebar ? "bg-accent-soft text-brand" : "bg-primary text-on-primary"
+                      : isSidebar ? "text-content-muted hover:bg-accent-soft hover:text-brand" : "border border-accent-border text-brand hover:bg-accent-soft"
                   }`}
                 >
-                  <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${active ? isSidebar ? "bg-violet-500" : "bg-white" : "bg-zinc-300"}`} />
+                  <NavigationIcon name={item.icon} />
                   {item.label}
                 </Link>
               </li>
             );
           })}
           <li>
-            <span aria-disabled="true" className="flex min-h-11 flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-sm text-zinc-500">
-              Configurações
-              <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-zinc-500">Em breve</span>
+            <span aria-disabled="true" className="flex min-h-11 flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-sm text-content-subtle">
+              <span className="inline-flex items-center gap-3"><NavigationIcon name="Settings" />Configurações</span>
+              <span className="rounded-full bg-disabled-surface px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-content-subtle">Em breve</span>
             </span>
           </li>
         </ul>
         {!isSidebar && (
-          <Link href="/dashboard" onClick={closeNavigation} className={`mt-2 flex min-h-11 items-center rounded-xl px-3 py-2.5 text-sm font-medium text-zinc-600 transition hover:bg-violet-50 hover:text-violet-800 ${focusStyles}`}>
+          <Link href="/dashboard" onClick={closeNavigation} className={`mt-2 flex min-h-11 items-center rounded-xl px-3 py-2.5 text-sm font-medium text-content-muted transition hover:bg-accent-soft hover:text-brand ${focusStyles}`}>
             ← Voltar para minhas bandas
           </Link>
         )}
+        <div className="mt-3 border-t border-nav-border px-3 pt-3"><ThemeSelector showIcon /></div>
       </div>
     </nav>
   );

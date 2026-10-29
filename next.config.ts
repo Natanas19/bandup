@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
+import { laboratory } from "./src/lib/development-lab";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  devIndicators: false,
+  allowedDevOrigins: laboratory.allowedDevOrigins,
 };
 
 export default nextConfig;
