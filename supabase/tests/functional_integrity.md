@@ -1,5 +1,12 @@
 # Migration 10: functional integrity v1 - PREPARED, NOT EXECUTED
 
+> Historical preparation report. The user subsequently reported isolated-lab
+> validation of Migrations 9/10; the reviewed local reports do not contain the
+> final execution evidence matching the current files. The prepared/not-executed
+> statements below describe that earlier revision and are retained as history.
+> See [production diagnostic evidence and gates](../../docs/supabase-production-readonly.md).
+> This documentation stage did not access a laboratory or validate production.
+
 No SQL was executed, no database was contacted and no existing application/migration file was changed during preparation. The historical Migration 9 test was adjusted only to allow future migrations after its fixed nine-file prefix. This document proposes future execution, requiring separate authorization.
 
 ## Confirmed file-based schema contract
@@ -42,3 +49,14 @@ See [sql_test_execution.md](sql_test_execution.md) for exact guarded commands, e
 Verify container ID, sole volume, loopback binding, current_database and PostgreSQL system identifier; do not trust only the port. Choose a capable existing administrative runner (supabase_admin in the previously identified local image), never widen permanent grants for tests. Confirm migrations 1..9 are already present without reapplying them; seed legacy fixtures before 10; record full row hashes and owner/column ACL/RLS/policy/trigger/function/view snapshots; apply 10 ONCE; compare unchanged data; run functional_integrity.sql and existing security suites in separate fresh psql -X sessions with ON_ERROR_STOP=1. Preserve sql_test_capabilities.sql next to suites for relative includes. Stop on any error without retry or automatic correction. Repeat row/catalog comparisons after each suite.
 
 The legacy seed COMMIT is deliberate and is separate from a migration (which also commits) and the regression suite (which rolls back). Test ROLLBACK cannot undo either earlier commit. Verify optional NULLs, statement-time boundary, timezone/offset behavior, upserts, multirow atomicity, two-session updates/lock waits and permission failures on the exact target PostgreSQL version. Sequence advances and external effects need separate checks. No production permissions, data compatibility or deployment readiness are presumed. No prepared SQL in this revision has been executed.
+
+
+## Legacy compatibility branch (prepared, not executed)
+
+The original sequence above is historical. For the legacy public layer use only the
+[explicit compatibility procedure](../../docs/publication-compatibility.md) and
+[branch manifest](../compatibility-publication.manifest.json). M8 must be verified
+before the bridge; original M7/M9 are excluded. The interstage gate keeps links
+private until URL safety is installed. Negative suites and the full URL corpus
+variants are prepared for the disposable compatibility target, not production.
+Do not apply files by timestamp or use `supabase db push` on this combined directory.

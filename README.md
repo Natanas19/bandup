@@ -52,7 +52,7 @@ Roteiro para uma futura instalação autorizada, não uma instrução para reapl
 9. `20261027000000_external_link_url_safety.sql`
 10. `20261027010000_functional_integrity.sql`
 
-Os arquivos estão em `supabase/migrations/`. Não aplique somente a primeira migration. A migration 10 está preparada e ainda não foi executada segundo a documentação local. As condições e limitações dos ensaios SQL estão em `supabase/tests/sql_test_execution.md`, `external_link_url_safety.md` e `functional_integrity.md`; exigem autorização própria e não comprovam o estado de produção.
+Os arquivos estão em `supabase/migrations/`. Não aplique somente a primeira migration. O usuário informou posteriormente a validação das migrations 9/10 em laboratórios isolados; os relatórios locais ainda descrevem revisões preparadas, sem um registro final que reconcilie essa informação. Isso não comprova aplicação ou compatibilidade em produção. Consulte [o plano de diagnóstico somente leitura](docs/supabase-production-readonly.md) para evidências, pré-requisitos e condições de autorização. As condições históricas dos ensaios SQL estão em `supabase/tests/sql_test_execution.md`, `external_link_url_safety.md` e `functional_integrity.md`; não execute esses testes ou fixtures em produção.
 
 ## Verificações locais
 
@@ -66,4 +66,11 @@ npm run build
 
 Os testes JavaScript usam mocks e não substituem integração com Auth, PostgREST ou RLS. Para um build isolado, use uma cópia temporária dos candidatos ao Git, dependências já instaladas e variáveis sintéticas, sem copiar `.env.local`. Não use credenciais reais nessa verificação.
 
-Os scripts Python locais de manutenção e `public/demo/magijos.svg` sem uso são ignorados individualmente; os testes oficiais JavaScript e SQL continuam candidatos ao versionamento. Consulte `docs/auditoria-final.md` para resultados, pendências e proposta de commits. Nenhum commit ou push foi autorizado nesta preparação.
+Os scripts Python locais de manutenção e `public/demo/magijos.svg` sem uso são ignorados individualmente. Os arquivos aprovados foram registrados nos cinco commits locais descritos no histórico; a auditoria preserva a proposta anterior como registro histórico. A preparação atual do diagnóstico não autoriza conexão, SQL, commit, push ou deploy. Consulte `docs/auditoria-final.md` e `docs/supabase-production-readonly.md` para os limites de cada etapa.
+
+
+Para o esquema com camada pública legada, a sequência original acima não é aplicável
+automaticamente. Consulte o [ramo de compatibilidade](docs/publication-compatibility.md)
+e seu [manifesto](supabase/compatibility-publication.manifest.json): M8 é pré-requisito,
+M7/M9 originais ficam excluídas e `supabase db push` permanece bloqueado. Os artefatos
+desse ramo estão preparados para revisão e ensaio futuro, sem execução SQL nesta etapa.

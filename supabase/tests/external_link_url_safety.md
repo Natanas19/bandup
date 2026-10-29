@@ -1,5 +1,12 @@
 # External URL safety v1 - prepared, never executed
 
+> Historical preparation report. The user subsequently reported isolated-lab
+> validation of Migrations 9/10; no final execution report for the current files
+> was found in the local reports reviewed. Preserve the historical results and
+> failures below; do not interpret this heading as a new execution assessment.
+> See [production diagnostic evidence and gates](../../docs/supabase-production-readonly.md).
+> No production validation or new SQL execution occurred in this documentation stage.
+
 ## Scope and compatibility
 Migration 20261027000000 follows the eight historical migrations. No existing rows are updated or deleted. CREATE OR REPLACE VIEW preserves its identity, column types/order, owner and ACLs; before/after snapshots assert those properties and source RLS/ACL/policies/guards. Catalog preconditions and a same-server canonical view comparison fail closed on drift. Strict policy deparser comparisons may also stop on harmless formatting/version differences: investigate, do not bypass them blindly.
 
@@ -35,3 +42,14 @@ References: PostgreSQL 17 CREATE VIEW, CREATE TRIGGER and ALTER TABLE documentat
 ## Explicit original-lab execution parameters - revised gate not executed
 
 This suite remains scoped to bandup_url_safety_20261027a because it needs that lab's pre-Migration-9 selected/hidden unsafe URL fixtures. Pass BOTH -v bandup_expected_database=bandup_url_safety_20261027a and -v bandup_expected_system_identifier=7701212271739703337 to psql (also -d bandup_url_safety_20261027a). The common gate verifies the actual database/system identifier and fixed pair allowlist; it has no defaults. The suite separately rejects the new functional-integrity database before corpus/fixture writes. Existing capability, RLS and URL assertions are unchanged. No old lab was accessed to prepare this revision. See sql_test_execution.md for current guarded execution instructions; run only with explicit authorization for the chosen target.
+
+
+## Legacy compatibility branch (prepared, not executed)
+
+The original sequence above is historical. For the legacy public layer use only the
+[explicit compatibility procedure](../../docs/publication-compatibility.md) and
+[branch manifest](../compatibility-publication.manifest.json). M8 must be verified
+before the bridge; original M7/M9 are excluded. The interstage gate keeps links
+private until URL safety is installed. Negative suites and the full URL corpus
+variants are prepared for the disposable compatibility target, not production.
+Do not apply files by timestamp or use `supabase db push` on this combined directory.

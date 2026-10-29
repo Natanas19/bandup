@@ -1,5 +1,12 @@
 # SQL test targeting - prepared identity revision, NOT EXECUTED
 
+> Historical laboratory procedure, not a production diagnostic. The user later
+> reported successful isolated-lab validation of Migrations 9/10; a final report
+> matching the current migration/suite files was not found in the local reports
+> reviewed. See [evidence reconciliation and production read-only plan](../../docs/supabase-production-readonly.md).
+> Never run the fixtures, test suites or this lab-specific gate in production.
+> No execution status was independently updated through a database connection.
+
 Only test SQL and documentation changed in this revision. No database, container, role, fixture, migration or SQL suite was accessed/executed. Earlier successful Migration 9 runs are historical evidence for the old gate, not proof that this revised psql gate has run.
 
 ## Explicit targets: no defaults and no arbitrary database
@@ -120,3 +127,14 @@ For a separately authorized Migration 9 run in its original container, use BOTH 
 6. Explicitly authorized two-session concurrency/lock waits, statement-time boundary and HTTP/PostgREST tests remain separate work. Transactions do not undo sequences or external effects; keep the laboratory idle. ON CONFLICT validates INSERT candidates before UPDATE, so unchanged legacy metadata uses UPDATE as documented.
 
 The fixture COMMIT, migration COMMIT and suite ROLLBACK are distinct. A fixture failure should leave the initial baseline; a migration failure should leave the committed fixture baseline; a suite failure should leave the committed migration and fixture intact. Always verify this instead of assuming it. No real SQL compilation, identity mismatch exit, rollback or permission behavior of this revised gate has been tested in this preparation-only stage.
+
+
+## Legacy compatibility branch (prepared, not executed)
+
+The original sequence above is historical. For the legacy public layer use only the
+[explicit compatibility procedure](../../docs/publication-compatibility.md) and
+[branch manifest](../compatibility-publication.manifest.json). M8 must be verified
+before the bridge; original M7/M9 are excluded. The interstage gate keeps links
+private until URL safety is installed. Negative suites and the full URL corpus
+variants are prepared for the disposable compatibility target, not production.
+Do not apply files by timestamp or use `supabase db push` on this combined directory.

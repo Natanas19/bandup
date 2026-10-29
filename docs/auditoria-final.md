@@ -1,3 +1,43 @@
+# Revisão de compatibilidade de publicação — 28/10/2026
+
+As propostas de compatibilidade agora exigem contratos de funções/triggers/ACLs e
+M8 anterior ao bridge; um gate impede publicação de links antes da etapa URL.
+Foram preparados negativos de preflight e corpus completo nas duas views públicas.
+O [roteiro e manifesto do ramo](publication-compatibility.md) prevalecem sobre a
+ordem original para o legado. SQL não foi executado; não houve acesso a produção,
+commit, push ou deploy. O diff preexistente de `package-lock.json` foi investigado
+e preservado, com origem não comprovada. Registros abaixo permanecem históricos.
+
+# Atualização: preparação do diagnóstico de produção
+
+## Revisão local do roteiro em duas fases
+
+A revisão posterior separou fisicamente os [metadados](supabase-production-readonly.sql)
+das [contagens e legados](supabase-production-readonly-data.sql), sem execução
+automática entre fases. Foram removidos deparsers de definições, pois podem chamar
+funções de saída de tipos personalizados; os hashes agora usam campos internos
+do catálogo. A fase de dados exige revisão de dependências e autorização posterior.
+Foram documentados privilégios, possíveis falhas, locks, custo e limites de sigilo.
+IPv6 continua explicitamente inconclusivo. Veja a [reconciliação das evidências](supabase-migration-evidence.md)
+e o [plano revisado](supabase-production-readonly.md). Nesta revisão, 13 testes
+offline das migrations passaram; isso não é execução SQL nem validação de produção.
+O verificador lexical local conferiu 28 instruções de metadados e 24 de dados,
+rejeitou 12 mutações negativas e passou 24 casos de limite UTF-16. A fase 1 está
+preparada para autorização específica, sem autorização implícita para a fase 2.
+
+O conteúdo abaixo registra etapas anteriores, inclusive a proposta de commits e
+avisos de testes ainda não executados naquela ocasião. Os cinco commits locais
+foram posteriormente criados. O usuário informou envio ao GitHub, Preview Ready,
+Production Branch `main` e validação das migrations 9/10 em laboratórios isolados;
+esses estados remotos não foram consultados nesta etapa. Os relatórios SQL locais
+ainda não incluem o registro final correspondente à validação informada.
+
+O [plano de diagnóstico somente leitura](supabase-production-readonly.md) reúne a
+conferência das evidências, os pré-requisitos e as condições antes de aplicar as
+migrations. Seu roteiro SQL está preparado, não executado nem validado por um
+servidor PostgreSQL. Não houve conexão, SQL, acesso a laboratório ou alteração de
+código/migrations durante sua elaboração. Validação de produção continua pendente.
+
 # Consolidação para preparação do GitHub — 27/10/2026
 
 Esta atualização prevalece sobre o diagnóstico histórico abaixo. A autorização atual abrange ajustes locais e verificações; não autoriza commit, push, banco, laboratório ou deploy.
