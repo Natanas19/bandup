@@ -24,6 +24,7 @@ export default function DashboardPage() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
   const [loadError, setLoadError] = useState("");
+  const [isMusician, setIsMusician] = useState(false);
 
   async function handleSignOut() {
     setIsLoggingOut(true);
@@ -118,13 +119,21 @@ export default function DashboardPage() {
         {!isLoading && !loadError && user && (
           bands.length === 0 ? (
             <div className="mt-6 rounded-2xl bg-accent-soft px-4 py-6 text-center sm:mt-10 sm:px-6 sm:py-8">
-              <h2 className="text-xl font-semibold text-content">Sua jornada começa com uma banda</h2>
+              <h2 className="text-xl font-semibold text-content">Como você quer começar?</h2>
               <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-content-muted">
-                Você ainda não participa de nenhuma banda. Crie a primeira para organizar tudo em um só lugar.
+                Sua conta é pessoal. Você pode criar uma banda agora ou continuar como músico e participar de bandas depois.
               </p>
               <Link href="/bandas/nova" className="mt-6 inline-flex w-full items-center justify-center rounded-xl bg-primary sm:w-auto px-5 py-3 text-sm font-semibold text-on-primary transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">
                 Criar minha banda
               </Link>
+              <button type="button" onClick={() => setIsMusician(true)} aria-pressed={isMusician}
+                className="mt-3 inline-flex w-full items-center justify-center rounded-xl border border-accent-border px-5 py-3 text-sm font-semibold text-brand transition hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus sm:ml-3 sm:w-auto">
+                Sou músico
+              </button>
+              {isMusician && <div role="status" className="mt-6 text-sm leading-6 text-content-muted">
+                <p className="font-semibold text-content">Boas-vindas ao BandUp!</p>
+                <p>Sua área pessoal e a opção de encontrar bandas serão implementadas nas próximas etapas. Você pode continuar aqui e criar uma banda quando quiser.</p>
+              </div>}
             </div>
           ) : (
             <div className="mt-6 sm:mt-10">

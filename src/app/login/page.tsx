@@ -201,7 +201,7 @@ export default function LoginPage() {
               </form>
 
               <p className="mt-8 text-center text-xs leading-5 text-content-faint">
-                Acesse com as credenciais da sua conta BandUp.
+                Ainda não tem conta? <Link href="/cadastro" className="font-semibold text-accent underline focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">Criar minha conta</Link>
               </p>
             </div>
           </section>

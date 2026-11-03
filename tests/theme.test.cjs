@@ -680,7 +680,7 @@ test("new band page uses semantic surfaces and fields in loading, signed out, re
   }
 });
 
-test("UI color audit permits fixed palette only in the approved promotional login artwork", () => {
+test("UI color audit permits fixed palette only in the approved promotional auth artwork", () => {
   const fixed = /(?:[a-z-]+:)*(?:bg|text|border(?:-[trblxy])?|ring|outline|decoration|accent|fill|stroke|shadow|from|via|to)-(?:white|black|(?:zinc|slate|gray|neutral|stone|violet|purple|indigo|fuchsia|red|rose|emerald|green|amber|yellow|sky|blue|pink|cyan|teal|orange|lime)-\d+)(?:\/\d+)?/g;
   const allowedLogin = new Set(["from-violet-700", "via-violet-800", "to-indigo-950", "text-white", "border-white/15", "focus:ring-violet-200", "text-violet-300", "text-violet-200", "text-violet-100/80", "text-violet-200/75"]);
   function walk(directory) {
@@ -691,7 +691,8 @@ test("UI color audit permits fixed palette only in the approved promotional logi
   }
   for (const file of walk(path.join(root, "src"))) {
     const colors = fs.readFileSync(file, "utf8").match(fixed) ?? [];
-    for (const color of colors) assert.ok(file === path.join(root, "src/app/login/page.tsx") && allowedLogin.has(color), `${path.relative(root, file)}: ${color}`);
+    const authArtwork = ["src/app/login/page.tsx", "src/app/cadastro/page.tsx"].some(relative => file === path.join(root, relative));
+    for (const color of colors) assert.ok(authArtwork && allowedLogin.has(color), `${path.relative(root, file)}: ${color}`);
   }
 });
 
