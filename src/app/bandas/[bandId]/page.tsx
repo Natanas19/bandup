@@ -13,7 +13,6 @@ type Band = {
   name: string;
   description: string | null;
   slug: string | null;
-  is_public: boolean;
   role: string;
 };
 
@@ -101,7 +100,7 @@ export default function BandPage() {
 
         const { data: bandData, error: bandError } = await supabase
           .from("bands")
-          .select("id, name, description, slug, is_public")
+          .select("id, name, description, slug")
           .eq("id", bandId)
           .maybeSingle();
 
