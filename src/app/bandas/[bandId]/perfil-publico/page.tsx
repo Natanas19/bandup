@@ -17,7 +17,7 @@ export default function BandProfilePage() {
   const { bandId } = useParams<{ bandId: string }>();
   if (PUBLICATION_ENABLED) return <EnabledBandProfilePage />;
   return <main className="flex flex-1 justify-center px-4 py-6 sm:px-6 sm:py-10"><div className="w-full min-w-0 max-w-5xl">
-    <BandNavigation bandId={bandId} activeSection="perfil-publico" />
+    <div className="md:hidden"><BandNavigation bandId={bandId} activeSection="perfil-publico" /></div>
     <PublicationUnavailable />
   </div></main>;
 }

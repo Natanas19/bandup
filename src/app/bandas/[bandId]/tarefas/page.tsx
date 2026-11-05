@@ -10,6 +10,7 @@ import CardDetails, { toggleCardDetails } from "@/components/card-details";
 import { calendarDay, formatTaskDate, taskDeadlinePatch } from "@/lib/date-time";
 import { requiredTextError } from "@/lib/form-validation";
 import { canEditTask, canReassignTask, canSaveTask, getBandAccess, recordWriteError } from "@/lib/record-permissions";
+import { readTasksWithEventSupport, taskColumns, taskEventValues } from "@/lib/task-event-compatibility";
 
 type TaskStatus = "todo" | "in_progress" | "done";
 type TaskPriority = "low" | "medium" | "high";
@@ -28,7 +29,7 @@ type Task = {
   priority: TaskPriority;
   due_date: string | null;
   assigned_to: string | null;
-  event_id: string | null;
+  event_id?: string | null;
   created_at: string;
   created_by: string;
 };
@@ -129,6 +130,7 @@ export default function BandTasksPage() {
   const [assignedTo, setAssignedTo] = useState("");
   const [relatedEventId, setRelatedEventId] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [supportsEvents, setSupportsEvents] = useState(true);
   const access = getBandAccess(currentUserId, isAdmin ? "admin" : "member");
   const editingTask = tasks.find((task) => task.id === editingTaskId);
   const canChangeAssignee = !editingTaskId || (!!editingTask && canReassignTask(access, editingTask));
@@ -207,25 +209,8 @@ export default function BandTasksPage() {
           label: member.user_id === user.id ? "Você" : `Integrante ${index + 1}`,
         }));
 
-        const { data: eventRows, error: eventsError } = await supabase
-          .from("events")
-          .select("id, title, start_at")
-          .eq("band_id", bandId)
-          .order("start_at", { ascending: true });
-
-        if (!isMounted) return;
-        if (eventsError) {
-          setPageState("error");
-          setLoadError("Não foi possível carregar os eventos da banda. Tente novamente.");
-          return;
-        }
-
-        const { data: taskRows, error: tasksError } = await supabase
-          .from("tasks")
-          .select("id, title, description, status, priority, due_date, assigned_to, event_id, created_at, created_by")
-          .eq("band_id", bandId)
-          .order("due_date", { ascending: true, nullsFirst: false })
-          .order("created_at", { ascending: false });
+        const { data: taskRows, error: tasksError, supportsEvents: hasEventSupport } =
+          await readTasksWithEventSupport(supabase, bandId);
 
         if (!isMounted) return;
         if (tasksError) {
@@ -234,6 +219,20 @@ export default function BandTasksPage() {
           return;
         }
 
+        const { data: eventRows, error: eventsError } = hasEventSupport ? await supabase
+          .from("events")
+          .select("id, title, start_at")
+          .eq("band_id", bandId)
+          .order("start_at", { ascending: true }) : { data: [], error: null };
+
+        if (!isMounted) return;
+        if (eventsError) {
+          setPageState("error");
+          setLoadError("Não foi possível carregar os eventos da banda. Tente novamente.");
+          return;
+        }
+
+        setSupportsEvents(hasEventSupport);
         setBandName(band.name);
         setIsAdmin(membership.role === "admin");
         setCurrentUserId(user.id);
@@ -349,6 +348,14 @@ export default function BandTasksPage() {
         return;
       }
 
+      let eventValues: { event_id?: string | null };
+      try {
+        eventValues = taskEventValues(supportsEvents, relatedEventId);
+      } catch (error) {
+        setFormError((error as Error).message);
+        return;
+      }
+
       if (relatedEventId && !events.some((bandEvent) => bandEvent.id === relatedEventId)) {
         setFormError("Selecione um evento que pertença a esta banda.");
         return;
@@ -373,7 +380,7 @@ export default function BandTasksPage() {
         priority,
         ...deadlineValues,
         assigned_to: assignedTo || null,
-        event_id: relatedEventId || null,
+        ...eventValues,
       };
 
       if (editingTaskId) {
@@ -382,7 +389,7 @@ export default function BandTasksPage() {
           .update({ ...taskValues, updated_at: new Date().toISOString() })
           .eq("id", editingTaskId)
           .eq("band_id", bandId)
-          .select("id, title, description, status, priority, due_date, assigned_to, event_id, created_at, created_by")
+          .select(taskColumns(supportsEvents))
           .maybeSingle();
 
         if (error || !updatedTask) {
@@ -407,7 +414,7 @@ export default function BandTasksPage() {
           created_by: user.id,
           ...taskValues,
         })
-        .select("id, title, description, status, priority, due_date, assigned_to, event_id, created_at, created_by")
+        .select(taskColumns(supportsEvents))
         .single();
 
       if (error || !createdTask) {
@@ -575,6 +582,7 @@ export default function BandTasksPage() {
                 <label htmlFor="task-event" className="mb-2 block text-sm font-medium text-content-label">Evento relacionado (opcional)</label>
                 <select
                   id="task-event"
+                  disabled={!supportsEvents}
                   value={relatedEventId}
                   onChange={(event) => setRelatedEventId(event.target.value)}
                   className="min-h-11 w-full rounded-xl border border-outline bg-surface px-3 py-2.5 text-base md:text-sm text-content outline-none focus:border-input-focus focus:ring-4 focus:ring-input-ring"
@@ -586,6 +594,7 @@ export default function BandTasksPage() {
                     </option>
                   ))}
                 </select>
+                {!supportsEvents && <p role="status" className="mt-2 text-sm text-content-muted">A associação com eventos não está disponível neste ambiente. Você pode gerenciar tarefas sem evento.</p>}
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

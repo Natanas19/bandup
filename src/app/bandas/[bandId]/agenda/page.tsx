@@ -10,6 +10,7 @@ import CardDetails, { toggleCardDetails } from "@/components/card-details";
 import { differentLocalEventDays, eventSchedulePatch, toLocalDateTimeInput, validateEventSchedule, watchPageClock } from "@/lib/date-time";
 import { requiredTextError } from "@/lib/form-validation";
 import { canEditEvent, getBandAccess, recordWriteError } from "@/lib/record-permissions";
+import { isMissingTaskEventColumn } from "@/lib/task-event-compatibility";
 
 type EventType =
   | "show"
@@ -141,6 +142,7 @@ export default function BandAgendaPage() {
   const [endAt, setEndAt] = useState("");
   const [location, setLocation] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [supportsRelatedTasks, setSupportsRelatedTasks] = useState(true);
   const access = getBandAccess(currentUserId, isAdmin ? "admin" : "member");
   const originalEvent = events.find((item) => item.id === editingEventId);
   const endAtMinimum = startAt || undefined;
@@ -229,6 +231,7 @@ export default function BandAgendaPage() {
         const loadedEvents = (data ?? []) as unknown as BandEvent[];
         const eventIds = loadedEvents.map((bandEvent) => bandEvent.id);
         let relatedTasks: RelatedTask[] = [];
+        let hasRelatedTaskSupport = true;
 
         if (eventIds.length > 0) {
           const { data: taskRows, error: tasksError } = await supabase
@@ -238,13 +241,14 @@ export default function BandAgendaPage() {
             .in("event_id", eventIds);
 
           if (!isMounted) return;
-          if (tasksError) {
+          if (tasksError && !isMissingTaskEventColumn(tasksError)) {
             setPageState("error");
             setLoadError("Não foi possível carregar as tarefas dos eventos. Tente novamente.");
             return;
           }
 
-          relatedTasks = (taskRows ?? []) as unknown as RelatedTask[];
+          hasRelatedTaskSupport = !isMissingTaskEventColumn(tasksError);
+          if (hasRelatedTaskSupport) relatedTasks = (taskRows ?? []) as unknown as RelatedTask[];
         }
 
         const groupedTasks = relatedTasks.reduce<Record<string, RelatedTask[]>>((groups, task) => {
@@ -258,6 +262,7 @@ export default function BandAgendaPage() {
         setCurrentUserId(user.id);
         setEvents(sortEvents(loadedEvents));
         setTasksByEvent(groupedTasks);
+        setSupportsRelatedTasks(hasRelatedTaskSupport);
         setCurrentTime(Date.now());
         setPageState("ready");
       } catch {
@@ -630,6 +635,7 @@ export default function BandAgendaPage() {
           </section>
         ) : (
           <section aria-label="Lista de eventos" className="mt-6 space-y-3">
+            {!supportsRelatedTasks && <p role="status" className="text-sm text-content-muted">Tarefas associadas indisponíveis neste ambiente. Os eventos continuam disponíveis na agenda.</p>}
             {sortEvents(events, currentTime).map((bandEvent) => {
               const isUpcoming = Date.parse(bandEvent.start_at) >= currentTime;
 

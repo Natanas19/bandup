@@ -26,7 +26,7 @@ function fixture(initialStates = {}, cryptoSource = { randomUUID: () => "1234567
         insert(values) { writing = true; calls.push(["insert", table, values]); saved = { ...saved, id: "new", ...values }; return this; },
         update(values) { writing = true; calls.push(["update", table, values]); saved = { ...saved, id: "existing", ...values }; return this; },
         delete() { writing = true; calls.push(["delete", table]); return this; },
-        select() { return this; }, eq(column, value) { calls.push(["eq", table, column, value]); return this; },
+        select(columns) { calls.push(["select", table, columns]); return this; }, eq(column, value) { calls.push(["eq", table, column, value]); return this; },
         maybeSingle: async () => writing && (options.writeError || options.noWriteRow)
           ? { data: null, error: options.writeError ?? null } : { data: saved },
         single: async () => ({ data: saved }),
@@ -179,6 +179,41 @@ const taskRecord = { id: "existing", title: "Repertório", description: null, cr
   status: "todo", priority: "medium", due_date: null, event_id: null, created_at: "2026-01-01T12:00:00Z" };
 const eventRecord = { id: "existing", title: "Show", description: null, created_by: "author", event_type: "show",
   start_at: "2099-12-31T18:00:00Z", end_at: null, location: null, created_at: "2026-01-01T12:00:00Z" };
+for (const supportsEvents of [false, true]) {
+  for (const editing of [false, true]) {
+    test(`task ${editing ? 'edit and complete' : 'create'} uses the detected event support: ${supportsEvents}`, async () => {
+      const record = { ...taskRecord, created_by: 'user', assigned_to: null,
+        ...(supportsEvents ? { event_id: 'event' } : {}) };
+      if (!supportsEvents) delete record.event_id;
+      const f = fixture({ 0: 'ready', 2: true, 3: [record],
+        4: [{ id: 'event', title: 'Show', start_at: '2099-01-01T12:00:00Z' }],
+        6: true, 7: editing ? 'existing' : null, 14: 'Task', 16: 'done',
+        20: supportsEvents ? 'event' : '', 21: 'user', 22: supportsEvents },
+      undefined, { record });
+      const tree = f.render(f.load('src/app/bandas/[bandId]/tarefas/page.tsx').default);
+      assert.equal(nodes(tree, n => n.props?.id === 'task-event')[0].props.disabled, !supportsEvents);
+      await findForm(tree).props.onSubmit({ preventDefault() {} });
+      const writes = f.calls.filter(call => ['insert', 'update'].includes(call[0]));
+      assert.equal(writes.length, 1, 'writes must never be retried');
+      assert.equal(writes[0][2].status, 'done');
+      assert.equal('event_id' in writes[0][2], supportsEvents);
+      if (supportsEvents) assert.equal(writes[0][2].event_id, 'event');
+      const returned = f.calls.filter(call => call[0] === 'select' && call[1] === 'tasks').at(-1);
+      assert.equal(returned[2].includes('event_id'), supportsEvents);
+      assert.ok(f.calls.some(call => call[0] === 'eq' && call[1] === 'band_members' && call[2] === 'band_id' && call[3] === 'band'));
+      if (editing) assert.ok(f.calls.some(call => call[0] === 'eq' && call[1] === 'tasks' && call[2] === 'band_id' && call[3] === 'band'));
+    });
+  }
+}
+
+test('task rejects an attempted event association without schema support before writing', async () => {
+  const f = fixture({ 0: 'ready', 6: true, 14: 'Task', 20: 'event', 21: 'user', 22: false });
+  await findForm(f.render(f.load('src/app/bandas/[bandId]/tarefas/page.tsx').default))
+    .props.onSubmit({ preventDefault() {} });
+  assert.ok(f.states[10].includes('não permite vincular'));
+  assert.equal(f.calls.some(call => ['insert', 'update'].includes(call[0])), false);
+});
+
 const profiles = [
   { name: "admin", role: "admin", creator: "author", assignee: "assignee", taskEdit: true, eventEdit: true, remove: true },
   { name: "author", role: "member", creator: "user", assignee: "assignee", taskEdit: true, eventEdit: true, remove: false },

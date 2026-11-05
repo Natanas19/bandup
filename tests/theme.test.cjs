@@ -20,6 +20,8 @@ function modules(globals = {}, react = React) {
     cache.set(name, loadedModule);
     const localRequire = (id) => {
       if (id === "react") return react;
+      // Dashboard theme fixtures start after the separately tested welcome flow.
+      if (id === "@/components/welcome-onboarding" && globals.onboardingCompleted) return { __esModule: true, default: ({ children }) => children };
       if (id === "next/navigation") return { useRouter: () => ({ replace() {} }), useParams: () => ({ bandId: "theme-band" }), usePathname: () => globals.testPathname ?? "/bandas/theme-band" };
       if (id === "@/lib/supabase/client") return globals.supabaseMock ?? { getSupabaseBrowserClient() { throw new Error("Tests must not contact Auth"); } };
       if (id === "./globals.css") return {};
@@ -344,7 +346,7 @@ test("entry, login and both navigation variants render an accessible appearance 
 test("login form retains mobile sizing, accessible fields, errors and busy state", () => {
   const values = ["musico@example.com", "secret", "Falha de teste", true, false];
   let index = 0;
-  const hooks = { ...React, useState: () => [values[index++], () => {}], useEffect() {} };
+  const hooks = { ...React, useState: () => [values[index++], () => {}], useRef: value => ({ current: value }), useEffect() {} };
   const loader = modules({}, hooks);
   const { ThemeProvider } = loader.load("src/components/theme-provider.tsx");
   const Login = loader.load("src/app/login/page.tsx").default;
@@ -384,7 +386,7 @@ function renderWorkspace(file, states) {
     useEffect() {},
     useRef(initial) { return { current: initial }; },
   };
-  const loader = modules({}, hooks);
+  const loader = modules({ onboardingCompleted: file === "src/app/dashboard/page.tsx" }, hooks);
   const Page = loader.load(file).default;
   const page = Page();
   const { ThemeProvider } = loader.load("src/components/theme-provider.tsx");
@@ -395,7 +397,7 @@ test("dashboard themes cover loading, signed out, empty, populated and error sta
   const file = "src/app/dashboard/page.tsx";
   const user = { id: "test-user", email: "test@example.com" };
   for (const [states, expected] of [
-    [[null, [], true, false, "", ""], "Verificando"],
+    [[null, [], true, false, "", ""], "Carregando sua conta e suas bandas..."],
     [[null, [], false, false, "", ""], 'href="/login"'],
     [[user, [], false, false, "", ""], 'href="/bandas/nova"'],
     [[user, [{ role: "admin", band: { id: "theme-band", name: "Theme Band", description: "Description" } }], false, true, "Sign out error", ""], 'href="/bandas/theme-band"'],
@@ -689,7 +691,7 @@ test("new band page uses semantic surfaces and fields in loading, signed out, re
   }
 });
 
-test("UI color audit permits fixed palette only in the approved promotional login artwork", () => {
+test("UI color audit permits fixed palette only in the approved login and signup artwork", () => {
   const fixed = /(?:[a-z-]+:)*(?:bg|text|border(?:-[trblxy])?|ring|outline|decoration|accent|fill|stroke|shadow|from|via|to)-(?:white|black|(?:zinc|slate|gray|neutral|stone|violet|purple|indigo|fuchsia|red|rose|emerald|green|amber|yellow|sky|blue|pink|cyan|teal|orange|lime)-\d+)(?:\/\d+)?/g;
   const allowedLogin = new Set(["from-violet-700", "via-violet-800", "to-indigo-950", "text-white", "border-white/15", "focus:ring-violet-200", "text-violet-300", "text-violet-200", "text-violet-100/80", "text-violet-200/75"]);
   function walk(directory) {
@@ -700,7 +702,8 @@ test("UI color audit permits fixed palette only in the approved promotional logi
   }
   for (const file of walk(path.join(root, "src"))) {
     const colors = fs.readFileSync(file, "utf8").match(fixed) ?? [];
-    for (const color of colors) assert.ok(file === path.join(root, "src/app/login/page.tsx") && allowedLogin.has(color), `${path.relative(root, file)}: ${color}`);
+    const authArtwork = ["src/app/login/page.tsx", "src/app/cadastro/page.tsx"].some(relative => file === path.join(root, relative));
+    for (const color of colors) assert.ok(authArtwork && allowedLogin.has(color), `${path.relative(root, file)}: ${color}`);
   }
 });
 
@@ -783,7 +786,7 @@ test("navigation icons and Perfil Publico follow Links in desktop and mobile men
     const html = renderToStaticMarkup(React.createElement(ThemeProvider, null, React.createElement(Navigation, { bandId: "band", activeSection: "perfil-publico", variant })));
     assert.match(html, /aria-current="page"[^>]*href="\/bandas\/band\/perfil-publico"/);
     assert.ok(html.indexOf('href="/bandas/band/links"') < html.indexOf('href="/bandas/band/perfil-publico"'));
-    assert.equal((html.match(/<svg /g) ?? []).length, 8);
+    assert.equal((html.match(/<svg /g) ?? []).length, 9);
     for (const svg of html.match(/<svg[^>]*>/g)) {
       assert.match(svg, /aria-hidden="true"/); assert.match(svg, /focusable="false"/); assert.match(svg, /stroke="currentColor"/);
     }

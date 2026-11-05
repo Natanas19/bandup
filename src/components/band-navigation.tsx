@@ -93,6 +93,10 @@ export default function BandNavigation({
             </span>
           </li>
         </ul>
+        <Link href="/meu-perfil" onClick={isSidebar ? undefined : closeNavigation}
+          className={`mt-2 flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-content-muted transition hover:bg-accent-soft hover:text-brand ${focusStyles}`}>
+          <NavigationIcon name="Users" />Meu Perfil
+        </Link>
         {!isSidebar && (
           <Link href="/dashboard" onClick={closeNavigation} className={`mt-2 flex min-h-11 items-center rounded-xl px-3 py-2.5 text-sm font-medium text-content-muted transition hover:bg-accent-soft hover:text-brand ${focusStyles}`}>
             ← Voltar para minhas bandas

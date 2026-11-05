@@ -6,7 +6,8 @@ export type PrivateSessionSnapshot = {
 };
 
 export function getPrivateScope(pathname: string): string | null {
-  if (pathname === "/dashboard" || pathname === "/bandas/nova") return pathname;
+  if (pathname === "/meu-perfil" || pathname.startsWith("/meu-perfil/")) return "/meu-perfil";
+  if (pathname === "/dashboard" || pathname === "/bandas/nova" || pathname === "/descobrir") return pathname;
   const band = /^\/bandas\/([^/]+)(?:\/|$)/.exec(pathname);
   return band ? `band:${band[1]}` : null;
 }
