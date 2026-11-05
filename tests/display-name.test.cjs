@@ -8,7 +8,7 @@ const mod = { exports: {} };
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/lib/display-name.ts', 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
 }).outputText, { module: mod, exports: mod.exports });
-const { normalizeDisplayName, loadMemberNames } = mod.exports;
+const { normalizeDisplayName, normalizeMemberDisplayName, loadMemberNames } = mod.exports;
 
 test('display names normalize Unicode and spaces; untrusted metadata fails closed', () => {
   assert.equal(normalizeDisplayName('  Jose\u0301   Silva  '), 'José Silva');
@@ -42,6 +42,16 @@ test('future band scoped response is validated again and never substitutes email
   const names = await loadMemberNames(client, 'band', true);
   assert.equal(names.size, 1);
   assert.equal(names.get('a'), 'Ana');
+});
+
+test('validated member names preserve Unicode and emoji without weakening account editing rules', () => {
+  for (const name of ['José', 'Jose\u0301', '山田 太郎', 'Ana 🎸', '👩‍🎤', '🇧🇷', '👍🏽', 'Ana  Silva', '🎸'.repeat(80)]) {
+    assert.equal(normalizeMemberDisplayName(name), name);
+  }
+  assert.equal(normalizeDisplayName('👩‍🎤'), null);
+  for (const value of [null, {}, '', '\u200d \ufe0f', '\u{e0100}', '🎸'.repeat(81), 'A\nB', 'A\u202eB', 'A\u2066B', '<script>', 'private@example.com']) {
+    assert.equal(normalizeMemberDisplayName(value), null);
+  }
 });
 
 test('legacy account can save only its own Auth metadata; invalid names never reach Auth', async () => {

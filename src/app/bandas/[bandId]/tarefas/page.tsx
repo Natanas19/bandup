@@ -12,6 +12,8 @@ import { requiredTextError } from "@/lib/form-validation";
 import { canEditTask, canReassignTask, canSaveTask, getBandAccess, recordWriteError } from "@/lib/record-permissions";
 import { readTasksWithEventSupport, taskColumns, taskEventValues } from "@/lib/task-event-compatibility";
 
+import { loadMemberNames } from "@/lib/display-name";
+
 type TaskStatus = "todo" | "in_progress" | "done";
 type TaskPriority = "low" | "medium" | "high";
 
@@ -204,9 +206,9 @@ export default function BandTasksPage() {
           return;
         }
 
-        const bandMembers = (memberRows ?? []).map((member, index) => ({
+        const bandMembers = (memberRows ?? []).map((member) => ({
           userId: member.user_id,
-          label: member.user_id === user.id ? "Você" : `Integrante ${index + 1}`,
+          label: "Integrante",
         }));
 
         const { data: taskRows, error: tasksError, supportsEvents: hasEventSupport } =
@@ -253,6 +255,49 @@ export default function BandTasksPage() {
       isMounted = false;
     };
   }, [bandId]);
+
+  useEffect(() => {
+    if (pageState !== "ready" || !currentUserId) return;
+    let active = true;
+    let generation = 0;
+    let timer: number | undefined;
+    const supabase = getSupabaseBrowserClient();
+    const clearNames = () => setMembers(current => current.map(member => ({ ...member, label: "Integrante" })));
+    async function refreshNames() {
+      const ticket = ++generation;
+      try {
+        const { data, error } = await supabase.auth.getUser();
+        if (!active || ticket !== generation) return;
+        if (error || data.user?.id !== currentUserId) { clearNames(); return; }
+        // RPC contract applied/validated on Demo; authorization stays in the RPC.
+        const names = await loadMemberNames(supabase, bandId, true);
+        if (!active || ticket !== generation) return;
+        setMembers(current => current.map(member => ({ ...member, label: names.get(member.userId) ?? "Integrante" })));
+      } catch { if (active && ticket === generation) clearNames(); }
+    }
+    const scheduleRefresh = () => {
+      generation++;
+      window.clearTimeout(timer);
+      // Never call SDK methods while its Auth notification lock may be held.
+      timer = window.setTimeout(() => { void refreshNames(); }, 0);
+    };
+    const onVisibility = () => { if (document.visibilityState === "visible") scheduleRefresh(); };
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!active) return;
+      if (event === "SIGNED_OUT" || session?.user.id !== currentUserId) {
+        generation++; window.clearTimeout(timer); clearNames();
+      } else if (event === "USER_UPDATED" || event === "SIGNED_IN") scheduleRefresh();
+    });
+    void refreshNames();
+    window.addEventListener("focus", scheduleRefresh);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      active = false; generation++; window.clearTimeout(timer);
+      listener.subscription.unsubscribe();
+      window.removeEventListener("focus", scheduleRefresh);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [bandId, currentUserId, pageState]);
 
   function resetForm() {
     setTitle("");
@@ -616,7 +661,7 @@ export default function BandTasksPage() {
                 </div>
                 <div>
                   <label htmlFor="task-assignee" className="mb-2 block text-sm font-medium text-content-label">Responsável <span className="font-normal text-content-faint">(opcional)</span></label>
-                  <select id="task-assignee" disabled={!canChangeAssignee || isSubmitting} aria-describedby={!canChangeAssignee ? "task-assignee-help" : undefined} value={assignedTo} onChange={(event) => setAssignedTo(event.target.value)} className="min-h-11 w-full rounded-xl border border-outline bg-surface px-3 py-2.5 text-base md:text-sm text-content outline-none focus:border-input-focus focus:ring-4 focus:ring-input-ring">
+                  <select id="task-assignee" disabled={!canChangeAssignee || isSubmitting} aria-describedby={!canChangeAssignee ? "task-assignee-help" : undefined} value={assignedTo} onChange={(event) => setAssignedTo(event.target.value)} className="min-h-11 w-full min-w-0 max-w-full rounded-xl border border-outline bg-surface px-3 py-2.5 text-base md:text-sm text-content outline-none focus:border-input-focus focus:ring-4 focus:ring-input-ring">
                     <option value="">Sem responsável</option>
                     {members.map((member) => <option key={member.userId} value={member.userId}>{member.label}</option>)}
                   </select>
@@ -658,7 +703,7 @@ export default function BandTasksPage() {
           <section aria-label="Lista de tarefas" className="mt-6 space-y-3">
             {tasks.map((task) => {
               const assignee = task.assigned_to
-                ? members.find((member) => member.userId === task.assigned_to)?.label ?? "Membro da banda"
+                ? members.find((member) => member.userId === task.assigned_to)?.label ?? "Integrante"
                 : null;
 
               return (
@@ -675,7 +720,7 @@ export default function BandTasksPage() {
                   {(task.due_date || assignee) && (
                     <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 pt-3 text-xs text-content-subtle">
                       {task.due_date && <p>Prazo: <span className="font-medium text-content-label">{formatDate(task.due_date)}</span></p>}
-                      {assignee && <p>Responsável: <span className="font-medium text-content-label">{assignee}</span></p>}
+                      {assignee && <p className="min-w-0 break-words [overflow-wrap:anywhere]">Responsável: <span className="font-medium text-content-label">{assignee}</span></p>}
                     </div>
                   )}
                   {task.event_id && <p className="mt-2 text-xs text-content-subtle">Evento: <span className="font-medium text-content-label">{events.find((bandEvent) => bandEvent.id === task.event_id)?.title ?? "Evento da banda"}</span></p>}

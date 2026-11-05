@@ -135,7 +135,7 @@ test('mobile menu expands, closes on Escape or navigation and exposes accessible
 
 test('unimplemented sections show coming soon only; unknown paths return not found', async () => {
   const Page = loader()('src/app/meu-perfil/[section]/page.tsx').default;
-  for (const section of ['tarefas', 'agenda', 'links', 'perfil-publico', 'configuracoes']) {
+  for (const section of ['agenda', 'links', 'perfil-publico', 'configuracoes']) {
     const html = renderToStaticMarkup(await Page({ params: Promise.resolve({ section }) }));
     assert.ok(html.includes('Em breve')); assert.ok(html.includes('href="/meu-perfil"'));
     assert.equal(html.includes('<form'), false);

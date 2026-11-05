@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import PersonalTasks from "@/components/personal-tasks";
 
 const sections = [
   { slug: "tarefas", title: "Tarefas", description: "Seu espaço para tarefas pessoais estará disponível em uma próxima etapa." },
@@ -11,6 +12,7 @@ const sections = [
 
 export default async function PersonalSectionPage({ params }: { params: Promise<{ section: string }> }) {
   const { section } = await params;
+  if (section === "tarefas") return <PersonalTasks />;
   const item = sections.find(item => item.slug === section);
   if (!item) notFound();
   return <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10">

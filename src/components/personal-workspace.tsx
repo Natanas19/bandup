@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import NavigationIcon, { type NavigationIconName } from "@/components/navigation-icon";
 import ThemeSelector from "@/components/theme-selector";
+import PersonalAccountName from "@/components/personal-account-name";
 
 const items: { href: string; label: string; icon: NavigationIconName }[] = [
   { href: "/meu-perfil", label: "Visão geral", icon: "LayoutDashboard" },
@@ -51,7 +52,7 @@ export default function PersonalWorkspace({ children }: { children: ReactNode })
       <Link href="/dashboard" className="rounded text-xl font-bold tracking-tight text-content focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">Band<span className="text-accent">Up</span></Link>
       <div className="mt-10 rounded-2xl bg-accent-soft p-4">
         <p className="text-xs font-semibold uppercase tracking-widest text-accent">Área pessoal</p>
-        <p className="mt-2 font-semibold text-content">Meu Perfil</p>
+        <PersonalAccountName />
         <p className="mt-1 text-xs leading-5 text-content-subtle">Seu espaço em todas as suas bandas.</p>
       </div>
       <div className="mt-8"><PersonalNavigation sidebar /></div>

@@ -9,8 +9,18 @@ export function normalizeDisplayName(value: unknown): string | null {
   return name;
 }
 
+// The validated RPC accepts Unicode/emoji, including joiners. Keep its display
+// validation separate from account-name editing rules; never use it as identity.
+export function normalizeMemberDisplayName(value: unknown): string | null {
+  if (typeof value !== "string" || [...value].length > 80
+    || /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069<>@]/u.test(value)) return null;
+  const name = value.trim();
+  if (!name || !name.replace(/[\s\u200b-\u200d\u2060\ufeff\ufe00-\ufe0f\u{e0100}-\u{e01ef}]/gu, "")) return null;
+  return name;
+}
+
 export async function loadMemberNames(client: SupabaseClient, bandId: string, backendValidated = false): Promise<Map<string, string>> {
-  // Future, band-scoped backend contract. Missing/denied RPC fails closed.
+  // Band-scoped RPC; opt in only at validated call sites. Missing/denied RPC fails closed.
   // Never query Auth users or substitute emails.
   if (!backendValidated) return new Map();
   try {
@@ -18,7 +28,7 @@ export async function loadMemberNames(client: SupabaseClient, bandId: string, ba
     const names = new Map<string, string>();
     if (error || !Array.isArray(data)) return names;
     for (const row of data) {
-      const name = normalizeDisplayName(row?.display_name);
+      const name = normalizeMemberDisplayName(row?.display_name);
       if (typeof row?.user_id === "string" && name) names.set(row.user_id, name);
     }
     return names;
