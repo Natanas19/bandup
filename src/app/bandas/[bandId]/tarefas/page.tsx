@@ -10,6 +10,9 @@ import CardDetails, { toggleCardDetails } from "@/components/card-details";
 import { calendarDay, formatTaskDate, taskDeadlinePatch } from "@/lib/date-time";
 import { requiredTextError } from "@/lib/form-validation";
 import { canEditTask, canReassignTask, canSaveTask, getBandAccess, recordWriteError } from "@/lib/record-permissions";
+import { readTasksWithEventSupport, taskColumns, taskEventValues } from "@/lib/task-event-compatibility";
+
+import { loadMemberNames } from "@/lib/display-name";
 
 type TaskStatus = "todo" | "in_progress" | "done";
 type TaskPriority = "low" | "medium" | "high";
@@ -28,7 +31,7 @@ type Task = {
   priority: TaskPriority;
   due_date: string | null;
   assigned_to: string | null;
-  event_id: string | null;
+  event_id?: string | null;
   created_at: string;
   created_by: string;
 };
@@ -129,6 +132,7 @@ export default function BandTasksPage() {
   const [assignedTo, setAssignedTo] = useState("");
   const [relatedEventId, setRelatedEventId] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [supportsEvents, setSupportsEvents] = useState(true);
   const access = getBandAccess(currentUserId, isAdmin ? "admin" : "member");
   const editingTask = tasks.find((task) => task.id === editingTaskId);
   const canChangeAssignee = !editingTaskId || (!!editingTask && canReassignTask(access, editingTask));
@@ -202,30 +206,13 @@ export default function BandTasksPage() {
           return;
         }
 
-        const bandMembers = (memberRows ?? []).map((member, index) => ({
+        const bandMembers = (memberRows ?? []).map((member) => ({
           userId: member.user_id,
-          label: member.user_id === user.id ? "Você" : `Integrante ${index + 1}`,
+          label: "Integrante",
         }));
 
-        const { data: eventRows, error: eventsError } = await supabase
-          .from("events")
-          .select("id, title, start_at")
-          .eq("band_id", bandId)
-          .order("start_at", { ascending: true });
-
-        if (!isMounted) return;
-        if (eventsError) {
-          setPageState("error");
-          setLoadError("Não foi possível carregar os eventos da banda. Tente novamente.");
-          return;
-        }
-
-        const { data: taskRows, error: tasksError } = await supabase
-          .from("tasks")
-          .select("id, title, description, status, priority, due_date, assigned_to, event_id, created_at, created_by")
-          .eq("band_id", bandId)
-          .order("due_date", { ascending: true, nullsFirst: false })
-          .order("created_at", { ascending: false });
+        const { data: taskRows, error: tasksError, supportsEvents: hasEventSupport } =
+          await readTasksWithEventSupport(supabase, bandId);
 
         if (!isMounted) return;
         if (tasksError) {
@@ -234,6 +221,20 @@ export default function BandTasksPage() {
           return;
         }
 
+        const { data: eventRows, error: eventsError } = hasEventSupport ? await supabase
+          .from("events")
+          .select("id, title, start_at")
+          .eq("band_id", bandId)
+          .order("start_at", { ascending: true }) : { data: [], error: null };
+
+        if (!isMounted) return;
+        if (eventsError) {
+          setPageState("error");
+          setLoadError("Não foi possível carregar os eventos da banda. Tente novamente.");
+          return;
+        }
+
+        setSupportsEvents(hasEventSupport);
         setBandName(band.name);
         setIsAdmin(membership.role === "admin");
         setCurrentUserId(user.id);
@@ -254,6 +255,49 @@ export default function BandTasksPage() {
       isMounted = false;
     };
   }, [bandId]);
+
+  useEffect(() => {
+    if (pageState !== "ready" || !currentUserId) return;
+    let active = true;
+    let generation = 0;
+    let timer: number | undefined;
+    const supabase = getSupabaseBrowserClient();
+    const clearNames = () => setMembers(current => current.map(member => ({ ...member, label: "Integrante" })));
+    async function refreshNames() {
+      const ticket = ++generation;
+      try {
+        const { data, error } = await supabase.auth.getUser();
+        if (!active || ticket !== generation) return;
+        if (error || data.user?.id !== currentUserId) { clearNames(); return; }
+        // RPC contract applied/validated on Demo; authorization stays in the RPC.
+        const names = await loadMemberNames(supabase, bandId, true);
+        if (!active || ticket !== generation) return;
+        setMembers(current => current.map(member => ({ ...member, label: names.get(member.userId) ?? "Integrante" })));
+      } catch { if (active && ticket === generation) clearNames(); }
+    }
+    const scheduleRefresh = () => {
+      generation++;
+      window.clearTimeout(timer);
+      // Never call SDK methods while its Auth notification lock may be held.
+      timer = window.setTimeout(() => { void refreshNames(); }, 0);
+    };
+    const onVisibility = () => { if (document.visibilityState === "visible") scheduleRefresh(); };
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!active) return;
+      if (event === "SIGNED_OUT" || session?.user.id !== currentUserId) {
+        generation++; window.clearTimeout(timer); clearNames();
+      } else if (event === "USER_UPDATED" || event === "SIGNED_IN") scheduleRefresh();
+    });
+    void refreshNames();
+    window.addEventListener("focus", scheduleRefresh);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      active = false; generation++; window.clearTimeout(timer);
+      listener.subscription.unsubscribe();
+      window.removeEventListener("focus", scheduleRefresh);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [bandId, currentUserId, pageState]);
 
   function resetForm() {
     setTitle("");
@@ -349,6 +393,14 @@ export default function BandTasksPage() {
         return;
       }
 
+      let eventValues: { event_id?: string | null };
+      try {
+        eventValues = taskEventValues(supportsEvents, relatedEventId);
+      } catch (error) {
+        setFormError((error as Error).message);
+        return;
+      }
+
       if (relatedEventId && !events.some((bandEvent) => bandEvent.id === relatedEventId)) {
         setFormError("Selecione um evento que pertença a esta banda.");
         return;
@@ -373,7 +425,7 @@ export default function BandTasksPage() {
         priority,
         ...deadlineValues,
         assigned_to: assignedTo || null,
-        event_id: relatedEventId || null,
+        ...eventValues,
       };
 
       if (editingTaskId) {
@@ -382,7 +434,7 @@ export default function BandTasksPage() {
           .update({ ...taskValues, updated_at: new Date().toISOString() })
           .eq("id", editingTaskId)
           .eq("band_id", bandId)
-          .select("id, title, description, status, priority, due_date, assigned_to, event_id, created_at, created_by")
+          .select(taskColumns(supportsEvents))
           .maybeSingle();
 
         if (error || !updatedTask) {
@@ -407,7 +459,7 @@ export default function BandTasksPage() {
           created_by: user.id,
           ...taskValues,
         })
-        .select("id, title, description, status, priority, due_date, assigned_to, event_id, created_at, created_by")
+        .select(taskColumns(supportsEvents))
         .single();
 
       if (error || !createdTask) {
@@ -575,6 +627,7 @@ export default function BandTasksPage() {
                 <label htmlFor="task-event" className="mb-2 block text-sm font-medium text-content-label">Evento relacionado (opcional)</label>
                 <select
                   id="task-event"
+                  disabled={!supportsEvents}
                   value={relatedEventId}
                   onChange={(event) => setRelatedEventId(event.target.value)}
                   className="min-h-11 w-full rounded-xl border border-outline bg-surface px-3 py-2.5 text-base md:text-sm text-content outline-none focus:border-input-focus focus:ring-4 focus:ring-input-ring"
@@ -586,6 +639,7 @@ export default function BandTasksPage() {
                     </option>
                   ))}
                 </select>
+                {!supportsEvents && <p role="status" className="mt-2 text-sm text-content-muted">A associação com eventos não está disponível neste ambiente. Você pode gerenciar tarefas sem evento.</p>}
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -607,7 +661,7 @@ export default function BandTasksPage() {
                 </div>
                 <div>
                   <label htmlFor="task-assignee" className="mb-2 block text-sm font-medium text-content-label">Responsável <span className="font-normal text-content-faint">(opcional)</span></label>
-                  <select id="task-assignee" disabled={!canChangeAssignee || isSubmitting} aria-describedby={!canChangeAssignee ? "task-assignee-help" : undefined} value={assignedTo} onChange={(event) => setAssignedTo(event.target.value)} className="min-h-11 w-full rounded-xl border border-outline bg-surface px-3 py-2.5 text-base md:text-sm text-content outline-none focus:border-input-focus focus:ring-4 focus:ring-input-ring">
+                  <select id="task-assignee" disabled={!canChangeAssignee || isSubmitting} aria-describedby={!canChangeAssignee ? "task-assignee-help" : undefined} value={assignedTo} onChange={(event) => setAssignedTo(event.target.value)} className="min-h-11 w-full min-w-0 max-w-full rounded-xl border border-outline bg-surface px-3 py-2.5 text-base md:text-sm text-content outline-none focus:border-input-focus focus:ring-4 focus:ring-input-ring">
                     <option value="">Sem responsável</option>
                     {members.map((member) => <option key={member.userId} value={member.userId}>{member.label}</option>)}
                   </select>
@@ -649,7 +703,7 @@ export default function BandTasksPage() {
           <section aria-label="Lista de tarefas" className="mt-6 space-y-3">
             {tasks.map((task) => {
               const assignee = task.assigned_to
-                ? members.find((member) => member.userId === task.assigned_to)?.label ?? "Membro da banda"
+                ? members.find((member) => member.userId === task.assigned_to)?.label ?? "Integrante"
                 : null;
 
               return (
@@ -666,7 +720,7 @@ export default function BandTasksPage() {
                   {(task.due_date || assignee) && (
                     <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 pt-3 text-xs text-content-subtle">
                       {task.due_date && <p>Prazo: <span className="font-medium text-content-label">{formatDate(task.due_date)}</span></p>}
-                      {assignee && <p>Responsável: <span className="font-medium text-content-label">{assignee}</span></p>}
+                      {assignee && <p className="min-w-0 break-words [overflow-wrap:anywhere]">Responsável: <span className="font-medium text-content-label">{assignee}</span></p>}
                     </div>
                   )}
                   {task.event_id && <p className="mt-2 text-xs text-content-subtle">Evento: <span className="font-medium text-content-label">{events.find((bandEvent) => bandEvent.id === task.event_id)?.title ?? "Evento da banda"}</span></p>}

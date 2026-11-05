@@ -2,10 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import DisplayNameSettings from "@/components/display-name-settings";
+import WelcomeOnboarding from "@/components/welcome-onboarding";
+import { BAND_ENTRY_BACKEND_VALIDATED } from "@/lib/band-entry";
 import ThemeSelector from "@/components/theme-selector";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { normalizeDisplayName } from "@/lib/display-name";
 
 type BandMembership = {
   role: string;
@@ -93,14 +97,14 @@ export default function DashboardPage() {
     };
   }, []);
 
-  return (
+  const content = (
     <main className="flex flex-1 items-center justify-center px-4 py-6 sm:px-6 sm:py-16">
-      <section className="w-full max-w-3xl rounded-3xl border border-nav-border bg-surface p-5 shadow-app-dashboard sm:p-12">
+      <section aria-busy={isLoading} className="min-w-0 w-full max-w-3xl rounded-3xl border border-nav-border bg-surface p-5 shadow-app-dashboard sm:p-12">
         <div className="text-center">
           <p className="text-sm font-semibold tracking-widest text-accent uppercase">BandUp</p>
-          <h1 className="mt-3 text-3xl sm:mt-4 sm:text-4xl font-semibold tracking-tight text-content">Dashboard</h1>
+          <h1 className="mt-3 text-3xl sm:mt-4 sm:text-4xl font-semibold tracking-tight text-content">Seu espaço no BandUp</h1>
           {isLoading ? (
-            <p className="mt-4 text-content-muted">Verificando sua sessão...</p>
+            <p role="status" className="mt-4 text-content-muted">Carregando sua conta e suas bandas...</p>
           ) : loadError ? (
             <p role="alert" className="mt-5 text-sm text-danger">{loadError}</p>
           ) : user ? (
@@ -116,15 +120,33 @@ export default function DashboardPage() {
         </div>
 
         {!isLoading && !loadError && user && (
+          <Link href="/meu-perfil" className="mt-6 flex min-h-11 items-center justify-center rounded-xl border border-accent-border px-5 py-3 text-sm font-semibold text-brand hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">Meu Perfil</Link>
+        )}
+
+        {!isLoading && !loadError && user && !normalizeDisplayName(user.user_metadata?.display_name) && (
+          <DisplayNameSettings key={user.id} initialName={user.user_metadata?.display_name} onSaved={name => {
+            setUser(current => current && current.id === user.id ? {
+              ...current, user_metadata: { ...current.user_metadata, display_name: name },
+            } : current);
+          }} />
+        )}
+
+        {!isLoading && !loadError && user && (
           bands.length === 0 ? (
             <div className="mt-6 rounded-2xl bg-accent-soft px-4 py-6 text-center sm:mt-10 sm:px-6 sm:py-8">
-              <h2 className="text-xl font-semibold text-content">Sua jornada começa com uma banda</h2>
+              <h2 className="text-xl font-semibold text-content">Suas bandas</h2>
               <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-content-muted">
-                Você ainda não participa de nenhuma banda. Crie a primeira para organizar tudo em um só lugar.
+                Encontre pessoas para fazer música com você. Sua conta é pessoal: você pode participar de bandas e criar a sua quando quiser.
               </p>
-              <Link href="/bandas/nova" className="mt-6 inline-flex w-full items-center justify-center rounded-xl bg-primary sm:w-auto px-5 py-3 text-sm font-semibold text-on-primary transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">
-                Criar minha banda
-              </Link>
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
+                <Link href="/descobrir" aria-describedby="discovery-availability" className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-on-primary transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus sm:w-auto">
+                  Encontrar uma banda
+                </Link>
+                <Link href="/bandas/nova" className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-accent-border px-5 py-3 text-sm font-semibold text-brand transition hover:bg-surface focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus sm:w-auto">
+                  Criar minha banda
+                </Link>
+              </div>
+              <p id="discovery-availability" className="mt-4 text-sm leading-6 text-content-muted">{BAND_ENTRY_BACKEND_VALIDATED ? "Pesquise pelo nome de uma banda e acompanhe suas solicitações de entrada." : "Você pode conhecer a área de descoberta. A busca e o envio de solicitações ainda estão indisponíveis enquanto validamos a funcionalidade."}</p>
             </div>
           ) : (
             <div className="mt-6 sm:mt-10">
@@ -142,8 +164,8 @@ export default function DashboardPage() {
                       className="block rounded-2xl border border-nav-border p-4 sm:p-5 transition hover:border-accent-outline-hover hover:bg-accent-soft/50 focus:outline-none focus:ring-4 focus:ring-input-ring"
                     >
                     <div className="flex flex-wrap items-start justify-between gap-3">
-                      <h3 className="break-words text-lg font-semibold text-content sm:break-normal">{band.name}</h3>
-                      <span className="rounded-full bg-accent-soft px-3 py-1 text-xs font-semibold text-accent">
+                      <h3 className="min-w-0 flex-1 break-words text-lg font-semibold text-content">{band.name}</h3>
+                      <span className="shrink-0 rounded-full bg-accent-soft px-3 py-1 text-xs font-semibold text-accent">
                         {role === "admin" ? "Administrador" : "Membro"}
                       </span>
                     </div>
@@ -158,6 +180,9 @@ export default function DashboardPage() {
           )
         )}
 
+        {user && !isLoading && !loadError && bands.length > 0 && (
+          <Link href="/descobrir" className="mt-6 flex min-h-11 items-center justify-center rounded-xl border border-accent-border px-5 py-3 text-sm font-semibold text-brand hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">Descobrir outras bandas</Link>
+        )}
         {logoutError && <p role="alert" className="mt-5 text-center text-sm text-danger">{logoutError}</p>}
         {user && !isLoading && (
           <div className="mt-6 text-center sm:mt-8">
@@ -175,4 +200,7 @@ export default function DashboardPage() {
       </section>
     </main>
   );
+  return !isLoading && !loadError && user
+    ? <WelcomeOnboarding key={user.id} userId={user.id}>{content}</WelcomeOnboarding>
+    : content;
 }

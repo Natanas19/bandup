@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import ThemeSelector from "@/components/theme-selector";
+import PasswordInput from "@/components/password-input";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+
+import { isAuthReturn, resolveLoginSession, sessionFailure, type LoginSessionResult } from "@/lib/email-confirmation";
 
 function getFriendlyError(message: string) {
   if (message.toLowerCase().includes("invalid login credentials")) {
@@ -12,7 +15,7 @@ function getFriendlyError(message: string) {
   }
 
   if (message.toLowerCase().includes("email not confirmed")) {
-    return "Confirme seu e-mail antes de entrar.";
+    return "Confirme seu e-mail antes de entrar. Você precisa ter acesso ao e-mail cadastrado: confira a caixa de entrada e o spam e abra o link mais recente.";
   }
 
   return "Não foi possível entrar agora. Tente novamente em instantes.";
@@ -26,46 +29,34 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
 
+  const sessionCheck = useRef<Promise<LoginSessionResult> | null>(null);
+
   useEffect(() => {
-    let isMounted = true;
-    let authStateChanged = false;
-    const supabase = getSupabaseBrowserClient();
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-      authStateChanged = true;
-      if (!isMounted) return;
-
-      if (session) {
-        router.replace("/dashboard");
-      } else if (event === "INITIAL_SESSION" || event === "SIGNED_OUT") {
-        setIsCheckingSession(false);
-      }
-    });
-
-    void supabase.auth.getSession().then(({ data, error: sessionError }) => {
-      if (!isMounted || authStateChanged) return;
-
-      if (sessionError) {
-        setError("Não foi possível verificar sua sessão. Tente novamente.");
-        setIsCheckingSession(false);
-        return;
-      }
-
-      if (data.session) {
-        router.replace("/dashboard");
-        return;
-      }
-
+    let active = true;
+    const url = new URL(window.location.href);
+    const callback = isAuthReturn(url);
+    const timeout = window.setTimeout(() => {
+      if (!active) return;
+      active = false;
+      setError(sessionFailure);
       setIsCheckingSession(false);
-    }).catch(() => {
-      if (!isMounted || authStateChanged) return;
-      setError("Não foi possível verificar sua sessão. Tente novamente.");
+      if (callback) window.history.replaceState(window.history.state, "", "/login");
+    }, 15000);
+    // Preserve the same promise across StrictMode effect replays, after the SDK
+    // has consumed the URL. Never retry a single-use confirmation token.
+    sessionCheck.current ??= (async () => {
+      try { return await resolveLoginSession(getSupabaseBrowserClient(), url); }
+      catch { return { authenticated: false, message: sessionFailure }; }
+    })();
+    void sessionCheck.current.then(result => {
+      if (!active) return;
+      window.clearTimeout(timeout);
+      if (callback) window.history.replaceState(window.history.state, "", "/login");
+      if (result.authenticated) { router.replace("/dashboard"); return; }
+      setError(result.message);
       setIsCheckingSession(false);
     });
-
-    return () => {
-      isMounted = false;
-      authListener.subscription.unsubscribe();
-    };
+    return () => { active = false; window.clearTimeout(timeout); };
   }, [router]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -101,8 +92,8 @@ export default function LoginPage() {
   if (isCheckingSession) {
     return (
       <>
-      <main className="flex flex-1 items-center justify-center px-5 py-12 sm:px-8">
-          <p role="status" className="text-sm text-content-muted">Verificando sua sessão...</p>
+      <main className="flex flex-1 items-center justify-center px-4 py-6 sm:px-8 sm:py-12">
+          <p role="status" className="text-sm text-content-muted">Verificando sua confirmação e sessão...</p>
       </main>
       <footer className="flex justify-center px-5 pb-6"><ThemeSelector /></footer>
     </>
@@ -111,31 +102,31 @@ export default function LoginPage() {
 
   return (
     <>
-      <main className="flex flex-1 items-center justify-center px-5 py-12 sm:px-8">
+      <main className="flex flex-1 items-center justify-center px-4 py-6 sm:px-8 sm:py-12">
         <div className="grid w-full max-w-5xl overflow-hidden rounded-[2rem] bg-surface shadow-app-panel md:grid-cols-[0.9fr_1.1fr]">
-          <section className="relative flex min-h-64 flex-col justify-between overflow-hidden bg-gradient-to-br from-violet-700 via-violet-800 to-indigo-950 p-8 text-white sm:p-10 md:min-h-[600px]">
+          <section className="relative flex flex-col sm:min-h-64 justify-between overflow-hidden bg-gradient-to-br from-violet-700 via-violet-800 to-indigo-950 p-6 text-white sm:p-10 md:min-h-[600px]">
             <div aria-hidden="true" className="absolute -right-20 -top-24 h-72 w-72 rounded-full border border-white/15" />
             <div aria-hidden="true" className="absolute -bottom-28 -left-24 h-80 w-80 rounded-full border border-white/15" />
             <Link href="/" className="relative rounded text-xl font-bold tracking-tight focus:outline-none focus:ring-4 focus:ring-violet-200">
               Band<span className="text-violet-300">Up</span>
             </Link>
-            <div className="relative mt-12 md:mt-0">
+            <div className="relative mt-5 sm:mt-12 md:mt-0">
               <p className="text-sm font-semibold tracking-[0.2em] text-violet-200 uppercase">
                 Sua música começa aqui
               </p>
-              <h1 className="mt-4 max-w-sm text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
+              <h1 className="mt-3 max-w-sm text-3xl sm:mt-4 font-semibold leading-tight tracking-tight sm:text-5xl">
                 Sua banda, em sintonia.
               </h1>
-              <p className="mt-5 max-w-sm text-base leading-7 text-login-secondary">
+              <p className="mt-3 max-w-sm text-base sm:mt-5 leading-7 text-login-secondary">
                 Um espaço para sua banda crescer e fazer acontecer.
               </p>
             </div>
-            <p className="relative mt-12 text-sm text-login-caption">
+            <p className="relative mt-5 text-sm text-login-caption sm:mt-12">
               Feito para quem vive música.
             </p>
           </section>
 
-          <section className="flex items-center justify-center px-6 py-12 sm:px-12 md:px-14">
+          <section className="flex items-center justify-center px-5 py-7 sm:px-12 sm:py-12 md:px-14">
             <div className="w-full max-w-md">
               <div className="mb-9">
                 <p className="text-sm font-semibold text-accent">Bem-vindo de volta</p>
@@ -169,10 +160,9 @@ export default function LoginPage() {
                   <label htmlFor="password" className="mb-2 block text-sm font-medium text-content-label">
                     Senha
                   </label>
-                  <input
+                  <PasswordInput
                     id="password"
                     name="password"
-                    type="password"
                     autoComplete="current-password"
                     required
                     value={password}
@@ -201,7 +191,7 @@ export default function LoginPage() {
               </form>
 
               <p className="mt-8 text-center text-xs leading-5 text-content-faint">
-                Acesse com as credenciais da sua conta BandUp.
+                Ainda não tem conta? <Link href="/cadastro" className="font-semibold text-accent underline focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">Criar minha conta</Link>
               </p>
             </div>
           </section>
