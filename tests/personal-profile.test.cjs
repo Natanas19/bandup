@@ -10,20 +10,31 @@ const { test } = require('node:test');
 
 function loader(overrides = {}) {
   const cache = new Map();
+  function resolveFile(base) {
+    const candidates = [base, `${base}.ts`, `${base}.tsx`, `${base}.js`, path.join(base, 'index.ts'), path.join(base, 'index.tsx')];
+    return candidates.find(candidate => fs.existsSync(candidate));
+  }
   function load(file) {
-    if (cache.has(file)) return cache.get(file).exports;
-    const mod = { exports: {} }; cache.set(file, mod);
-    vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8'), {
+    const absoluteFile = path.resolve(file);
+    if (cache.has(absoluteFile)) return cache.get(absoluteFile).exports;
+    const mod = { exports: {} }; cache.set(absoluteFile, mod);
+    vm.runInNewContext(ts.transpileModule(fs.readFileSync(absoluteFile, 'utf8'), {
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
     }).outputText, { module: mod, exports: mod.exports, require(name) {
       if (name in overrides) return overrides[name];
       if (name === 'next/link') return { __esModule: true, default: ({ children, ...props }) => React.createElement('a', props, children) };
-      if (name === 'next/navigation') return { usePathname: () => '/meu-perfil/agenda', notFound: () => { throw Error('not-found'); } };
-      if (name === '@/components/theme-selector') return { __esModule: true, default: () => React.createElement('span', null, 'Tema') };
+      if (name === 'next/navigation') return { usePathname: () => '/dashboard/agenda', notFound: () => { throw Error('not-found'); } };
+      if (name === '@/components/theme-selector') return { __esModule: true, default: () => React.createElement('span', null, 'Aparência') };
       if (name === '@/lib/supabase/client') return { getSupabaseBrowserClient() { throw Error('No live access in tests'); } };
       if (name.startsWith('@/')) {
-        const base = path.join('src', name.slice(2));
-        return load([base + '.ts', base + '.tsx'].find(file => fs.existsSync(file)));
+        const resolved = resolveFile(path.resolve('src', name.slice(2)));
+        if (!resolved) throw Error(`Cannot resolve application import ${name}`);
+        return load(resolved);
+      }
+      if (name.startsWith('./') || name.startsWith('../')) {
+        const resolved = resolveFile(path.resolve(path.dirname(absoluteFile), name));
+        if (!resolved) throw Error(`Cannot resolve relative import ${name} from ${absoluteFile}`);
+        return load(resolved);
       }
       return require(name);
     } });
@@ -77,37 +88,22 @@ test('different accounts always scope membership reads to their own verified ide
   }
 });
 
-function overviewMarkup(data, error = '') {
-  let cursor = 0;
-  const values = [data, error, 0];
-  const Page = loader({ react: { ...React, useState: () => [values[cursor++], () => {}], useEffect() {} } })('src/app/meu-perfil/page.tsx').default;
-  return renderToStaticMarkup(Page());
-}
-
-test('overview shows genuine account summary and band workspace links; zero bands still has a profile', () => {
-  const html = overviewMarkup({ name: 'Ana Silva', emailConfirmed: true, bands: [{ role: 'member', band: { id: 'b', name: 'Minha banda' } }] });
-  for (const value of ['Ana Silva', 'E-mail confirmado', 'Minha banda', 'href="/bandas/b"', 'href="/dashboard"', 'Abrir workspace']) assert.ok(html.includes(value));
-  assert.ok(html.includes('sm:grid-cols-2'));
-  const empty = overviewMarkup({ name: null, emailConfirmed: true, bands: [] });
-  assert.ok(empty.includes('Seu perfil pessoal já está disponível'));
-  assert.ok(empty.includes('nome de exibição ainda não foi informado'));
-  assert.equal(empty.includes('href="/bandas/'), false);
+test('legacy profile route redirects into the single dashboard workspace', async () => {
+  const legacy = loader({ 'next/navigation': { redirect: value => { throw Error(`redirect:${value}`); } } });
+  const Page = legacy('src/app/meu-perfil/page.tsx').default;
+  assert.throws(() => Page(), /redirect:\/dashboard/);
+  const Section = legacy('src/app/meu-perfil/[section]/page.tsx').default;
+  await assert.rejects(Section({ params: Promise.resolve({ section: 'tarefas' }) }), /redirect:\/dashboard\/tarefas/);
+  await assert.rejects(Section({ params: Promise.resolve({ section: 'agenda' }) }), /redirect:\/dashboard\/agenda/);
 });
 
-test('loading and errors never present fabricated counts or bands', () => {
-  const loading = overviewMarkup(null);
-  assert.ok(loading.includes('role="status"')); assert.equal(loading.includes('Bandas das quais participa'), false);
-  const error = overviewMarkup(null, 'Falha ao carregar');
-  for (const value of ['role="alert"', 'Tentar novamente', 'href="/login"']) assert.ok(error.includes(value));
-  assert.equal(error.includes('Bandas das quais participa'), false);
-});
-
-test('sidebar includes all seven destinations, current section, existing icons and theme selector', () => {
+test('sidebar navigation includes four contextual destinations without a separate appearance control', () => {
   const { PersonalNavigation } = loader()('src/components/personal-workspace.tsx');
   const html = renderToStaticMarkup(React.createElement(PersonalNavigation, { sidebar: true }));
-  for (const label of ['Visão geral', 'Tarefas', 'Agenda', 'Links', 'Perfil público', 'Configurações', 'Minhas bandas', 'Tema']) assert.ok(html.includes(label));
-  assert.match(html, /href="\/meu-perfil\/agenda" aria-current="page"/);
-  assert.ok(html.includes('href="/dashboard"'));
+  for (const label of ['Visão geral', 'Tarefas', 'Agenda', 'Minhas Bandas']) assert.ok(html.includes(label));
+  assert.match(html, /href="\/dashboard\/agenda" aria-current="page"/);
+  assert.ok(html.includes('href="/dashboard/bandas"'));
+  assert.equal(html.includes('Aparência'), false);
   assert.ok(html.includes('min-h-11')); assert.ok(html.includes('<svg'));
 });
 
@@ -116,29 +112,34 @@ function nodes(tree) {
   if (Array.isArray(tree)) return tree.flatMap(nodes);
   return [tree, ...nodes(tree.props?.children)];
 }
-test('mobile menu expands, closes on Escape or navigation and exposes accessible controls', () => {
-  let open = false;
-  const { PersonalNavigation } = loader({ react: { ...React,
-    useState: () => [open, value => { open = typeof value === 'function' ? value(open) : value; }],
-    useId: () => 'menu-id', useRef: () => ({ current: null }),
-  } })('src/components/personal-workspace.tsx');
-  const render = () => nodes(PersonalNavigation({}));
-  let tree = render(); const button = tree.find(n => n.type === 'button');
-  assert.equal(button.props['aria-controls'], 'menu-id'); assert.equal(button.props['aria-expanded'], false);
-  button.props.onClick(); tree = render();
-  assert.equal(tree.find(n => n.props?.id === 'menu-id').props.hidden, false);
-  tree.find(n => n.type === 'nav').props.onKeyDown({ key: 'Escape', preventDefault() {} });
-  assert.equal(open, false);
-  button.props.onClick(); render().find(n => n.props?.href === '/dashboard').props.onClick();
-  assert.equal(open, false);
+test('mobile personal navigation is a fixed four-tab bar without an expandable menu', () => {
+  const { PersonalNavigation } = loader()('src/components/personal-workspace.tsx');
+  const tree = nodes(PersonalNavigation({}));
+  const navigation = tree.find(n => n.type === 'nav');
+  assert.match(navigation.props.className, /fixed inset-x-0 bottom-0/);
+  assert.match(navigation.props.className, /safe-area-inset-bottom/);
+  assert.equal(navigation.props['aria-label'], 'Navegação inferior do Meu Painel');
+  for (const href of ['/dashboard', '/dashboard/tarefas', '/dashboard/agenda', '/dashboard/bandas']) {
+    assert.equal(tree.filter(n => n.props?.href === href).length, 1);
+  }
+  assert.equal(tree.some(n => n.type === 'button'), false);
 });
 
-test('unimplemented sections show coming soon only; unknown paths return not found', async () => {
-  const Page = loader()('src/app/meu-perfil/[section]/page.tsx').default;
-  for (const section of ['agenda', 'links', 'perfil-publico', 'configuracoes']) {
+test('dashboard section route keeps personal tasks and future sections', async () => {
+  const load = loader(); const Page = load('src/app/dashboard/[section]/page.tsx').default;
+  const tasks = await Page({ params: Promise.resolve({ section: 'tarefas' }) });
+  assert.equal(tasks.type.name, 'PersonalTasks');
+  const agenda = await Page({ params: Promise.resolve({ section: 'agenda' }) });
+  assert.equal(agenda.type.name, 'PersonalAgenda');
+  for (const section of ['links', 'perfil-publico']) {
     const html = renderToStaticMarkup(await Page({ params: Promise.resolve({ section }) }));
-    assert.ok(html.includes('Em breve')); assert.ok(html.includes('href="/meu-perfil"'));
+    assert.ok(html.includes('Em breve')); assert.ok(html.includes('href="/dashboard"'));
     assert.equal(html.includes('<form'), false);
   }
+  const settings = renderToStaticMarkup(await Page({ params: Promise.resolve({ section: 'configuracoes' }) }));
+  assert.ok(settings.includes('Preferências'));
+  assert.ok(settings.includes('Aparência'));
+  assert.ok(settings.includes('href="/dashboard"'));
+  assert.equal(settings.includes('Em breve'), false);
   await assert.rejects(Page({ params: Promise.resolve({ section: 'qualquer' }) }), /not-found/);
 });

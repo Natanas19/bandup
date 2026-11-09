@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import ThemeSelector from "@/components/theme-selector";
 import PasswordInput from "@/components/password-input";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -95,7 +94,6 @@ export default function LoginPage() {
       <main className="flex flex-1 items-center justify-center px-4 py-6 sm:px-8 sm:py-12">
           <p role="status" className="text-sm text-content-muted">Verificando sua confirmação e sessão...</p>
       </main>
-      <footer className="flex justify-center px-5 pb-6"><ThemeSelector /></footer>
     </>
     );
   }
@@ -197,7 +195,6 @@ export default function LoginPage() {
           </section>
         </div>
       </main>
-      <footer className="flex justify-center px-5 pb-6"><ThemeSelector /></footer>
     </>
   );
 }

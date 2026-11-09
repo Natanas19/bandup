@@ -46,5 +46,5 @@ export default function PersonalAccountName() {
     } catch { setName(null); }
     return () => { active = false; generation++; window.clearTimeout(timer); };
   }, []);
-  return <p className="mt-2 break-words font-semibold text-content [overflow-wrap:anywhere]">{name ?? "Meu Perfil"}</p>;
+  return <p className="mt-2 break-words font-semibold text-content [overflow-wrap:anywhere]">{name ?? "Meu Painel"}</p>;
 }

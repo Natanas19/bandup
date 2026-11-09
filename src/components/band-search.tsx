@@ -122,7 +122,7 @@ export default function BandSearch({ onRequestsChanged }: { onRequestsChanged?: 
     {accountReady && !name && <DisplayNameSettings onSaved={saved => { setName(saved); setMessage(defaultEntryMessage(saved)); }} />}
     {selected && entryEligibility === "checking" && <p role="status" className="text-sm text-content-muted">Verificando sua participação e solicitações para esta banda...</p>}
     {selected && entryEligibility === "member" && <p role="status" className="rounded-xl bg-accent-soft p-4 text-sm text-content">Você já faz parte desta banda. Não é necessário solicitar entrada.</p>}
-    {selected && entryEligibility === "pending" && <p role="status" className="rounded-xl bg-accent-soft p-4 text-sm text-content">Você já tem uma solicitação pendente para esta banda. Acompanhe o status em Meu Perfil.</p>}
+    {selected && entryEligibility === "pending" && <p role="status" className="rounded-xl bg-accent-soft p-4 text-sm text-content">Você já tem uma solicitação pendente para esta banda. Acompanhe o status no Meu Painel.</p>}
     {selected && entryEligibility === "member" && <Link href={`/bandas/${selected.band_id}`} className={`${button} inline-flex items-center`}>Acessar banda</Link>}
     {selected && name && entryEligibility === "eligible" && !outcome && <form className="space-y-3 border-t border-nav-border pt-5" onSubmit={event => { event.preventDefault(); setConfirming(true); }}>
       <p className="break-words text-sm font-semibold text-content">Banda selecionada: {selected.name}</p>
@@ -141,7 +141,7 @@ export default function BandSearch({ onRequestsChanged }: { onRequestsChanged?: 
     </div>}
     {outcome && <div className="space-y-3 rounded-xl bg-accent-soft p-4">
       <p role="status" className="text-sm leading-6 text-content">{outcome === "pending" ? "Você já tem uma solicitação pendente para esta banda." : "Solicitação registrada no sistema. Aguarde a decisão de um administrador."} A mensagem de apresentação não foi enviada.</p>
-      <Link href="/meu-perfil" className={`${button} inline-flex items-center`}>Ir para Meu Perfil</Link>
+      <Link href="/dashboard" className={`${button} inline-flex items-center`}>Ir para Meu Painel</Link>
     </div>}
   </section>;
 }

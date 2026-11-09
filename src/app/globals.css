@@ -66,11 +66,14 @@
   --shadow-panel: 0 24px 80px -32px rgba(54, 36, 104, 0.3);
   --font-sans: Arial, Helvetica, sans-serif;
   --font-mono: "Courier New", monospace;
+  --radius-card: 1rem;
+  --radius-control: 0.75rem;
+  --radius-panel: 1.25rem;
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --background: #110e1b;
+  --background: #0e0e12;
   --foreground: #f3f0ff;
   --login-secondary: rgba(237, 233, 254, 0.8);
   --login-caption: rgba(221, 214, 254, 0.75);
@@ -79,37 +82,37 @@
   --brand: 196 181 253;
   --brand-highlight: 167 139 250;
   --input-focus: 167 139 250;
-  --input-ring: 44 31 69;
-  --nav-border: 78 68 95;
-  --nav-dot: 118 103 133;
-  --disabled-surface: 37 30 53;
+  --input-ring: 43 31 61;
+  --nav-border: 52 52 61;
+  --nav-dot: 118 118 128;
+  --disabled-surface: 38 38 45;
   --accent-strong: 196 181 253;
   --accent-outline-hover: 167 139 250;
   --brand-hover: 221 214 254;
   --warning-strong: 252 211 77;
   --content-strong: 244 244 245;
-  --outline-subtle: 60 50 75;
+  --outline-subtle: 45 45 53;
   --warning-badge-bg: 51 37 16;
   --success-badge-bg: 16 42 35;
   --danger-soft-bg: 54 27 39;
   --danger-emphasis: 253 164 175;
   --shadow-tint: 0 0 0;
-  --surface: 28 23 41;
-  --surface-muted: 37 30 53;
-  --surface-raised: 43 35 64;
+  --surface: 26 26 31;
+  --surface-muted: 32 32 38;
+  --surface-raised: 39 39 46;
   --content: 244 244 245;
   --content-muted: 187 181 201;
   --content-subtle: 170 163 184;
-  --outline: 78 68 95;
-  --outline-strong: 118 103 133;
-  --primary: 124 58 237;
-  --primary-hover: 109 40 217;
+  --outline: 52 52 61;
+  --outline-strong: 85 85 96;
+  --primary: 114 60 214;
+  --primary-hover: 96 45 183;
   --on-primary: 255 255 255;
   --accent: 196 181 253;
   --accent-hover: 221 214 254;
-  --accent-soft: 44 31 69;
-  --accent-border: 91 65 131;
-  --focus: 76 29 149;
+  --accent-soft: 42 33 58;
+  --accent-border: 90 71 122;
+  --focus: 182 154 255;
   --danger-bg: 54 27 39;
   --danger-text: 253 164 175;
   --danger-border: 159 18 57;
@@ -123,12 +126,15 @@
   --info-text: 125 211 252;
   --info-border: 7 89 133;
   --decorative-start: 43 28 68;
-  --decorative-end: 28 23 41;
+  --decorative-end: 26 26 31;
   --decorative-glow: 66 25 73;
   --shadow-dashboard: 0 20px 60px -32px rgba(0, 0, 0, 0.65);
   --shadow-form: 0 16px 48px -32px rgba(0, 0, 0, 0.65);
   --shadow-card: 0 12px 36px -28px rgba(0, 0, 0, 0.65);
   --shadow-panel: 0 24px 80px -32px rgba(0, 0, 0, 0.75);
+  --radius-card: 1rem;
+  --radius-control: 0.75rem;
+  --radius-panel: 1.25rem;
 }
 
 /* System fallback before initialization, or when scripting/storage is unavailable.
@@ -136,7 +142,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
     color-scheme: dark;
-    --background: #110e1b;
+    --background: #0e0e12;
     --foreground: #f3f0ff;
     --login-secondary: rgba(237, 233, 254, 0.8);
     --login-caption: rgba(221, 214, 254, 0.75);
@@ -145,37 +151,37 @@
     --brand: 196 181 253;
     --brand-highlight: 167 139 250;
     --input-focus: 167 139 250;
-    --input-ring: 44 31 69;
-    --nav-border: 78 68 95;
-    --nav-dot: 118 103 133;
-    --disabled-surface: 37 30 53;
+    --input-ring: 43 31 61;
+    --nav-border: 52 52 61;
+    --nav-dot: 118 118 128;
+    --disabled-surface: 38 38 45;
     --accent-strong: 196 181 253;
     --accent-outline-hover: 167 139 250;
     --brand-hover: 221 214 254;
     --warning-strong: 252 211 77;
     --content-strong: 244 244 245;
-    --outline-subtle: 60 50 75;
+    --outline-subtle: 45 45 53;
     --warning-badge-bg: 51 37 16;
     --success-badge-bg: 16 42 35;
     --danger-soft-bg: 54 27 39;
     --danger-emphasis: 253 164 175;
     --shadow-tint: 0 0 0;
-    --surface: 28 23 41;
-    --surface-muted: 37 30 53;
-    --surface-raised: 43 35 64;
+    --surface: 26 26 31;
+    --surface-muted: 32 32 38;
+    --surface-raised: 39 39 46;
     --content: 244 244 245;
     --content-muted: 187 181 201;
     --content-subtle: 170 163 184;
-    --outline: 78 68 95;
-    --outline-strong: 118 103 133;
-    --primary: 124 58 237;
-    --primary-hover: 109 40 217;
+    --outline: 52 52 61;
+    --outline-strong: 85 85 96;
+    --primary: 114 60 214;
+    --primary-hover: 96 45 183;
     --on-primary: 255 255 255;
     --accent: 196 181 253;
     --accent-hover: 221 214 254;
-    --accent-soft: 44 31 69;
-    --accent-border: 91 65 131;
-    --focus: 76 29 149;
+    --accent-soft: 42 33 58;
+    --accent-border: 90 71 122;
+    --focus: 182 154 255;
     --danger-bg: 54 27 39;
     --danger-text: 253 164 175;
     --danger-border: 159 18 57;
@@ -189,17 +195,20 @@
     --info-text: 125 211 252;
     --info-border: 7 89 133;
     --decorative-start: 43 28 68;
-    --decorative-end: 28 23 41;
+    --decorative-end: 26 26 31;
     --decorative-glow: 66 25 73;
     --shadow-dashboard: 0 20px 60px -32px rgba(0, 0, 0, 0.65);
     --shadow-form: 0 16px 48px -32px rgba(0, 0, 0, 0.65);
     --shadow-card: 0 12px 36px -28px rgba(0, 0, 0, 0.65);
     --shadow-panel: 0 24px 80px -32px rgba(0, 0, 0, 0.75);
+    --radius-card: 1rem;
+    --radius-control: 0.75rem;
+    --radius-panel: 1.25rem;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans);
+  font-family: var(--font-inter), var(--font-sans);
 }

@@ -31,7 +31,7 @@ export default function PersonalTasks() {
   return <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10">
     <div className="mx-auto w-full max-w-4xl">
       <header>
-        <p className="text-xs font-semibold uppercase tracking-widest text-accent">Meu Perfil</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-accent">Meu Painel</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight text-content sm:text-4xl">Tarefas</h1>
         <p className="mt-3 text-sm leading-6 text-content-muted">Suas tarefas atribuídas, reunidas de todas as suas bandas.</p>
       </header>
@@ -59,7 +59,7 @@ export default function PersonalTasks() {
           <button type="button" className={button} disabled={!page.hasMore} onClick={() => setOffset(value => value + PERSONAL_TASK_PAGE_SIZE)}>Próximas</button>
         </nav>}
       </>}
-      <Link href="/meu-perfil" className={`${button} mt-6`}>Voltar para a visão geral</Link>
+      <Link href="/dashboard" className={`${button} mt-6`}>Voltar à visão geral</Link>
     </div>
   </main>;
 }

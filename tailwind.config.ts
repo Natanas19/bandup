@@ -88,8 +88,13 @@ const config: Config = {
         "app-panel": "var(--shadow-panel)",
       },
       fontFamily: {
-        sans: ["Arial", "Helvetica", "sans-serif"],
+        sans: ["var(--font-inter)", "Arial", "Helvetica", "sans-serif"],
         mono: ["Courier New", "monospace"],
+      },
+      borderRadius: {
+        card: "var(--radius-card)",
+        control: "var(--radius-control)",
+        panel: "var(--radius-panel)",
       },
     },
   },

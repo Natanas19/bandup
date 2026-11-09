@@ -20,6 +20,7 @@ function modules(globals = {}, react = React) {
     cache.set(name, loadedModule);
     const localRequire = (id) => {
       if (id === "react") return react;
+      if (id === "next/font/google") return { Inter: () => ({ variable: "font-inter" }) };
       // Dashboard theme fixtures start after the separately tested welcome flow.
       if (id === "@/components/welcome-onboarding" && globals.onboardingCompleted) return { __esModule: true, default: ({ children }) => children };
       if (id === "next/navigation") return { useRouter: () => ({ replace() {} }), useParams: () => ({ bandId: "theme-band" }), usePathname: () => globals.testPathname ?? "/bandas/theme-band" };
@@ -322,24 +323,14 @@ test("Tailwind emits semantic selector utilities and opacity variants without mo
 });
 
 
-test("entry, login and both navigation variants render an accessible appearance selector", () => {
-  const loader = modules();
-  const { ThemeProvider } = loader.load("src/components/theme-provider.tsx");
-  for (const [file, props] of [
-    ["src/app/page.tsx", {}], ["src/app/login/page.tsx", {}],
-    ["src/components/band-navigation.tsx", { bandId: "demo", activeSection: "agenda", variant: "sidebar" }],
-    ["src/components/band-navigation.tsx", { bandId: "demo", activeSection: "agenda", variant: "expandable" }],
-  ]) {
-    const Component = loader.load(file).default;
-    const html = renderToStaticMarkup(React.createElement(ThemeProvider, null, React.createElement(Component, props)));
-    assert.equal((html.match(/<select /g) ?? []).length, 1, file);
-    assert.match(html, /<label[^>]*for="[^"]+"[^>]*>[\s\S]*?Apar\u00eancia<\/label>/);
-    assert.match(html, /min-h-11/);
-    if (props.variant) {
-      assert.match(html, /aria-current="page"/);
-      assert.match(html, /href="\/bandas\/demo\/agenda"/);
-      assert.equal(html.includes('hidden=""'), props.variant === "expandable");
-    } else assert.match(html, /role="status"/);
+test("appearance is configured inside personal and band settings routes", () => {
+  const personal = fs.readFileSync(path.join(root, "src/app/dashboard/[section]/page.tsx"), "utf8");
+  const band = fs.readFileSync(path.join(root, "src/app/bandas/[bandId]/perfil-publico/page.tsx"), "utf8");
+  assert.match(personal, /section === "configuracoes"[\s\S]*ThemeSelector/);
+  assert.match(band, /ThemeSelector/);
+  for (const file of ["src/app/page.tsx", "src/app/login/page.tsx", "src/app/cadastro/page.tsx", "src/app/descobrir/page.tsx", "src/app/b/[slug]/layout.tsx", "src/components/band-navigation.tsx"]) {
+    const source = fs.readFileSync(path.join(root, file), "utf8");
+    assert.doesNotMatch(source, /ThemeSelector|Aparência/, file);
   }
 });
 
@@ -371,7 +362,7 @@ test("tokens retain the approved light palette and generate Safari 15 compatible
   for (const [token, value] of Object.entries(expected)) assert.equal(light.nodes.find((node) => node.prop === "--" + token)?.value, value);
   const config = modules().load("tailwind.config.ts").default;
   const sources = ["src/app/page.tsx", "src/app/login/page.tsx", "src/components/band-navigation.tsx"].map((file) => fs.readFileSync(path.join(root, file), "utf8")).join("\n");
-  const result = await postcss([tailwind({ ...config, content: [{ raw: sources + " bg-nav-dot" }] })]).process(css, { from: undefined });
+  const result = await postcss([tailwind({ ...config, content: [{ raw: sources + " bg-nav-dot bg-disabled-surface" }] })]).process(css, { from: undefined });
   for (const token of Object.keys(expected)) assert.ok(result.css.includes(`var(--${token})`), token);
   assert.match(result.css, /rgb\(var\(--primary\) \/ 0\.2\)/);
   assert.equal(/color-mix\(|light-dark\(|oklch\(/.test(result.css), false);
@@ -397,17 +388,17 @@ test("dashboard themes cover loading, signed out, empty, populated and error sta
   const file = "src/app/dashboard/page.tsx";
   const user = { id: "test-user", email: "test@example.com" };
   for (const [states, expected] of [
-    [[null, [], true, false, "", ""], "Carregando sua conta e suas bandas..."],
-    [[null, [], false, false, "", ""], 'href="/login"'],
-    [[user, [], false, false, "", ""], 'href="/bandas/nova"'],
-    [[user, [{ role: "admin", band: { id: "theme-band", name: "Theme Band", description: "Description" } }], false, true, "Sign out error", ""], 'href="/bandas/theme-band"'],
-    [[null, [], false, false, "", "Load error"], 'role="alert"'],
+    [[null, [], true, "", null, null, "", null, "", 0], "Carregando seu espaço..."],
+    [[null, [], false, "", null, null, "", null, "", 0], 'href="/login"'],
+    [[user, [], false, "", [], 0, "", [], "", 0], 'href="/bandas/nova"'],
+    [[user, [{ role: "admin", band: { id: "theme-band", name: "Theme Band" } }], false, "", [], 0, "", [], "", 0], 'href="/dashboard/bandas"'],
+    [[null, [], false, "Load error", null, null, "", null, "", 0], 'role="alert"'],
   ]) {
     const html = renderWorkspace(file, states);
     assert.ok(html.includes(expected), expected);
     assert.match(html, /bg-surface/);
-    assert.match(html, /shadow-app-dashboard/);
-    assert.equal((html.match(/<select /g) ?? []).length, 1);
+    assert.match(html, /rounded-panel/);
+    assert.equal((html.match(/<select /g) ?? []).length, 0);
     assert.equal(/(?:bg-white|text-zinc-|text-violet-)/.test(html), false);
   }
 });
@@ -427,7 +418,7 @@ test("overview themes cover all page states, summary states and admin/member con
       const html = renderWorkspace(file, [band, "ready", summary, { tasks: state, event: state, members: state }, [], 0]);
       assert.equal(html.includes("<aside"), false);
       assert.equal((html.match(/<article /g) ?? []).length, 3);
-      assert.equal((html.match(/<select /g) ?? []).length, 1);
+      assert.equal((html.match(/<select /g) ?? []).length, 0);
       assert.equal(html.includes('role="switch"'), false);
       assert.equal(/(?:bg-white|text-zinc-|text-violet-)/.test(html), false);
       assert.equal(html.includes('id="public-profile-url"'), false);
@@ -601,7 +592,7 @@ test("links themes preserve member/admin controls, publication states, custom fi
   }
 });
 
-test("public profile and every public route state share the visitor appearance selector", () => {
+test("public profile and every public route state leave appearance controls to settings", () => {
   const loader = modules();
   const { ThemeProvider } = loader.load("src/components/theme-provider.tsx");
   const Layout = loader.load("src/app/b/[slug]/layout.tsx").default;
@@ -614,7 +605,7 @@ test("public profile and every public route state share the visitor appearance s
   for (const links of [band.links, []]) {
     const html = wrap(React.createElement(Profile, { band: { ...band, links } }));
     assertThemedPlanningPage(html);
-    assert.equal((html.match(/<select /g) ?? []).length, 1);
+    assert.equal((html.match(/<select /g) ?? []).length, 0);
     assert.match(html, /from-decorative-start via-decorative-end/);
     assert.match(html, /bg-decorative-glow\/60/);
     assert.match(html, /border-surface bg-decorative-start/);
@@ -624,7 +615,7 @@ test("public profile and every public route state share the visitor appearance s
   for (const name of ["loading", "not-found", "error"]) {
     const Component = loader.load(`src/app/b/[slug]/${name}.tsx`).default;
     const html = wrap(React.createElement(Component, { reset() {} }));
-    assert.equal((html.match(/<select /g) ?? []).length, 1);
+    assert.equal((html.match(/<select /g) ?? []).length, 0);
     assert.equal(/bg-white|text-zinc-|text-violet-/.test(html), false);
     if (name === "loading") assert.match(html, /role="status"/);
     if (name === "error") assert.match(html, /role="alert"/);
@@ -720,14 +711,17 @@ test("shared band layout reserves desktop space and retains a fixed sidebar acro
     assert.match(html, /<aside[^>]*fixed inset-y-0 left-0[^>]*hidden w-64[^>]*overflow-y-auto[^>]*md:flex lg:w-72/);
     assert.equal((html.match(/<aside /g) ?? []).length, 1);
     assert.ok(html.includes("Page content"));
-    if (["links", "perfil-publico"].includes(section)) {
+    if (section === "links") {
       assert.equal(html.includes('aria-current="page"'), false);
       assert.equal(html.includes(`href="/bandas/theme-band/${section}"`), false);
-      assert.equal((html.match(/aria-disabled="true"/g) ?? []).length, 3);
+      assert.equal((html.match(/aria-disabled="true"/g) ?? []).length, 4);
+    } else if (section === "perfil-publico") {
+      assert.match(html, /aria-current="page"[^>]*href="\/bandas\/theme-band\/perfil-publico"/);
+      assert.equal((html.match(/aria-disabled="true"/g) ?? []).length, 4);
     } else {
       assert.match(html, new RegExp(`aria-current="page"[^>]*href="/bandas/theme-band${section ? "/" + section : ""}"`));
     }
-    assert.equal((html.match(/<select /g) ?? []).length, 1);
+    assert.equal((html.match(/<select /g) ?? []).length, 0);
   }
 });
 
@@ -784,7 +778,7 @@ test("card clicks toggle independently and ignore actions, links, native summary
 });
 
 
-test("navigation icons and Perfil Publico follow Links in desktop and mobile menus", () => {
+test("band navigation icons appear in the concise desktop and mobile menus", () => {
   const loader = modules();
   const Navigation = loader.load("src/components/band-navigation.tsx").default;
   const { ThemeProvider } = loader.load("src/components/theme-provider.tsx");
@@ -792,10 +786,10 @@ test("navigation icons and Perfil Publico follow Links in desktop and mobile men
     const html = renderToStaticMarkup(React.createElement(ThemeProvider, null, React.createElement(Navigation, { bandId: "band", activeSection: "agenda", variant })));
     assert.match(html, /aria-current="page"[^>]*href="\/bandas\/band\/agenda"/);
     assert.equal(/href="\/bandas\/band\/(links|perfil-publico)"/.test(html), false);
-    assert.equal((html.match(/Em breve/g) ?? []).length, 3);
-    assert.match(html, /Links<\/span>[\s\S]*Perfil P\u00fablico<\/span>/);
+    assert.equal((html.match(/Em breve/g) ?? []).length, 0);
+    assert.equal(/>Links<|>Perfil P\u00fablico</.test(html), false);
 
-    assert.equal((html.match(/<svg /g) ?? []).length, 9);
+    assert.ok((html.match(/<svg /g) ?? []).length >= 4);
     for (const svg of html.match(/<svg[^>]*>/g)) {
       assert.match(svg, /aria-hidden="true"/); assert.match(svg, /focusable="false"/); assert.match(svg, /stroke="currentColor"/);
     }

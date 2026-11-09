@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import PersonalWorkspace from "@/components/personal-workspace";
 
-export default function PersonalLayout({ children }: { children: ReactNode }) {
-  return <PersonalWorkspace>{children}</PersonalWorkspace>;
+// Compatibility routes redirect into the single Meu Painel workspace.
+export default function LegacyPersonalLayout({ children }: { children: ReactNode }) {
+  return children;
 }

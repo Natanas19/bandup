@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import ThemeSelector from "@/components/theme-selector";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -82,7 +81,6 @@ export default function Home() {
           )}
         </div>
       </main>
-      <footer className="flex justify-center px-5 pb-6"><ThemeSelector /></footer>
     </>
   );
 }

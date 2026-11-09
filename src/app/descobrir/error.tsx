@@ -9,7 +9,7 @@ export default function DiscoveryError({ reset }: { reset: () => void }) {
     <BandEntryPanel state="error" />
     <div className="mt-6 flex flex-wrap gap-3">
       <button type="button" onClick={reset} className="min-h-11 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-on-primary hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">Tentar novamente</button>
-      <Link href="/dashboard" className="inline-flex min-h-11 items-center rounded-xl px-5 py-3 text-sm font-semibold text-brand focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">Voltar para minhas bandas</Link>
+      <Link href="/dashboard/bandas" className="inline-flex min-h-11 items-center rounded-xl px-5 py-3 text-sm font-semibold text-brand focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">Voltar para minhas bandas</Link>
     </div>
   </div></main>;
 }

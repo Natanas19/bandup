@@ -4,6 +4,8 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import BandNavigation from "@/components/band-navigation";
+import { SpaceSwitcherHeader } from "@/components/space-switcher";
+import { WorkspaceSettingsNavigation } from "@/components/workspace-settings";
 
 type BandInfo = { name: string; role?: string };
 const BandInfoContext = createContext<((info: BandInfo) => void) | null>(null);
@@ -24,24 +26,30 @@ export default function BandWorkspace({ bandId, children }: { bandId: string; ch
   return (
     <BandInfoContext.Provider value={setInfo}>
       <div className="flex min-w-0 flex-1 flex-col md:pl-64 lg:pl-72">
-        <aside aria-label="Menu lateral da banda" className="fixed inset-y-0 left-0 z-20 hidden w-64 flex-col overflow-y-auto overscroll-contain border-r border-nav-border bg-surface px-5 py-6 md:flex lg:w-72 lg:px-6">
+        <aside aria-label="Menu lateral da banda" className="fixed inset-y-0 left-0 z-20 hidden w-64 flex-col gap-7 overflow-y-auto overscroll-contain border-r border-nav-border bg-surface px-5 py-6 md:flex lg:w-72 lg:px-6">
           <Link href="/dashboard" className="rounded text-xl font-bold tracking-tight text-content focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">
             Band<span className="text-accent">Up</span>
           </Link>
-          {info && <div className="mt-10 min-w-0 rounded-2xl bg-accent-soft p-4">
+          {info && <div className="min-w-0 rounded-2xl bg-accent-soft p-4">
             <p className="text-[11px] font-semibold tracking-[0.16em] text-accent-strong uppercase">Banda ativa</p>
             <p className="mt-2 break-words text-base font-semibold text-content [overflow-wrap:anywhere]">{info.name}</p>
             {info.role && <p className="mt-1 text-xs text-content-subtle">{info.role === "admin" ? "Administrador" : "Membro"}</p>}
           </div>}
-          <div className="mt-8">
+          <div>
             <p className="mb-3 px-3 text-[11px] font-semibold tracking-[0.16em] text-content-faint uppercase">Workspace</p>
             <BandNavigation bandId={bandId} activeSection={activeSection} variant="sidebar" />
           </div>
-          <Link href="/dashboard" className="mt-auto flex min-h-11 shrink-0 items-center rounded-xl px-3 py-3 text-sm font-medium text-content-muted transition hover:bg-accent-soft hover:text-brand focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">
-            ← Voltar para minhas bandas
+          <div className="mt-auto w-full">
+            <WorkspaceSettingsNavigation href={`/bandas/${bandId}/perfil-publico`} />
+          </div>
+          <Link href="/dashboard" className="flex min-h-11 shrink-0 items-center rounded-xl px-3 py-3 text-sm font-medium text-content-muted transition hover:bg-accent-soft hover:text-brand focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">
+            ← Voltar ao Meu Painel
           </Link>
         </aside>
-        <div className="flex min-w-0 flex-1 flex-col">{children}</div>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <SpaceSwitcherHeader bandId={bandId} bandName={info?.name} settingsHref={`/bandas/${bandId}/perfil-publico`} />
+          <div className="flex min-w-0 flex-1 flex-col pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0">{children}</div>
+        </div>
       </div>
     </BandInfoContext.Provider>
   );

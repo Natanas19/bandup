@@ -120,7 +120,7 @@ test('welcome offers three paths once and StrictMode shares the same persistence
   const h = componentHarness('src/components/welcome-onboarding.tsx', { '@/lib/supabase/client': { getSupabaseBrowserClient: () => f.client } });
   const dispose = h.start(); dispose(); const secondDispose = h.start(); await settle();
   const tree = nodes(h.render());
-  for (const [label, href] of [['Criar banda', '/bandas/nova'], ['Encontrar banda', '/descobrir'], ['Pular por enquanto', '/meu-perfil']]) {
+  for (const [label, href] of [['Criar banda', '/bandas/nova'], ['Encontrar banda', '/descobrir'], ['Pular por enquanto', '/dashboard']]) {
     assert.ok(tree.some(n => n.props?.children === label && n.props.href === href));
   }
   assert.equal(f.writes.length, 1);
@@ -170,7 +170,7 @@ test('search starts empty, edits a draft and requires confirmation before record
   assert.equal(writes, 1);
   assert.equal(refreshed, 1);
   tree = nodes(h.render());
-  assert.ok(tree.some(n => n.props?.href === '/meu-perfil' && n.props.children === 'Ir para Meu Perfil'));
+  assert.ok(tree.some(n => n.props?.href === '/dashboard' && n.props.children === 'Ir para Meu Painel'));
   assert.ok(tree.some(n => n.props?.role === 'status' && JSON.stringify(n.props.children).includes('não foi enviada')));
   cleanup();
 });

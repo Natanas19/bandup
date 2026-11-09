@@ -7,8 +7,9 @@ const { test } = require('node:test');
 const React = require('react');
 const ts = require('typescript');
 
-function fixture() {
+function fixture(pathname = '/dashboard/agenda') {
   let open = false, focused = 0;
+  const pushed = [];
   const cache = new Map();
   function load(file) {
     if (cache.has(file)) return cache.get(file).exports;
@@ -17,125 +18,144 @@ function fixture() {
       compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
     }).outputText, { module: mod, exports: mod.exports, require(name) {
       if (name === 'react') return { ...React,
-        useState: () => [open, value => { open = typeof value === 'function' ? value(open) : value; }],
+        useState: initial => [typeof initial === 'boolean' ? open : initial, value => { open = typeof value === 'function' ? value(open) : value; }],
+        useEffect() {},
         useId: () => 'area-menu', useRef: () => ({ current: { focus() { focused++; } } }),
       };
-      if (name === 'next/navigation') return { usePathname: () => '/meu-perfil/agenda' };
+      if (name === 'next/navigation') return { usePathname: () => pathname, useRouter: () => ({ push: value => pushed.push(value) }) };
       if (name === 'next/link' || name.startsWith('@/components/')) return { __esModule: true, default: () => null };
       if (name === 'react/jsx-runtime') return require(name);
+      if (name === '@/lib/supabase/client') return { getSupabaseBrowserClient: () => ({}) };
+      if (name === '@/lib/display-name') return { normalizeDisplayName: value => typeof value === 'string' && value.trim() ? value.trim() : null };
+      if (name === '@/lib/public-band-data') return { safeBandLogo: value => value };
       throw Error('Unexpected dependency: ' + name);
     } });
     return mod.exports;
   }
-  return { load, focused: () => focused };
+  return { load, focused: () => focused, pushed };
 }
 function nodes(tree) {
   if (!tree || typeof tree !== 'object') return [];
   if (Array.isArray(tree)) return tree.flatMap(nodes);
   return [tree, ...nodes(tree.props?.children)];
 }
+const source = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
 
-for (const variant of ['sidebar', 'expandable']) {
-  test(`band ${variant} has one personal destination and retains band-scoped sections`, () => {
+for (const variant of ['sidebar', 'bottom', 'expandable']) {
+  test(`band ${variant} navigation contains only band workspace destinations`, () => {
     const Navigation = fixture().load('src/components/band-navigation.tsx').default;
     const tree = nodes(Navigation({ bandId: 'band-a', activeSection: 'agenda', variant }));
-    const links = tree.filter(n => n.props?.href);
-    const personal = links.filter(n => n.props.href === '/meu-perfil');
-    assert.equal(personal.length, 1);
-    assert.match(personal[0].props.className, /min-h-11/);
-    assert.match(personal[0].props.className, /focus:ring-focus/);
-    assert.equal(personal[0].props['aria-current'], undefined);
-    for (const section of ['', '/tarefas', '/agenda', '/membros']) {
-      assert.equal(links.filter(n => n.props.href === '/bandas/band-a' + section).length, 1);
+    const links = tree.filter(node => node.props?.href);
+    for (const route of ['', '/tarefas', '/agenda', '/membros']) {
+      assert.equal(links.filter(node => node.props.href === `/bandas/band-a${route}`).length, 1);
     }
-    assert.equal(links.filter(n => n.props['aria-current'] === 'page').length, 1);
-    assert.equal(links.find(n => n.props['aria-current'] === 'page').props.href, '/bandas/band-a/agenda');
-    // Desktop return stays in BandWorkspace; mobile return stays in this menu.
-    assert.equal(links.filter(n => n.props.href === '/dashboard').length, variant === 'sidebar' ? 0 : 1);
-    assert.equal(tree.find(n => n.props?.id === 'area-menu').props.hidden, variant !== 'sidebar');
+    assert.equal(links.filter(node => node.props['aria-current'] === 'page').length, 1);
+    assert.equal(links.find(node => node.props['aria-current'] === 'page').props.href, '/bandas/band-a/agenda');
+    assert.equal(links.some(node => /meu-perfil|\/links|perfil-publico|configuracoes/.test(node.props.href)), false);
+    assert.equal(tree.find(node => node.props?.id === 'area-menu').props.hidden, variant === 'expandable');
+    if (variant === 'bottom') {
+      const navigation = tree.find(node => node.type === 'nav');
+      assert.match(navigation.props.className, /fixed inset-x-0 bottom-0/);
+      assert.match(navigation.props.className, /safe-area-inset-bottom/);
+    }
   });
 }
 
-test('mobile personal link and Escape close the menu and restore trigger focus', () => {
+test('band mobile menu closes on Escape and restores trigger focus', () => {
   const f = fixture(), Navigation = f.load('src/components/band-navigation.tsx').default;
-  const render = () => nodes(Navigation({ bandId: 'b', activeSection: 'overview' }));
-  let tree = render();
-  const trigger = tree.find(n => n.type === 'button');
-  assert.equal(trigger.props['aria-controls'], 'area-menu');
-  assert.equal(trigger.props['aria-expanded'], false);
+  const render = () => nodes(Navigation({ bandId: 'b', activeSection: 'overview', variant: 'expandable' }));
+  const trigger = render().find(node => node.type === 'button');
   trigger.props.onClick();
-  assert.equal(render().find(n => n.props?.id === 'area-menu').props.hidden, false);
-  render().find(n => n.props?.href === '/meu-perfil').props.onClick();
-  assert.equal(render().find(n => n.type === 'button').props['aria-expanded'], false);
-  assert.equal(f.focused(), 1);
-  trigger.props.onClick();
-  tree = render();
+  assert.equal(render().find(node => node.props?.id === 'area-menu').props.hidden, false);
   let prevented = false;
-  tree.find(n => n.type === 'nav').props.onKeyDown({ key: 'Escape', preventDefault() { prevented = true; } });
+  render().find(node => node.type === 'nav').props.onKeyDown({ key: 'Escape', preventDefault() { prevented = true; } });
   assert.equal(prevented, true);
-  assert.equal(render().find(n => n.props?.id === 'area-menu').props.hidden, true);
-  assert.equal(f.focused(), 2);
+  assert.equal(render().find(node => node.type === 'button').props['aria-expanded'], false);
+  assert.equal(f.focused(), 1);
 });
 
-test('personal desktop and mobile menus keep one return to dashboard', () => {
+test('personal navigation exposes overview, tasks, agenda and bands on desktop and mobile', () => {
+  const expected = ['/dashboard', '/dashboard/tarefas', '/dashboard/agenda', '/dashboard/bandas'];
   for (const sidebar of [false, true]) {
     const Navigation = fixture().load('src/components/personal-workspace.tsx').PersonalNavigation;
-    const links = nodes(Navigation({ sidebar })).filter(n => n.props?.href);
-    assert.equal(links.filter(n => n.props.href === '/dashboard').length, 1);
-    assert.equal(new Set(links.map(n => n.props.href)).size, links.length);
-    assert.equal(links.find(n => n.props['aria-current'] === 'page').props.href, '/meu-perfil/agenda');
-  }
-});
-
-test('band page menus hide at the same breakpoint where the desktop workspace appears', () => {
-  const source = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
-  assert.match(source('src/components/band-workspace.tsx'), /hidden w-64[\s\S]*md:flex/);
-  assert.match(source('src/components/band-workspace.tsx'), /md:pl-64/);
-  for (const file of ['page', 'tarefas/page', 'agenda/page', 'membros/page', 'links/page', 'perfil-publico/page']) {
-    const page = source(`src/app/bandas/[bandId]/${file}.tsx`);
-    if (file === 'page') assert.match(page, /<header className="[^"]*md:hidden">[\s\S]*<BandNavigation[\s\S]*<\/header>/);
-    else assert.match(page, /className="md:hidden">\s*<BandNavigation/);
-    if (file === 'perfil-publico/page') {
-      assert.equal((page.match(/<BandNavigation/g) ?? []).length, (page.match(/className="md:hidden"><BandNavigation/g) ?? []).length);
+    const tree = nodes(Navigation({ sidebar }));
+    const links = tree.filter(node => node.props?.href);
+    for (const href of expected) assert.equal(links.filter(node => node.props.href === href).length, 1);
+    assert.equal(links.find(node => node.props['aria-current'] === 'page').props.href, '/dashboard/agenda');
+    assert.equal(new Set(links.map(node => node.props.href)).size, links.length);
+    const navigation = tree.find(node => node.type === 'nav');
+    if (sidebar) assert.match(navigation.props.className, /hidden md:block/);
+    else {
+      assert.match(navigation.props.className, /fixed inset-x-0 bottom-0/);
+      assert.match(navigation.props.className, /safe-area-inset-bottom/);
+      assert.equal(navigation.props['aria-label'], 'Navegação inferior do Meu Painel');
     }
   }
-  assert.match(source('src/components/legacy-band-links.tsx'), /className="md:hidden"><BandNavigation/);
 });
 
-
-function textContent(tree) {
-  if (typeof tree === 'string') return tree;
-  if (Array.isArray(tree)) return tree.map(textContent).join('');
-  return tree && typeof tree === 'object' ? textContent(tree.props?.children) : '';
-}
-
-for (const sidebar of [false, true]) {
-  for (const area of ['personal', 'band']) {
-    test(`${area} ${sidebar ? 'desktop' : 'mobile'} keeps Links and public profile visible without navigation`, () => {
-      const f = fixture();
-      const Navigation = area === 'personal'
-        ? f.load('src/components/personal-workspace.tsx').PersonalNavigation
-        : f.load('src/components/band-navigation.tsx').default;
-      const render = () => nodes(Navigation(area === 'personal' ? { sidebar }
-        : { bandId: 'band-a', activeSection: 'agenda', variant: sidebar ? 'sidebar' : 'expandable' }));
-      if (!sidebar) render().find(n => n.type === 'button').props.onClick();
-      const tree = render();
-      assert.equal(tree.find(n => n.props?.id === 'area-menu').props.hidden, false);
-      for (const label of ['Links', area === 'personal' ? 'Perfil p\u00fablico' : 'Perfil P\u00fablico']) {
-        const item = tree.find(n => n.type === 'li' && textContent(n).startsWith(label));
-        assert.ok(item, label + ' remains visible');
-        assert.equal(textContent(item), label + 'Em breve');
-        const children = nodes(item);
-        assert.ok(children.some(n => n.props?.['aria-disabled'] === 'true'));
-        assert.equal(children.some(n => n.props?.href || n.props?.onClick || n.props?.onKeyDown
-          || n.type === 'a' || n.type === 'button' || n.props?.tabIndex !== undefined), false);
-      }
-      assert.equal(tree.some(n => /\/(links|perfil-publico)$/.test(n.props?.href ?? '')), false);
-      if (!sidebar) {
-        tree.find(n => n.type === 'nav').props.onKeyDown({ key: 'Escape', preventDefault() {} });
-        assert.equal(render().find(n => n.props?.id === 'area-menu').props.hidden, true);
-        assert.equal(f.focused(), 1);
-      }
-    });
+test('space switcher is present in both responsive workspaces and offers creation and discovery', () => {
+  const switcher = source('src/components/space-switcher.tsx');
+  assert.match(switcher, /aria-label="Alternar espaço"/);
+  assert.match(switcher, /Meus perfis/);
+  assert.match(switcher, /ProfileAvatar name=\{selectedName\}/);
+  assert.match(switcher, /band:bands!inner\(id, name, logo_url\)/);
+  assert.match(switcher, /<summary aria-label=\{/);
+  assert.match(switcher, /href="\/bandas\/nova"/);
+  assert.match(switcher, /href="\/descobrir"/);
+  for (const file of ['src/components/personal-workspace.tsx', 'src/components/band-workspace.tsx']) {
+    assert.match(source(file), /<SpaceSwitcherHeader/);
   }
-}
+});
+
+test('profile selector keeps its identity header for personal and band contexts', () => {
+  const load = fixture().load, Switcher = load('src/components/space-switcher.tsx').default;
+  const personal = nodes(Switcher({})), band = nodes(Switcher({ bandId: 'band-current', bandName: 'Kimera ao Kaos' }));
+  for (const [tree, selected] of [[personal, 'Meu Espaço'], [band, 'Kimera ao Kaos']]) {
+    const summary = tree.find(node => node.type === 'summary');
+    assert.ok(summary.props['aria-label'].includes(`Perfil selecionado: ${selected}`));
+    assert.ok(tree.some(node => node.props?.children === 'Meus perfis'));
+  }
+  assert.ok(band.some(node => node.props?.children === 'Kimera ao Kaos'));
+  assert.ok(personal.some(node => node.props?.href === '/dashboard'));
+  assert.ok(band.some(node => node.props?.children === 'Kimera ao Kaos'));
+  assert.ok(band.some(node => node.props?.href === '/bandas/nova'));
+  assert.ok(band.some(node => node.props?.href === '/descobrir'));
+});
+
+test('personal routes and layouts remain mobile and desktop compatible', () => {
+  const personal = source('src/components/personal-workspace.tsx');
+  const band = source('src/components/band-workspace.tsx');
+  assert.match(personal, /hidden w-64[\s\S]*md:flex/);
+  assert.match(personal, /md:pl-64/);
+  assert.match(band, /hidden w-64[\s\S]*md:flex/);
+  assert.match(band, /md:pl-64/);
+  assert.match(source('src/app/meu-perfil/page.tsx'), /redirect\("\/dashboard"\)/);
+  assert.match(source('src/app/meu-perfil/[section]/page.tsx'), /redirect\(`\/dashboard/);
+});
+
+test('settings and account actions are grouped in both desktop sidebars', () => {
+  const settings = source('src/components/workspace-settings.tsx');
+  assert.match(settings, /Configurações/);
+  assert.match(settings, /Notificações/);
+  assert.match(settings, /Privacidade/);
+  assert.match(settings, /Em breve/);
+  assert.match(settings, /"Sair"/);
+  for (const file of ['src/components/personal-workspace.tsx', 'src/components/band-workspace.tsx']) {
+    assert.match(source(file), /<WorkspaceSettingsNavigation/);
+  }
+  const header = source('src/components/space-switcher.tsx');
+  assert.match(header, /<WorkspaceSettingsMenu href=\{settingsHref\}/);
+  assert.match(header, /justify-between/);
+  assert.match(header, /md:flex md:justify-end/);
+  assert.doesNotMatch(header, /ThemeSelector/);
+});
+
+test('appearance control is available only within personal and band settings routes', () => {
+  const personalSettings = source('src/app/dashboard/[section]/page.tsx');
+  const bandSettings = source('src/app/bandas/[bandId]/perfil-publico/page.tsx');
+  assert.match(personalSettings, /section === "configuracoes"[\s\S]*ThemeSelector/);
+  assert.match(bandSettings, /ThemeSelector/);
+  for (const file of ['src/app/page.tsx', 'src/app/login/page.tsx', 'src/app/cadastro/page.tsx', 'src/app/descobrir/page.tsx', 'src/app/b/[slug]/layout.tsx', 'src/components/band-navigation.tsx', 'src/components/personal-workspace.tsx', 'src/components/welcome-onboarding.tsx']) {
+    assert.doesNotMatch(source(file), /ThemeSelector|Aparência/);
+  }
+});

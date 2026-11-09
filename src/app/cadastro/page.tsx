@@ -2,7 +2,6 @@
 
 import { useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import ThemeSelector from "@/components/theme-selector";
 import PasswordInput from "@/components/password-input";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -224,7 +223,6 @@ export default function CadastroPage() {
           </section>
         </div>
       </main>
-      <footer className="flex justify-center px-5 pb-6"><ThemeSelector /></footer>
     </>
   );
 }

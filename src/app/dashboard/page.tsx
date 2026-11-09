@@ -4,202 +4,200 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import DisplayNameSettings from "@/components/display-name-settings";
 import WelcomeOnboarding from "@/components/welcome-onboarding";
+import NavigationIcon from "@/components/navigation-icon";
 import { BAND_ENTRY_BACKEND_VALIDATED } from "@/lib/band-entry";
-import ThemeSelector from "@/components/theme-selector";
-import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { normalizeDisplayName } from "@/lib/display-name";
+import { loadPersonalTasks, PersonalTasksLoadError, type PersonalTask } from "@/lib/personal-tasks";
+import { loadPersonalAgenda, PersonalAgendaLoadError, type PersonalEvent } from "@/lib/personal-agenda";
+import { formatTaskDate } from "@/lib/date-time";
 
-type BandMembership = {
-  role: string;
-  band: {
-    id: string;
-    name: string;
-    description: string | null;
-  } | null;
-};
+type BandMembership = { role: string; band: { id: string; name: string } | null };
+
+function previewEvents(events: PersonalEvent[]) {
+  const now = Date.now();
+  const upcoming = events.filter(event => Date.parse(event.start_at) >= now)
+    .sort((a, b) => Date.parse(a.start_at) - Date.parse(b.start_at));
+  const ordered = upcoming.length ? upcoming : [...events].sort((a, b) => Date.parse(b.start_at) - Date.parse(a.start_at));
+  return ordered.slice(0, 3);
+}
+
+const dateFormatter = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short" });
+const timeFormatter = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+
+function eventDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Data indisponível" : dateFormatter.format(date);
+}
+
+function eventTime(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Horário indisponível" : timeFormatter.format(date);
+}
+
+function accountName(user: User) {
+  return normalizeDisplayName(user.user_metadata?.display_name)
+    ?? normalizeDisplayName(user.user_metadata?.full_name)
+    ?? normalizeDisplayName(user.user_metadata?.name);
+}
+
+function retryButton(onClick: () => void) {
+  return <button type="button" onClick={onClick} className="mt-3 min-h-10 rounded-xl border border-accent-border px-3 py-2 text-sm font-semibold text-brand hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">Tentar novamente</button>;
+}
 
 export default function DashboardPage() {
-  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [bands, setBands] = useState<BandMembership[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [logoutError, setLogoutError] = useState("");
   const [loadError, setLoadError] = useState("");
-
-  async function handleSignOut() {
-    setIsLoggingOut(true);
-    setLogoutError("");
-
-    try {
-      const { error } = await getSupabaseBrowserClient().auth.signOut();
-      if (error) {
-        setLogoutError("Não foi possível sair agora. Tente novamente.");
-        return;
-      }
-
-      router.replace("/login");
-    } catch {
-      setLogoutError("Não foi possível sair agora. Tente novamente.");
-    } finally {
-      setIsLoggingOut(false);
-    }
-  }
+  const [tasks, setTasks] = useState<PersonalTask[] | null>(null);
+  const [taskCount, setTaskCount] = useState<number | null>(null);
+  const [tasksError, setTasksError] = useState("");
+  const [agenda, setAgenda] = useState<PersonalEvent[] | null>(null);
+  const [agendaError, setAgendaError] = useState("");
+  const [revision, setRevision] = useState(0);
 
   useEffect(() => {
-    let isMounted = true;
+    let active = true;
+    setIsLoading(true);
+    setLoadError("");
+    setTasks(null); setTaskCount(null); setTasksError(""); setAgenda(null); setAgendaError("");
 
     async function loadDashboard() {
       try {
         const supabase = getSupabaseBrowserClient();
         const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-
-        if (!isMounted) return;
-        if (sessionError) {
-          setLoadError("Não foi possível carregar sua conta agora. Tente novamente.");
-          return;
-        }
-
+        if (!active) return;
+        if (sessionError) { setLoadError("Não foi possível carregar sua conta agora. Tente novamente."); return; }
         const session = sessionData.session;
-        if (!session) {
-          setUser(null);
-          return;
-        }
-
+        if (!session) { setUser(null); return; }
         setUser(session.user);
 
-        const { data, error } = await supabase
-          .from("band_members")
-          .select("role, band:bands!inner(id, name, description)")
+        const { data, error } = await supabase.from("band_members")
+          .select("role, band:bands!inner(id, name)")
           .eq("user_id", session.user.id);
+        if (!active) return;
+        if (error) { setLoadError("Não foi possível carregar suas bandas agora. Tente novamente."); return; }
+        const memberships = ((data ?? []) as unknown as BandMembership[])
+          .filter(item => (item.role === "admin" || item.role === "member")
+            && item.band?.id && item.band.name.trim());
+        setBands(memberships);
 
-        if (!isMounted) return;
-        if (error) {
-          setLoadError("Não foi possível carregar suas bandas agora. Tente novamente.");
+        if (!memberships.length) {
+          setTasks([]); setTaskCount(0); setAgenda([]);
           return;
         }
 
-        setBands((data ?? []) as unknown as BandMembership[]);
+        void loadPersonalTasks(supabase).then(result => {
+          if (active) { setTasks(result.tasks); setTaskCount(result.totalCount); }
+        }).catch(cause => {
+          if (!active) return;
+          setTasksError(cause instanceof PersonalTasksLoadError ? cause.message : "Não foi possível carregar suas tarefas. Tente novamente.");
+        });
+        void loadPersonalAgenda(supabase).then(result => {
+          if (active) setAgenda(result);
+        }).catch(cause => {
+          if (!active) return;
+          setAgendaError(cause instanceof PersonalAgendaLoadError ? cause.message : "Não foi possível carregar sua agenda. Tente novamente.");
+        });
       } catch {
-        if (isMounted) {
-          setLoadError("Não foi possível carregar sua conta agora. Tente novamente.");
-        }
+        if (active) setLoadError("Não foi possível carregar sua conta agora. Tente novamente.");
       } finally {
-        if (isMounted) setIsLoading(false);
+        if (active) setIsLoading(false);
       }
     }
 
     void loadDashboard();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+    return () => { active = false; };
+  }, [revision]);
 
-  const content = (
-    <main className="flex flex-1 items-center justify-center px-4 py-6 sm:px-6 sm:py-16">
-      <section aria-busy={isLoading} className="min-w-0 w-full max-w-3xl rounded-3xl border border-nav-border bg-surface p-5 shadow-app-dashboard sm:p-12">
-        <div className="text-center">
-          <p className="text-sm font-semibold tracking-widest text-accent uppercase">BandUp</p>
-          <h1 className="mt-3 text-3xl sm:mt-4 sm:text-4xl font-semibold tracking-tight text-content">Seu espaço no BandUp</h1>
-          {isLoading ? (
-            <p role="status" className="mt-4 text-content-muted">Carregando sua conta e suas bandas...</p>
-          ) : loadError ? (
-            <p role="alert" className="mt-5 text-sm text-danger">{loadError}</p>
-          ) : user ? (
-            <p className="mt-3 break-words text-sm text-content-subtle sm:break-normal">{user.email}</p>
-          ) : (
-            <div className="mt-5">
-              <p className="text-content-muted">Nenhuma sessão autenticada foi encontrada.</p>
-              <Link href="/login" className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-primary sm:w-auto px-5 py-3 text-sm font-semibold text-on-primary transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">
-                Ir para o login
-              </Link>
-            </div>
-          )}
-        </div>
-
-        {!isLoading && !loadError && user && (
-          <Link href="/meu-perfil" className="mt-6 flex min-h-11 items-center justify-center rounded-xl border border-accent-border px-5 py-3 text-sm font-semibold text-brand hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">Meu Perfil</Link>
-        )}
-
-        {!isLoading && !loadError && user && !normalizeDisplayName(user.user_metadata?.display_name) && (
-          <DisplayNameSettings key={user.id} initialName={user.user_metadata?.display_name} onSaved={name => {
-            setUser(current => current && current.id === user.id ? {
-              ...current, user_metadata: { ...current.user_metadata, display_name: name },
-            } : current);
-          }} />
-        )}
-
-        {!isLoading && !loadError && user && (
-          bands.length === 0 ? (
-            <div className="mt-6 rounded-2xl bg-accent-soft px-4 py-6 text-center sm:mt-10 sm:px-6 sm:py-8">
-              <h2 className="text-xl font-semibold text-content">Suas bandas</h2>
-              <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-content-muted">
-                Encontre pessoas para fazer música com você. Sua conta é pessoal: você pode participar de bandas e criar a sua quando quiser.
-              </p>
-              <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
-                <Link href="/descobrir" aria-describedby="discovery-availability" className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-on-primary transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus sm:w-auto">
-                  Encontrar uma banda
-                </Link>
-                <Link href="/bandas/nova" className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-accent-border px-5 py-3 text-sm font-semibold text-brand transition hover:bg-surface focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus sm:w-auto">
-                  Criar minha banda
-                </Link>
+  const displayName = user ? accountName(user) : null;
+  const savedDisplayName = user ? normalizeDisplayName(user.user_metadata?.display_name) : null;
+  const content = <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 sm:py-8 lg:px-10 lg:py-10">
+    <div className="mx-auto w-full max-w-7xl">
+      {isLoading ? <section aria-busy="true" className="mt-8 rounded-panel border border-outline bg-surface p-6 sm:p-8"><p role="status" className="text-sm text-content-muted">Carregando seu espaço...</p></section>
+        : loadError ? <section className="mt-8 rounded-panel border border-danger-border bg-surface p-6 sm:p-8"><p role="alert" className="text-sm text-danger">{loadError}</p>{retryButton(() => setRevision(value => value + 1))}</section>
+          : !user ? <section className="mt-8 rounded-panel border border-outline bg-surface p-6 text-center sm:p-10">
+            <h1 className="text-2xl font-semibold text-content">Entre no seu espaço</h1>
+            <p className="mt-2 text-sm text-content-muted">Nenhuma sessão autenticada foi encontrada.</p>
+            <Link href="/login" className="mt-5 inline-flex min-h-11 items-center justify-center rounded-control bg-primary px-5 py-3 text-sm font-semibold text-on-primary hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">Ir para o login</Link>
+          </section> : <>
+            <section className="relative mt-8 overflow-hidden rounded-panel border border-accent-border bg-surface p-6 shadow-app-dashboard sm:p-8 lg:flex lg:items-end lg:justify-between lg:gap-8 lg:px-10 lg:py-9">
+              <div aria-hidden="true" className="pointer-events-none absolute -right-12 -top-20 h-56 w-56 rounded-full bg-accent/10 blur-3xl" />
+              <div className="relative max-w-3xl">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-accent">Seu espaço, seu ritmo</p>
+                <h1 className="mt-3 text-3xl font-semibold leading-tight tracking-tight text-content sm:text-4xl lg:text-5xl">
+                  {displayName ? `Boas-vindas, ${displayName}.` : "Boas-vindas ao seu espaço."}
+                </h1>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-content-muted sm:text-base">Acompanhe o que está acontecendo nas bandas de que você participa.</p>
               </div>
-              <p id="discovery-availability" className="mt-4 text-sm leading-6 text-content-muted">{BAND_ENTRY_BACKEND_VALIDATED ? "Pesquise pelo nome de uma banda e acompanhe suas solicitações de entrada." : "Você pode conhecer a área de descoberta. A busca e o envio de solicitações ainda estão indisponíveis enquanto validamos a funcionalidade."}</p>
-            </div>
-          ) : (
-            <div className="mt-6 sm:mt-10">
-              <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
-                <h2 className="text-xl font-semibold text-content">Suas bandas</h2>
-                <Link href="/bandas/nova" className="inline-flex min-h-11 items-center justify-center rounded-xl border border-accent-border px-3 text-sm font-semibold text-accent hover:text-accent-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus sm:inline sm:min-h-0 sm:rounded-none sm:border-0 sm:px-0">
-                  Criar outra banda
-                </Link>
-              </div>
-              <ul className="mt-4 space-y-3">
-                {bands.map(({ band, role }, index) => band && (
-                  <li key={band.id ?? index}>
-                    <Link
-                      href={`/bandas/${band.id}`}
-                      className="block rounded-2xl border border-nav-border p-4 sm:p-5 transition hover:border-accent-outline-hover hover:bg-accent-soft/50 focus:outline-none focus:ring-4 focus:ring-input-ring"
-                    >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <h3 className="min-w-0 flex-1 break-words text-lg font-semibold text-content">{band.name}</h3>
-                      <span className="shrink-0 rounded-full bg-accent-soft px-3 py-1 text-xs font-semibold text-accent">
-                        {role === "admin" ? "Administrador" : "Membro"}
-                      </span>
-                    </div>
-                    <p className="mt-2 break-words text-sm leading-6 text-content-muted sm:break-normal">
-                      {band.description?.trim() || "Nenhuma descrição informada."}
-                    </p>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )
-        )}
+              {bands.length > 0 && <Link href="/dashboard/bandas" className="relative mt-5 inline-flex min-h-11 items-center gap-2 rounded-control border border-outline px-4 py-2 text-sm font-semibold text-content hover:border-accent-border hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus lg:mt-0">Ver minhas bandas <NavigationIcon name="Users" className="h-4 w-4" /></Link>}
+            </section>
 
-        {user && !isLoading && !loadError && bands.length > 0 && (
-          <Link href="/descobrir" className="mt-6 flex min-h-11 items-center justify-center rounded-xl border border-accent-border px-5 py-3 text-sm font-semibold text-brand hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">Descobrir outras bandas</Link>
-        )}
-        {logoutError && <p role="alert" className="mt-5 text-center text-sm text-danger">{logoutError}</p>}
-        {user && !isLoading && (
-          <div className="mt-6 text-center sm:mt-8">
-            <button
-              type="button"
-              onClick={handleSignOut}
-              disabled={isLoggingOut}
-              className="inline-flex w-full items-center justify-center rounded-xl border border-accent-border px-5 py-3 text-sm font-semibold text-brand transition hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
-            >
-              {isLoggingOut ? "Saindo..." : "Sair"}
-            </button>
-          </div>
-        )}
-        <div className="mt-6 flex justify-center sm:mt-8"><ThemeSelector /></div>
-      </section>
-    </main>
-  );
+            {!savedDisplayName && <DisplayNameSettings key={user.id} initialName={user.user_metadata?.display_name} onSaved={name => {
+              setUser(current => current && current.id === user.id ? { ...current, user_metadata: { ...current.user_metadata, display_name: name } } : current);
+            }} />}
+
+            {bands.length === 0 && <section className="mt-6 grid gap-6 rounded-panel border border-accent-border bg-accent-soft/40 p-5 sm:p-7 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center lg:gap-7 lg:p-8">
+              <div aria-hidden="true" className="flex h-14 w-14 items-center justify-center rounded-panel border border-accent-border bg-surface text-accent"><NavigationIcon name="Users" className="h-7 w-7" /></div>
+              <div>
+                <h2 className="text-xl font-semibold text-content sm:text-2xl">Seu espaço começa com uma banda</h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-content-muted">Crie uma banda ou pesquise uma para acompanhar tarefas, eventos e novidades em um só lugar.</p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:min-w-64 lg:grid-cols-1">
+                <Link href="/bandas/nova" className="inline-flex min-h-11 items-center justify-center rounded-control bg-primary px-5 py-3 text-sm font-semibold text-on-primary hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">Criar banda</Link>
+                <Link href="/descobrir" aria-describedby="discovery-availability" className="inline-flex min-h-11 items-center justify-center rounded-control border border-accent-border bg-surface px-5 py-3 text-sm font-semibold text-brand hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">Pesquisar banda</Link>
+              </div>
+              <p id="discovery-availability" className="text-xs leading-5 text-content-muted lg:col-start-2">{BAND_ENTRY_BACKEND_VALIDATED ? "Pesquise pelo nome de uma banda e acompanhe suas solicitações de entrada." : "A busca e o envio de solicitações ainda estão indisponíveis enquanto validamos a funcionalidade."}</p>
+            </section>}
+
+            <div className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(20rem,0.9fr)]">
+              <section aria-labelledby="personal-tasks-title" className="min-w-0 rounded-panel border border-outline bg-surface p-5 shadow-app-card sm:p-6 lg:p-7">
+                <header className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-accent">Em todas as suas bandas</p>
+                    <h2 id="personal-tasks-title" className="mt-2 text-xl font-semibold text-content sm:text-2xl">Minhas tarefas</h2>
+                  </div>
+                  <span className="rounded-full bg-accent-soft px-3 py-1 text-sm font-bold tabular-nums text-accent">{taskCount ?? "—"}</span>
+                </header>
+                {tasksError ? <div className="mt-5"><p role="alert" className="text-sm text-danger">{tasksError}</p>{retryButton(() => setRevision(value => value + 1))}</div>
+                  : tasks === null ? <p role="status" className="mt-5 text-sm text-content-muted">Carregando suas tarefas...</p>
+                    : tasks.length === 0 ? <p className="mt-5 rounded-control border border-dashed border-outline px-4 py-5 text-sm leading-6 text-content-muted">Nenhuma tarefa atribuída a você no momento.</p>
+                      : <ul className="mt-5 divide-y divide-outline-subtle">{tasks.slice(0, 4).map(task => <li key={`${task.band_id}:${task.id}`} className="py-4 first:pt-0 last:pb-0">
+                        <Link href={`/bandas/${task.band_id}/tarefas`} className="group block rounded-control focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">
+                          <p className="text-xs font-semibold text-accent">{task.bandName}</p>
+                          <div className="mt-1 flex items-start justify-between gap-3"><h3 className="min-w-0 break-words font-semibold text-content group-hover:text-brand">{task.title}</h3><span aria-hidden="true" className="text-content-faint">↗</span></div>
+                          <p className="mt-1 text-xs text-content-muted">{task.due_date ? `Prazo: ${formatTaskDate(task.due_date)}` : "Sem prazo definido"}</p>
+                        </Link>
+                      </li>)}</ul>}
+                <Link href="/dashboard/tarefas" className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-control px-3 text-sm font-semibold text-brand hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">Ver todas as tarefas <span aria-hidden="true">→</span></Link>
+              </section>
+
+              <section aria-labelledby="personal-agenda-title" className="min-w-0 rounded-panel border border-outline bg-surface p-5 shadow-app-card sm:p-6 lg:p-7">
+                <header className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-accent">Próximos momentos</p>
+                    <h2 id="personal-agenda-title" className="mt-2 text-xl font-semibold text-content sm:text-2xl">Minha agenda</h2>
+                  </div>
+                  <span className="rounded-full bg-accent-soft px-3 py-1 text-sm font-bold tabular-nums text-accent">{agenda ? agenda.length : "—"}</span>
+                </header>
+                {agendaError ? <div className="mt-5"><p role="alert" className="text-sm text-danger">{agendaError}</p>{retryButton(() => setRevision(value => value + 1))}</div>
+                  : agenda === null ? <p role="status" className="mt-5 text-sm text-content-muted">Carregando sua agenda...</p>
+                    : agenda.length === 0 ? <p className="mt-5 rounded-control border border-dashed border-outline px-4 py-5 text-sm leading-6 text-content-muted">Ainda não há eventos das suas bandas na agenda.</p>
+                      : <ul className="mt-5 space-y-3">{previewEvents(agenda).map(event => <li key={`${event.band_id}:${event.id}`}>
+                        <Link href={`/bandas/${event.band_id}/agenda`} className="flex min-w-0 gap-3 rounded-control border border-outline-subtle bg-surface-muted p-3 transition hover:border-accent-border hover:bg-accent-soft/50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus sm:p-4">
+                          <span className="flex w-14 shrink-0 flex-col items-center justify-center rounded-control bg-accent-soft px-2 py-2 text-center"><span className="text-xs font-semibold uppercase text-accent">{eventDate(event.start_at)}</span><span className="mt-1 text-xs tabular-nums text-content-muted">{eventTime(event.start_at)}</span></span>
+                          <span className="min-w-0 flex-1"><span className="block break-words font-semibold text-content">{event.title}</span><span className="mt-1 block break-words text-xs font-semibold text-accent">{event.bandName}</span>{event.location?.trim() && <span className="mt-1 block break-words text-xs text-content-muted">{event.location}</span>}</span>
+                        </Link>
+                      </li>)}</ul>}
+                <Link href="/dashboard/agenda" className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-control px-3 text-sm font-semibold text-brand hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">Ver agenda completa <span aria-hidden="true">→</span></Link>
+              </section>
+            </div>
+          </>}
+    </div>
+  </main>;
+
   return !isLoading && !loadError && user
     ? <WelcomeOnboarding key={user.id} userId={user.id}>{content}</WelcomeOnboarding>
     : content;

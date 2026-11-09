@@ -94,7 +94,8 @@ test('real UI classes compile to accessible token colors, opaque placeholders an
   assert.ok(read('src/app/login/page.tsx').includes('text-login-secondary'));
   assert.ok(read('src/app/login/page.tsx').includes('text-login-caption'));
   assert.ok(read('src/components/band-workspace.tsx').includes('text-content-faint'));
-  assert.ok(read('src/components/band-navigation.tsx').includes('bg-disabled-surface'));
+  assert.ok(read('src/components/band-navigation.tsx').includes('bg-primary'));
+  assert.ok(read('src/components/band-navigation.tsx').includes('focus:ring-focus'));
   assert.ok(read('src/components/public-band-profile.tsx').includes('bg-surface/70'));
   assert.doesNotMatch(read('src/components/public-band-profile.tsx'), /text-content-faint/,
     'Faint is tested for neutral surfaces; public gradient helper uses content-subtle');

@@ -166,7 +166,7 @@ export default function BandPage() {
             href="/dashboard"
             className="inline-flex min-h-11 items-center rounded-xl border border-accent-border px-4 py-2.5 text-sm font-semibold text-brand transition hover:bg-accent-soft focus:outline-none focus:ring-4 focus:ring-input-ring"
           >
-            ← Voltar para minhas bandas
+            ← Voltar ao Meu Painel
           </Link>
 
           {pageState === "loading" ? (

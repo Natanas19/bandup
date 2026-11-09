@@ -26,7 +26,7 @@ export function isValidPublicSlug(slug: string): boolean {
   return slug.trim().length > 0 && slug.length <= 2048 && !/[\u0000-\u001f\u007f]/.test(slug);
 }
 
-function safeImage(value: string | null, origin: string): string | null {
+export function safeBandLogo(value: string | null, origin: string): string | null {
   if (!value) return null;
   const safe = getSafeExternalUrl(value);
   if (!safe) return null;
@@ -76,7 +76,7 @@ export function toPublicBand(
     links.push({ id: `public-link-${links.length}`, platform, url,
       ...(customLabel ? { label: customLabel } : {}) });
   }
-  const src = safeImage(value.logo_url as string | null, imageOrigin);
+  const src = safeBandLogo(value.logo_url as string | null, imageOrigin);
   return {
     slug: expectedSlug,
     name: value.name.trim(),

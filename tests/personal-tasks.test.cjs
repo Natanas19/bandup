@@ -41,7 +41,7 @@ function fixture(options = {}) {
     from(table) {
       const call = { table, filters: [], orders: [] }; calls.push(call);
       return {
-        select(columns) { call.columns = columns; return this; },
+        select(columns, options) { call.columns = columns; call.selectOptions = options; return this; },
         eq(...args) { call.filters.push(args); return this; },
         in(...args) { call.in = args; return this; },
         order(...args) { call.orders.push(args); return this; },
@@ -57,7 +57,7 @@ function fixture(options = {}) {
               return b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id);
             });
           }
-          return { data: error ? null : rows.slice(start, end + 1), error };
+          return { data: error ? null : rows.slice(start, end + 1), error, count: table === 'tasks' ? rows.length : null };
         },
       };
     },
@@ -67,7 +67,7 @@ function fixture(options = {}) {
 test('empty tasks and no memberships produce honest empty results; no bands skips task query', async () => {
   for (const options of [{}, { memberships: [] }]) {
     const f = fixture(options), result = await service.loadPersonalTasks(f.client);
-    assert.equal(result.tasks.length, 0); assert.equal(result.hasMore, false);
+    assert.equal(result.tasks.length, 0); assert.equal(result.hasMore, false); assert.equal(result.totalCount, 0);
     assert.equal(f.calls.filter(c => c.table === 'tasks').length, options.memberships ? 0 : 1);
   }
 });
@@ -109,7 +109,10 @@ test('deadline order puts undated tasks last with stable creation/id ties and bo
   const many = fixture({ tasks: Array.from({ length: 51 }, (_, i) => task(String(i).padStart(3, '0'))) });
   const first = await service.loadPersonalTasks(many.client), second = await service.loadPersonalTasks(many.client, 50);
   assert.equal(first.tasks.length, 50); assert.equal(first.hasMore, true);
+  assert.equal(first.totalCount, 51);
   assert.equal(second.tasks.length, 1); assert.equal(second.hasMore, false);
+  assert.equal(second.totalCount, 51);
+  assert.equal(many.calls.find(c => c.table === 'tasks').selectOptions.count, 'exact');
 });
 test('membership pagination includes bands beyond the first page; bad offsets never call Auth', async () => {
   const f = fixture({ memberships: Array.from({ length: 201 }, (_, i) => membership(String(i))), tasks: [task('last', '200')] });
@@ -164,10 +167,10 @@ test('UI reports failures without leaking raw errors, supports retry and ignores
   const dispose = delayed.start(); dispose(); finish({ tasks: [task('late')], hasMore: false }); await settle();
   assert.ok(delayed.render().some(n => n.props?.role === 'status'));
 });
-test('personal tasks route renders the read component; agenda retains its placeholder', async () => {
-  const load = loader(); const Page = load('src/app/meu-perfil/[section]/page.tsx').default;
+test('dashboard tasks and agenda routes render their personal read components', async () => {
+  const load = loader(); const Page = load('src/app/dashboard/[section]/page.tsx').default;
   const tasks = await Page({ params: Promise.resolve({ section: 'tarefas' }) });
   assert.equal(tasks.type, load('src/components/personal-tasks.tsx').default);
-  const agenda = nodes(await Page({ params: Promise.resolve({ section: 'agenda' }) }));
-  assert.ok(agenda.some(n => n.props?.children === 'Em breve'));
+  const agenda = await Page({ params: Promise.resolve({ section: 'agenda' }) });
+  assert.equal(agenda.type.name, 'PersonalAgenda');
 });

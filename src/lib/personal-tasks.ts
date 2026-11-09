@@ -7,7 +7,7 @@ export type PersonalTask = {
   status: string | null; priority: string | null; due_date: string | null; created_at: string;
   bandName: string;
 };
-export type PersonalTasksPage = { tasks: PersonalTask[]; hasMore: boolean };
+export type PersonalTasksPage = { tasks: PersonalTask[]; hasMore: boolean; totalCount: number | null };
 type Membership = { band_id: string; role: string; band: { id: string; name: string } | null };
 type TaskRow = Omit<PersonalTask, "bandName">;
 
@@ -32,12 +32,12 @@ export async function loadPersonalTasks(client: SupabaseClient, offset = 0): Pro
     }
     if (rows.length < 200) break;
   }
-  if (!bands.size) return { tasks: [], hasMore: false };
+  if (!bands.size) return { tasks: [], hasMore: false, totalCount: 0 };
   // No event_id, task/event joins or write methods in this personal read path.
   const query = client.from("tasks")
-    .select("id, band_id, assigned_to, title, status, priority, due_date, created_at")
+    .select("id, band_id, assigned_to, title, status, priority, due_date, created_at", { count: "exact" })
     .eq("assigned_to", userId).in("band_id", [...bands.keys()]);
-  const { data, error } = await query
+  const { data, error, count } = await query
     .order("due_date", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: false }).order("id", { ascending: true })
     .range(offset, offset + PERSONAL_TASK_PAGE_SIZE);
@@ -49,5 +49,6 @@ export async function loadPersonalTasks(client: SupabaseClient, offset = 0): Pro
   return {
     tasks: rows.slice(0, PERSONAL_TASK_PAGE_SIZE).map(row => ({ ...row, bandName: bands.get(row.band_id)! })),
     hasMore: rows.length > PERSONAL_TASK_PAGE_SIZE,
+    totalCount: count,
   };
 }

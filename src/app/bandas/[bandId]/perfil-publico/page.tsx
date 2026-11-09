@@ -9,6 +9,7 @@ import BandNavigation from "@/components/band-navigation";
 import { BandWorkspaceInfo } from "@/components/band-workspace";
 import BandPublicProfileSettings from "@/components/band-public-profile-settings";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import ThemeSelector from "@/components/theme-selector";
 
 type PageState = "loading" | "unauthenticated" | "unavailable" | "error" | "ready";
 type Band = { name: string; slug: string | null; is_public: boolean; role: string };
@@ -18,6 +19,10 @@ export default function BandProfilePage() {
   if (PUBLICATION_ENABLED) return <EnabledBandProfilePage />;
   return <main className="flex flex-1 justify-center px-4 py-6 sm:px-6 sm:py-10"><div className="w-full min-w-0 max-w-5xl">
     <div className="md:hidden"><BandNavigation bandId={bandId} activeSection="perfil-publico" /></div>
+    <section aria-labelledby="band-appearance-title" className="mt-6 rounded-2xl border border-nav-border bg-surface p-5 sm:p-6">
+      <h1 id="band-appearance-title" className="text-lg font-semibold text-content">Aparência</h1>
+      <ThemeSelector className="mt-4" />
+    </section>
     <PublicationUnavailable />
   </div></main>;
 }
@@ -99,6 +104,10 @@ function EnabledBandProfilePage() {
           <h1 className="mt-2 text-3xl font-semibold tracking-tight text-content sm:text-4xl">Perfil Público</h1>
           <p className="mt-2 text-sm leading-6 text-content-muted">Gerencie a visibilidade e o endereço público da banda.</p>
         </header>
+        <section aria-labelledby="band-appearance-title" className="mt-6 rounded-2xl border border-nav-border bg-surface p-5 sm:p-6">
+          <h2 id="band-appearance-title" className="text-lg font-semibold text-content">Aparência</h2>
+          <ThemeSelector className="mt-4" />
+        </section>
         <BandPublicProfileSettings key={bandId} bandId={bandId} initialSlug={band.slug}
           initiallyPublic={band.is_public} isAdmin={band.role === "admin"} />
       </div>

@@ -1,13 +1,11 @@
 import Link from "next/link";
 import BandDiscovery from "@/components/band-discovery";
-import ThemeSelector from "@/components/theme-selector";
 
 export default function DiscoverBandsPage() {
   return <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 sm:py-12">
     <div className="mx-auto w-full max-w-5xl">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link href="/dashboard" className="inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold text-brand hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">← Minhas bandas</Link>
-        <ThemeSelector />
+        <Link href="/dashboard/bandas" className="inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold text-brand hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">← Minhas bandas</Link>
       </div>
       <header className="mt-8 sm:mt-12">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Sua música, novas conexões</p>

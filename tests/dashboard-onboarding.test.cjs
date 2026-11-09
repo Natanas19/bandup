@@ -29,6 +29,9 @@ function harness(file, result, initial = {}) {
       if (name === 'next/navigation') return { useRouter: () => ({ replace: url => calls.push(url) }) };
       if (name === '@/lib/band-entry') return { BAND_ENTRY_BACKEND_VALIDATED: initial.backendValidated === true };
       if (name === '@/lib/supabase/client') return { getSupabaseBrowserClient: () => client };
+      if (name === '@/lib/personal-tasks') return { PersonalTasksLoadError: class PersonalTasksLoadError extends Error {}, loadPersonalTasks: async () => ({ tasks: [], hasMore: false, totalCount: 0 }) };
+      if (name === '@/lib/personal-agenda') return { PersonalAgendaLoadError: class PersonalAgendaLoadError extends Error {}, loadPersonalAgenda: async () => [] };
+      if (name === '@/lib/date-time') return { formatTaskDate: value => value };
       if (name === 'next/link' || name.startsWith('@/components/')) return { __esModule: true, default: () => null };
       if (name === '@/lib/display-name') {
       const names = { exports: {} };
@@ -47,27 +50,48 @@ function nodes(tree) {
   if (Array.isArray(tree)) return tree.flatMap(nodes);
   return [tree, ...nodes(tree.props?.children)];
 }
-test('empty band dashboard keeps creation, discovery and personal profile available without the old musician step', () => {
+test('empty personal dashboard offers band creation, discovery and personal summaries', () => {
   const h = harness('src/app/dashboard/page.tsx', null, { 0: { id: 'u' }, 1: [], 2: false });
   const tree = nodes(h.render());
-  for (const href of ['/bandas/nova', '/descobrir', '/meu-perfil']) assert.ok(tree.some(n => n.props?.href === href));
-  assert.equal(tree.filter(n => n.props?.href === '/meu-perfil').length, 1);
-  assert.ok(tree.some(n => n.type === 'h2' && n.props.children === 'Suas bandas'));
+  for (const href of ['/bandas/nova', '/descobrir', '/dashboard/tarefas']) assert.ok(tree.some(n => n.props?.href === href));
+  assert.equal(tree.filter(n => n.props?.href === '/dashboard/tarefas').length, 1);
+  assert.ok(tree.some(n => n.type === 'h2' && n.props.children === 'Seu espaço começa com uma banda'));
+  assert.ok(tree.some(n => n.type === 'h2' && n.props.children === 'Minhas tarefas'));
+  assert.ok(tree.some(n => n.type === 'h2' && n.props.children === 'Minha agenda'));
   assert.equal(tree.some(n => n.props?.['aria-pressed'] !== undefined), false);
   assert.equal(h.calls.length, 0);
 });
 
-test('existing memberships preserve band navigation without onboarding choices', () => {
+test('existing memberships retain access to their list and summaries', () => {
   const h = harness('src/app/dashboard/page.tsx', null, {
     0: { id: 'u' }, 1: [{ role: 'admin', band: { id: 'b', name: 'Band' } }], 2: false,
   });
   const tree = nodes(h.render());
-  assert.ok(tree.some(n => n.props?.href === '/bandas/b'));
-  assert.ok(tree.some(n => n.props?.href === '/descobrir'));
+  assert.ok(tree.some(n => n.props?.href === '/dashboard/bandas'));
+  assert.ok(tree.some(n => n.props?.href === '/dashboard/agenda'));
+  assert.ok(tree.some(n => n.props?.href === '/dashboard/tarefas'));
   assert.equal(tree.some(n => n.props?.['aria-pressed'] !== undefined), false);
 });
 
-test('band dashboard describes discovery availability accurately in demo and blocked environments', () => {
+test('overview renders supplied personal task and agenda data with real band labels and counts', () => {
+  const h = harness('src/app/dashboard/page.tsx', null, {
+    0: { id: 'u', user_metadata: { display_name: 'Ana' } },
+    1: [{ role: 'member', band: { id: 'band-a', name: 'Banda Aurora' } }],
+    2: false,
+    4: [{ id: 'task-1', band_id: 'band-a', bandName: 'Banda Aurora', title: 'Preparar repertório', due_date: '2099-12-31' }],
+    5: 8,
+    7: [{ id: 'event-1', band_id: 'band-a', bandName: 'Banda Aurora', title: 'Ensaio geral', start_at: '2099-12-31T19:30:00Z', location: 'Sala 2' }],
+  });
+  const tree = nodes(h.render());
+  for (const text of ['Boas-vindas, Ana.', 'Preparar repertório', 'Banda Aurora', 'Ensaio geral', 'Sala 2']) {
+    assert.ok(tree.some(n => n.props?.children === text), text);
+  }
+  assert.ok(tree.some(n => n.type === 'span' && n.props.children === 8));
+  assert.ok(tree.some(n => n.props?.href === '/bandas/band-a/tarefas'));
+  assert.ok(tree.some(n => n.props?.href === '/bandas/band-a/agenda'));
+});
+
+test('empty dashboard describes discovery availability accurately in demo and blocked environments', () => {
   for (const backendValidated of [false, true]) {
     const h = harness('src/app/dashboard/page.tsx', null, { 0: { id: 'u' }, 1: [], 2: false, backendValidated });
     const tree = nodes(h.render());
@@ -80,41 +104,39 @@ test('band dashboard describes discovery availability accurately in demo and blo
   }
 });
 
-test('home preserves real memberships, administrator roles and band creation for musicians', () => {
+test('personal overview links to real bands through the bands page', () => {
   const h = harness('src/app/dashboard/page.tsx', null, {
     0: { id: 'u' }, 1: [
       { role: 'member', band: { id: 'a', name: 'Minha banda', description: 'Descrição existente' } },
       { role: 'admin', band: { id: 'b', name: 'Outra banda', description: null } },
-    ], 2: false, 6: true,
+    ], 2: false,
   });
   const tree = nodes(h.render());
-  for (const href of ['/bandas/a', '/bandas/b', '/bandas/nova', '/descobrir']) {
-    assert.ok(tree.some(n => n.props?.href === href));
-  }
-  assert.ok(tree.some(n => n.type === 'h3' && n.props.children === 'Minha banda'));
-  assert.ok(tree.some(n => n.type === 'span' && n.props.children === 'Membro'));
-  assert.ok(tree.some(n => n.type === 'span' && n.props.children === 'Administrador'));
+  assert.ok(tree.some(n => n.props?.href === '/dashboard/bandas'));
+  assert.ok(tree.some(n => n.props?.href === '/dashboard/tarefas'));
+  assert.ok(tree.some(n => n.props?.href === '/dashboard/agenda'));
+  assert.ok(tree.some(n => n.type === 'h1' && n.props.children === 'Boas-vindas ao seu espaço.'));
   assert.equal(tree.some(n => n.props?.['aria-pressed'] !== undefined), false);
   assert.equal(h.calls.length, 0);
 });
 
 test('home hides band navigation and onboarding while loading, signed out or in error', () => {
-  for (const state of [{ 2: true }, { 0: null }, { 5: 'Não foi possível carregar suas bandas.' }]) {
+  for (const state of [{ 2: true }, { 0: null }, { 3: 'Não foi possível carregar suas bandas.' }]) {
     const h = harness('src/app/dashboard/page.tsx', null, {
       0: { id: 'u' }, 1: [{ role: 'admin', band: { id: 'cached', name: 'Cached' } }], 2: false, ...state,
     });
     const tree = nodes(h.render());
-    for (const href of ['/bandas/cached', '/bandas/nova', '/descobrir']) {
+  for (const href of ['/dashboard/bandas', '/bandas/nova', '/descobrir']) {
       assert.equal(tree.some(n => n.props?.href === href), false);
     }
     if (state[2]) assert.ok(tree.some(n => n.props?.role === 'status'));
     if (state[0] === null) assert.ok(tree.some(n => n.props?.href === '/login'));
-    if (state[5]) assert.ok(tree.some(n => n.props?.role === 'alert'));
+    if (state[3]) assert.ok(tree.some(n => n.props?.role === 'alert'));
     assert.equal(h.calls.length, 0);
   }
 });
 
-test('dashboard only offers name completion for missing or invalid saved names', () => {
+test('overview offers name completion only when the saved display name is missing or invalid', () => {
   for (const name of [undefined, null, '', '   ', 'private@example.com', {}, 'Ana Silva']) {
     const h = harness('src/app/dashboard/page.tsx', null, {
       0: { id: 'u', user_metadata: { display_name: name } }, 1: [], 2: false,
@@ -124,22 +146,18 @@ test('dashboard only offers name completion for missing or invalid saved names',
   }
 });
 
-test('successful name completion hides the form immediately and keeps band navigation', () => {
+test('successful name completion updates the greeting and retains overview destinations', () => {
   const h = harness('src/app/dashboard/page.tsx', null, {
     0: { id: 'u', user_metadata: { existing: 'preserved' } },
     1: [{ role: 'admin', band: { id: 'b', name: 'Minha banda' } }], 2: false,
   });
   nodes(h.render()).find(n => typeof n.props?.onSaved === 'function').props.onSaved('Ana Silva');
   const tree = nodes(h.render());
-  assert.ok(tree.some(n => n.props?.href === '/meu-perfil' && n.props.children === 'Meu Perfil'));
+  assert.ok(tree.some(n => n.props?.href === '/dashboard/tarefas'));
+  assert.ok(tree.some(n => n.type === 'h1' && n.props.children === 'Boas-vindas, Ana Silva.'));
   assert.equal(tree.some(n => typeof n.props?.onSaved === 'function'), false);
   assert.equal(h.states[0].user_metadata.display_name, 'Ana Silva');
   assert.equal(h.states[0].user_metadata.existing, 'preserved');
-  for (const href of ['/bandas/b', '/bandas/nova', '/descobrir']) {
-    assert.ok(tree.some(n => n.props?.href === href));
-  }
-  for (const text of ['Suas bandas', 'Criar outra banda', 'Descobrir outras bandas']) {
-    assert.ok(tree.some(n => n.props?.children === text));
-  }
+  assert.ok(tree.some(n => n.props?.href === '/dashboard/bandas'));
   assert.equal(h.calls.length, 0);
 });

@@ -55,7 +55,7 @@ test('default route shows unavailability, never a fabricated list or success', (
   const Page = load('src/app/descobrir/page.tsx').default;
   const html = renderToStaticMarkup(React.createElement(Page));
   assert.ok(html.includes('A descoberta está chegando'));
-  assert.ok(html.includes('href="/dashboard"'));
+  assert.ok(html.includes('href="/dashboard/bandas"'));
   assert.ok(html.includes('href="/bandas/nova"'));
   assert.equal(html.includes('Nenhuma banda encontrada'), false);
   assert.equal(html.includes('Solicitação enviada'), false);

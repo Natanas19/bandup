@@ -45,7 +45,7 @@ function fixture(account = user('a', 'Ana Silva')) {
 
 test('sidebar name starts with fallback and uses the normalized name of the verified account', async () => {
   const h = fixture(user('a', '  Ana   Silva  '));
-  assert.equal(h.render().props.children, 'Meu Perfil');
+  assert.equal(h.render().props.children, 'Meu Painel');
   const dispose = h.start(); await settle();
   assert.equal(h.render().props.children, 'Ana Silva');
   assert.match(h.render().props.className, /break-words/);
@@ -55,12 +55,12 @@ test('sidebar name starts with fallback and uses the normalized name of the veri
 test('missing or invalid names, signed-out accounts and Auth errors keep the fallback', async () => {
   for (const account of [null, user('a'), user('a', ''), user('a', 'private@example.com'), user('a', {})]) {
     const h = fixture(account); const dispose = h.start(); await settle();
-    assert.equal(h.render().props.children, 'Meu Perfil'); dispose();
+    assert.equal(h.render().props.children, 'Meu Painel'); dispose();
   }
   for (const reader of [async () => ({ data: { user: null }, error: { message: 'private detail' } }),
     async () => { throw Error('private detail'); }]) {
     const h = fixture(); h.reader(reader); const dispose = h.start(); await settle();
-    assert.equal(h.render().props.children, 'Meu Perfil'); dispose();
+    assert.equal(h.render().props.children, 'Meu Painel'); dispose();
   }
 });
 test('account switching hides the old name immediately and waits for the expected verified user', async () => {
@@ -68,12 +68,12 @@ test('account switching hides the old name immediately and waits for the expecte
   let finish;
   h.reader(() => new Promise(resolve => { finish = resolve; }));
   h.emit('SIGNED_IN', user('b', 'Untrusted event name'));
-  assert.equal(h.render().props.children, 'Meu Perfil');
+  assert.equal(h.render().props.children, 'Meu Painel');
   await h.flush(); finish(result(user('b', 'Bruno'))); await settle();
   assert.equal(h.render().props.children, 'Bruno');
   h.reader(async () => result(user('b', 'Bruno')));
   h.emit('SIGNED_IN', user('c', 'Other'));
-  await h.flush(); assert.equal(h.render().props.children, 'Meu Perfil'); dispose();
+  await h.flush(); assert.equal(h.render().props.children, 'Meu Painel'); dispose();
 });
 test('metadata updates refresh the same account name outside the Auth callback', async () => {
   const h = fixture(); const dispose = h.start(); await settle();
@@ -92,7 +92,7 @@ test('logout, newer sessions and unmount invalidate late name responses', async 
     if (mode === 'unmount') dispose();
     const writes = h.stats().writes;
     finish(result(user('a', 'Old Name'))); await settle();
-    assert.equal(h.render().props.children, 'Meu Perfil');
+    assert.equal(h.render().props.children, 'Meu Painel');
     assert.equal(h.stats().writes, writes);
     if (mode === 'switch') { await h.flush(); assert.equal(h.render().props.children, 'Bruno'); }
     if (mode !== 'unmount') dispose();
@@ -105,5 +105,8 @@ test('only the sidebar card renders the account name; navigation and responsive 
   assert.match(source, /<aside[\s\S]*<PersonalAccountName\s*\/>[\s\S]*<\/aside>/);
   assert.match(source, /hidden w-64[\s\S]*md:flex/);
   assert.match(source, /<PersonalNavigation sidebar\s*\/>/);
-  assert.match(source, /md:hidden"><PersonalNavigation\s*\/>/);
+  assert.match(source, /<SpaceSwitcherHeader settingsHref="\/dashboard\/configuracoes"\s*\/>[\s\S]*<PersonalNavigation\s*\/>/);
+  const header = fs.readFileSync('src/components/space-switcher.tsx', 'utf8');
+  assert.match(header, /justify-between/);
+  assert.match(header, /<SpaceSwitcher bandId=\{bandId\} bandName=\{bandName\}\s*\/>[\s\S]*<WorkspaceSettingsMenu href=\{settingsHref\}\s*\/>/);
 });
