@@ -1,23 +1,23 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-// Temporary opt-in for manual demo testing, never a production release.
 // Direct env references are required for Next.js browser bundle substitution.
-// RPCs/RLS remain the authorization boundary.
-export const BAND_ENTRY_BACKEND_VALIDATED = typeof process !== "undefined"
-  && process.env.NODE_ENV === "development"
-  && process.env.NEXT_PUBLIC_BAND_ENTRY_DEMO_TEST === "1"
-  // The browser client accepts the project root or its configured REST endpoint.
-  // Anchor the entire value so paths cannot disguise a different origin.
-  && /^https:\/\/zwmihhdvvpqgyavworgh\.supabase\.co(?:\/rest\/v1)?\/?$/.test(
-    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "");
-
-function isLocalBrowser() {
-  return typeof window !== "undefined"
-    && ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
+// Presence enables the configured feature; Auth, RLS and RPCs remain the
+// authorization boundary. This flag does not claim that a live backend passed
+// a connectivity or permission check.
+function hasSupabaseConfiguration() {
+  if (typeof process === "undefined" || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) return false;
+  try {
+    const url = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "");
+    return url.protocol === "https:" && !url.username && !url.password
+      && !url.search && !url.hash
+      && ["", "/", "/rest/v1", "/rest/v1/"].includes(url.pathname);
+  } catch {
+    return false;
+  }
 }
+export const BAND_ENTRY_BACKEND_VALIDATED = hasSupabaseConfiguration();
 export type EntryStatus = "pending" | "approved" | "rejected" | "cancelled";
-export type DiscoveredBand = { band_id: string; display_name: string; summary: string };
-export type DiscoverySettings = DiscoveredBand & { accepting_requests: boolean };
+export type DiscoveredBand = { band_id: string; name: string };
 export type EntryRequest = {
   id: string; band_id: string; requester_id: string; applicant_name: string;
   status: EntryStatus; requested_at: string; decided_at: string | null;
@@ -50,7 +50,7 @@ const pageSize = 20;
 // Never derive validation from table/RPC existence or caller-supplied flags.
 export function createBandEntryService(client: SupabaseClient) {
   async function actor(bandId?: string) {
-    if (!BAND_ENTRY_BACKEND_VALIDATED || !isLocalBrowser())
+    if (!BAND_ENTRY_BACKEND_VALIDATED)
       throw entryError({ code: "blocked" });
     const { data, error } = await client.auth.getUser();
     if (error || !data.user) throw entryError({ code: "42501" });
@@ -67,12 +67,13 @@ export function createBandEntryService(client: SupabaseClient) {
     if (error) throw entryError(error);
     return data as T;
   }
-  async function requests(bandId: string | undefined, offset: number) {
+  async function requests(bandId: string | undefined, offset: number, pendingOnly = false) {
     const userId = await actor(bandId);
     if (!Number.isInteger(offset) || offset < 0) throw entryError({ code: "22023" });
-    const result = await client.from("band_join_requests").select(fields)
-      .eq(bandId ? "band_id" : "requester_id", bandId ?? userId)
-      .order("requested_at", { ascending: false }).order("id", { ascending: false })
+    const query = client.from("band_join_requests").select(fields)
+      .eq(bandId ? "band_id" : "requester_id", bandId ?? userId);
+    if (pendingOnly) query.eq("status", "pending");
+    const result = await query.order("requested_at", { ascending: false }).order("id", { ascending: false })
       .range(offset, offset + pageSize - 1);
     if (result.error) throw entryError(result.error);
     return (result.data ?? []) as EntryRequest[];
@@ -90,7 +91,10 @@ export function createBandEntryService(client: SupabaseClient) {
     async discover(after: string | null = null): Promise<DiscoveredBand[]> {
       await actor();
       if (after) requireId(after);
-      return rpc("bandup_discover_bands", { p_after: after, p_limit: pageSize });
+      const rows = await rpc<unknown>("bandup_discover_bands", { p_after: after, p_limit: pageSize });
+      if (!Array.isArray(rows) || rows.some(row => !row || !uuid(row.band_id) || typeof row.display_name !== "string")) throw entryError(null);
+      // Keep the public search contract narrow even if a server returns extra fields.
+      return rows.map(row => ({ band_id: row.band_id, name: row.display_name }));
     },
     ownRequests: (offset = 0) => requests(undefined, offset),
     async pendingRequest(bandId: string): Promise<EntryRequest | null> {
@@ -101,7 +105,22 @@ export function createBandEntryService(client: SupabaseClient) {
       if (result.error) throw entryError(result.error);
       return result.data as EntryRequest | null;
     },
-    adminRequests: (bandId: string, offset = 0) => requests(bandId, offset),
+    async entryEligibility(bandId: string): Promise<"member" | "pending" | "eligible"> {
+      requireId(bandId);
+      const userId = await actor();
+      const [membership, request] = await Promise.all([
+        client.from("band_members").select("user_id")
+          .eq("band_id", bandId).eq("user_id", userId).maybeSingle(),
+        client.from("band_join_requests").select("id")
+          .eq("requester_id", userId).eq("band_id", bandId).eq("status", "pending").maybeSingle(),
+      ]);
+      if (membership.error) throw entryError(membership.error);
+      if (request.error) throw entryError(request.error);
+      if (membership.data) return "member";
+      if (request.data) return "pending";
+      return "eligible";
+    },
+    adminRequests: (bandId: string, offset = 0, pendingOnly = false) => requests(bandId, offset, pendingOnly),
     async getRequest(id: string, bandId?: string): Promise<EntryRequest | null> {
       requireId(id);
       const userId = await actor(bandId);
@@ -110,21 +129,13 @@ export function createBandEntryService(client: SupabaseClient) {
       if (result.error) throw entryError(result.error);
       return result.data as EntryRequest | null;
     },
-    async getDiscovery(bandId: string): Promise<DiscoverySettings | null> {
-      await actor(bandId);
-      const rows = await rpc<DiscoverySettings[]>("bandup_get_discovery", { p_band_id: bandId });
-      return rows[0] ?? null;
-    },
-    async setDiscovery(settings: DiscoverySettings): Promise<void> {
-      await actor(settings.band_id);
-      if (!settings.display_name.trim() || [...settings.display_name.trim()].length > 100 || [...settings.summary].length > 500
-        || typeof settings.accepting_requests !== "boolean") throw entryError({ code: "22023" });
-      await rpc("bandup_set_discovery", { p_band_id: settings.band_id, p_display_name: settings.display_name.trim(),
-        p_summary: settings.summary, p_accepting: settings.accepting_requests });
-    },
     async request(bandId: string, applicantName: string): Promise<string> {
-      await actor(); requireId(bandId);
+      const userId = await actor(); requireId(bandId);
       if (!applicantName.trim() || [...applicantName.trim()].length > 80) throw entryError({ code: "22023" });
+      const membership = await client.from("band_members").select("user_id")
+        .eq("band_id", bandId).eq("user_id", userId).maybeSingle();
+      if (membership.error) throw entryError(membership.error);
+      if (membership.data) throw entryError({ code: "23505" });
       const id = await rpc<string>("bandup_request_entry", { p_band_id: bandId, p_applicant_name: applicantName.trim() });
       if (!id || !uuid(id)) throw entryError(null);
       return id;

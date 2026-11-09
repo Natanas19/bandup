@@ -7,12 +7,12 @@ import NavigationIcon, { type NavigationIconName } from "@/components/navigation
 import ThemeSelector from "@/components/theme-selector";
 import PersonalAccountName from "@/components/personal-account-name";
 
-const items: { href: string; label: string; icon: NavigationIconName }[] = [
+const items: { href: string; label: string; icon: NavigationIconName; comingSoon?: boolean }[] = [
   { href: "/meu-perfil", label: "Visão geral", icon: "LayoutDashboard" },
   { href: "/meu-perfil/tarefas", label: "Tarefas", icon: "ListTodo" },
   { href: "/meu-perfil/agenda", label: "Agenda", icon: "CalendarDays" },
-  { href: "/meu-perfil/links", label: "Links", icon: "Link" },
-  { href: "/meu-perfil/perfil-publico", label: "Perfil público", icon: "Globe" },
+  { href: "/meu-perfil/links", label: "Links", icon: "Link", comingSoon: true },
+  { href: "/meu-perfil/perfil-publico", label: "Perfil público", icon: "Globe", comingSoon: true },
   { href: "/meu-perfil/configuracoes", label: "Configurações", icon: "Settings" },
   { href: "/dashboard", label: "Minhas bandas", icon: "Users" },
 ];
@@ -34,11 +34,16 @@ export function PersonalNavigation({ sidebar = false }: { sidebar?: boolean }) {
     <div id={panelId} hidden={!sidebar && !open} className={sidebar ? "" : "mt-3 rounded-2xl border border-nav-border bg-surface p-3"}>
       <ul className={sidebar ? "space-y-1" : "grid gap-2 sm:grid-cols-2"}>
         {items.map(item => <li key={item.href}>
-          <Link href={item.href} aria-current={pathname === item.href ? "page" : undefined}
+          {item.comingSoon ? (
+            <span aria-disabled="true" className="flex min-h-11 flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-sm text-content-subtle">
+              <span className="inline-flex items-center gap-3"><NavigationIcon name={item.icon} />{item.label}</span>
+              <span className="rounded-full bg-disabled-surface px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-content-subtle">Em breve</span>
+            </span>
+          ) : <Link href={item.href} aria-current={pathname === item.href ? "page" : undefined}
             onClick={sidebar ? undefined : close}
             className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus ${pathname === item.href ? "bg-accent-soft text-brand" : "text-content-muted hover:bg-accent-soft hover:text-brand"}`}>
             <NavigationIcon name={item.icon} />{item.label}
-          </Link>
+          </Link>}
         </li>)}
       </ul>
       <div className="mt-3 border-t border-nav-border px-3 pt-3"><ThemeSelector showIcon /></div>

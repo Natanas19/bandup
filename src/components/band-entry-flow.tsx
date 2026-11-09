@@ -24,6 +24,7 @@ function EntryFlow({ bandId, onMembersChanged }: { bandId?: string; onMembersCha
   const live = useRef(false);
   const generation = useRef(0);
   const actionPending = useRef(false);
+  const [decision, setDecision] = useState<{ row: EntryRequest; status: "approved" | "rejected" } | null>(null);
 
   const load = useCallback(async () => {
     if (!BAND_ENTRY_BACKEND_VALIDATED) return;
@@ -31,14 +32,16 @@ function EntryFlow({ bandId, onMembersChanged }: { bandId?: string; onMembersCha
     setPhase("loading");
     try {
       const api = service.current ??= createBandEntryService(getSupabaseBrowserClient());
-      const rows = bandId ? await api.adminRequests(bandId, offset) : await api.ownRequests(offset);
+      const rows = bandId ? await api.adminRequests(bandId, offset, true) : await api.ownRequests(offset);
       if (!live.current || ticket !== generation.current) return;
-      setRequests(rows);
+      setRequests(bandId ? rows.filter(row => row.status === "pending") : rows);
+      setDecision(null);
       setPhase("ready");
     } catch (error) {
       if (!live.current || ticket !== generation.current) return;
       const failure = entryError(error);
       setRequests([]);
+      setDecision(null);
       setFeedback({ error: true, text: failure.message });
       setPhase(failure.code === "blocked" ? "unavailable" : failure.code === "42501" ? "forbidden" : "error");
       throw failure;
@@ -86,7 +89,7 @@ function EntryFlow({ bandId, onMembersChanged }: { bandId?: string; onMembersCha
       await api.decide(bandId, row.id, decision);
       const confirmed = await api.getRequest(row.id, bandId);
       if (confirmed?.status !== decision) throw entryError(null);
-      if (decision === "approved") onMembersChanged?.();
+      if (decision === "approved" && live.current) onMembersChanged?.();
       return decision === "approved" ? "Entrada aprovada. O músico entrou como membro." : "Pedido recusado.";
     });
   }
@@ -96,6 +99,7 @@ function EntryFlow({ bandId, onMembersChanged }: { bandId?: string; onMembersCha
     <button type="button" className={button} disabled={busy} onClick={() => { setFeedback(null); void load().catch(() => {}); }}>Atualizar dados e permissões</button>
     <div className="space-y-4 rounded-2xl border border-nav-border bg-surface p-5">
       <h2 className="text-lg font-semibold text-content">{admin ? "Pedidos recebidos" : "Meus pedidos"}</h2>
+      {admin && <p className="text-sm text-content-muted">Somente solicitações pendentes são exibidas.</p>}
       {!requests.length && <p role="status" className="text-sm text-content-muted">Nenhum pedido nesta página.</p>}
       {requests.map(row => <article key={row.id} className="space-y-3 rounded-xl border border-nav-border p-4">
         <p className="break-words font-semibold text-content">{admin ? (normalizeDisplayName(row.applicant_name) ?? "Solicitante sem nome") : `Banda: ${row.band_id}`}</p>
@@ -103,13 +107,21 @@ function EntryFlow({ bandId, onMembersChanged }: { bandId?: string; onMembersCha
         <p className="text-sm text-content">{statusLabels[row.status]}</p>
         <time dateTime={row.requested_at} className="text-xs text-content-muted">{new Date(row.requested_at).toLocaleString("pt-BR")}</time>
         {row.status === "pending" && <div className="flex flex-col gap-3 sm:flex-row">{admin ? <>
-          <button className={button} disabled={busy} onClick={() => void decide(row, "approved")}>Aprovar entrada</button>
-          <button className={button} disabled={busy} onClick={() => void decide(row, "rejected")}>Recusar pedido</button>
+          <button className={button} disabled={busy} onClick={() => setDecision({ row, status: "approved" })}>Aprovar entrada</button>
+          <button className={button} disabled={busy} onClick={() => setDecision({ row, status: "rejected" })}>Recusar pedido</button>
         </> : <button className={button} disabled={busy} onClick={() => void mutate(async api => {
           await api.cancel(row.id);
           if ((await api.getRequest(row.id))?.status !== "cancelled") throw entryError(null);
           return "Pedido cancelado.";
         })}>Cancelar pedido</button>}</div>}
+        {decision?.row.id === row.id && <div role="group" aria-labelledby="entry-decision-title" className="space-y-3 rounded-xl border border-accent-border bg-accent-soft p-4">
+          <h2 id="entry-decision-title" className="font-semibold text-content">{decision.status === "approved" ? "Confirmar aprovação?" : "Confirmar recusa?"}</h2>
+          <p className="break-words text-sm text-content-muted">{normalizeDisplayName(decision.row.applicant_name) ?? "Solicitante sem nome"}. {decision.status === "approved" ? "A pessoa passará a integrar esta banda como membro." : "A pessoa não entrará na banda por este pedido."}</p>
+          <div className="flex flex-wrap gap-3">
+            <button type="button" className={button} disabled={busy} onClick={() => void decide(decision.row, decision.status)}>{busy ? "Processando..." : decision.status === "approved" ? "Confirmar aprovação" : "Confirmar recusa"}</button>
+            <button type="button" className={button} disabled={busy} onClick={() => setDecision(null)}>Voltar sem decidir</button>
+          </div>
+        </div>}
         {!admin && row.status === "approved" && <Link className={button} href={`/bandas/${row.band_id}`}>Abrir banda</Link>}
       </article>)}
       <div className="flex flex-wrap gap-3"><button className={button} disabled={busy || offset === 0} onClick={() => setOffset(Math.max(0, offset - 20))}>Pedidos anteriores</button>

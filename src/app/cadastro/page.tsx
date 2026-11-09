@@ -9,6 +9,15 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 import { normalizeDisplayName } from "@/lib/display-name";
 
+const emailPattern = String.raw`[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+`;
+
+function emailValidationMessage(value: string) {
+  if (!value.trim()) return "Informe seu e-mail.";
+  return new RegExp(`^${emailPattern}$`).test(value.trim())
+    ? ""
+    : "Informe um e-mail válido, como voce@exemplo.com.";
+}
+
 export default function CadastroPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -19,6 +28,7 @@ export default function CadastroPage() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const submitting = useRef(false);
   const [displayName, setDisplayName] = useState("");
+  const [emailError, setEmailError] = useState("");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -30,8 +40,11 @@ export default function CadastroPage() {
       return;
     }
     const normalizedEmail = email.trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
-      setError("Informe um e-mail válido.");
+    const validationMessage = emailValidationMessage(normalizedEmail);
+    setEmail(normalizedEmail);
+    setEmailError(validationMessage);
+    if (validationMessage) {
+      setError(validationMessage);
       return;
     }
     if (password.length < 8) {
@@ -130,14 +143,36 @@ export default function CadastroPage() {
                     id="email"
                     name="email"
                     type="email"
+                    inputMode="email"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    pattern={emailPattern}
                     autoComplete="email"
                     required
                     value={email}
-                    onChange={(event) => setEmail(event.target.value)}
+                    onChange={(event) => {
+                      event.currentTarget.setCustomValidity("");
+                      setEmail(event.target.value.trim());
+                      setEmailError("");
+                    }}
+                    onBlur={(event) => {
+                      const message = emailValidationMessage(event.currentTarget.value);
+                      setEmail(event.currentTarget.value.trim());
+                      setEmailError(message);
+                    }}
+                    onInvalid={(event) => {
+                      const message = emailValidationMessage(event.currentTarget.value)
+                        || "Informe um e-mail válido, como voce@exemplo.com.";
+                      event.currentTarget.setCustomValidity(message);
+                      setEmailError(message);
+                    }}
                     placeholder="voce@exemplo.com"
-                    aria-describedby="signup-email-help"
+                    aria-invalid={Boolean(emailError)}
+                    aria-describedby={emailError ? "signup-email-help signup-email-error" : "signup-email-help"}
                     className="w-full rounded-xl border border-outline bg-surface px-4 py-3 text-base md:text-sm text-content outline-none transition placeholder:text-content-faint focus:border-input-focus focus:ring-4 focus:ring-input-ring"
                   />
+                  {emailError && <p id="signup-email-error" role="alert" className="mt-2 text-sm text-danger">{emailError}</p>}
                   <p id="signup-email-help" className="mt-2 text-xs text-content-muted">Use um e-mail ao qual você tenha acesso. Você precisará abrir o link de confirmação recebido nele.</p>
                 </div>
 

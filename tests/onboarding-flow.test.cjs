@@ -66,7 +66,7 @@ test('wrong account, unconfirmed email, denied and unconfirmed persistence never
 
 test('empty search makes no directory calls and name search filters authorized pages with accent handling', async () => {
   const calls = [];
-  const api = { discover: async after => { calls.push(after); return [{ band_id: '1', display_name: 'São João', summary: '' }, { band_id: '2', display_name: 'Outra', summary: '' }]; } };
+  const api = { discover: async after => { calls.push(after); return [{ band_id: '1', name: 'São João' }, { band_id: '2', name: 'Outra' }]; } };
   await assert.rejects(searchLib.searchBandNames(api, '   ')); assert.equal(calls.length, 0);
   const result = await searchLib.searchBandNames(api, 'sao joao');
   assert.equal(result.matches.length, 1); assert.equal(result.matches[0].band_id, '1'); assert.equal(result.next, null);
@@ -75,7 +75,7 @@ test('empty search makes no directory calls and name search filters authorized p
 
 test('large directories are searched in bounded batches with a continuation cursor', async () => {
   let calls = 0;
-  const api = { discover: async () => Array.from({ length: 20 }, (_, i) => ({ band_id: `${++calls}-${i}`, display_name: 'Other', summary: '' })) };
+  const api = { discover: async () => Array.from({ length: 20 }, (_, i) => ({ band_id: `${++calls}-${i}`, name: 'Other' })) };
   const result = await searchLib.searchBandNames(api, 'missing');
   assert.equal(calls, 100); assert.equal(result.matches.length, 0); assert.ok(result.next);
 });
@@ -102,7 +102,7 @@ function nodes(tree) {
   return [tree, ...nodes(tree.props?.children)];
 }
 const settle = async () => { for (let i = 0; i < 8; i++) await new Promise(setImmediate); };
-function componentHarness(file, overrides) {
+function componentHarness(file, overrides, props = {}) {
   const slots = [], refs = [], effects = [], timers = new Map();
   let cursor = 0, refCursor = 0, timerId = 0;
   const Component = loader({ ...overrides, react: { ...React,
@@ -110,7 +110,7 @@ function componentHarness(file, overrides) {
     useRef(initial) { const i = refCursor++; return refs[i] ??= { current: initial }; },
     useEffect(fn) { if (!effects.length) effects.push(fn); },
   } }, { window: { setTimeout: fn => { timers.set(++timerId, fn); return timerId; }, clearTimeout: id => timers.delete(id) } })(file).default;
-  const render = () => { cursor = refCursor = 0; return Component({ userId: 'a', children: 'dashboard' }); };
+  const render = () => { cursor = refCursor = 0; return Component({ userId: 'a', children: 'dashboard', ...props }); };
   render();
   return { render, start: () => effects[0](), timers };
 }
@@ -143,21 +143,23 @@ test('welcome failure shows retry; a timed out attempt never opens stale welcome
   assert.ok(nodes(delayed.render()).some(n => n.props?.role === 'alert')); cleanup();
 });
 
-function searchHarness(api, enabled = true) {
+function searchHarness(api, enabled = true, props = {}) {
   return componentHarness('src/components/band-search.tsx', {
     '@/lib/band-entry': { BAND_ENTRY_BACKEND_VALIDATED: enabled, createBandEntryService: () => api, entryError: () => ({ message: 'Falha. Atualize os dados antes de tentar novamente.' }) },
     '@/lib/supabase/client': { getSupabaseBrowserClient: () => ({ auth: { getUser: async () => ({ data: { user: { user_metadata: { display_name: 'Ana Silva' } } } }) } }) },
-  });
+  }, props);
 }
 test('search starts empty, edits a draft and requires confirmation before recording a real request', async () => {
-  let searches = 0, writes = 0;
-  const api = { discover: async () => { searches++; return [{ band_id: 'band', display_name: 'Minha banda', summary: '' }]; },
+  let searches = 0, writes = 0, refreshed = 0;
+  const api = { discover: async () => { searches++; return [{ band_id: 'band', name: 'Minha banda' }]; },
+    entryEligibility: async () => 'eligible',
     pendingRequest: async () => null, request: async () => { writes++; return 'r'; }, getRequest: async () => ({ id: 'r', band_id: 'band', status: 'pending' }) };
-  const h = searchHarness(api); const cleanup = h.start(); await settle();
+  const h = searchHarness(api, true, { onRequestsChanged: () => { refreshed++; } }); const cleanup = h.start(); await settle();
   assert.equal(searches, 0); assert.equal(nodes(h.render()).some(n => n.type === 'article'), false);
   nodes(h.render()).find(n => n.type === 'input').props.onChange({ target: { value: 'Minha' } });
   nodes(h.render()).find(n => n.type === 'form').props.onSubmit({ preventDefault() {} }); await settle();
   nodes(h.render()).find(n => n.props?.children === 'Selecionar banda').props.onClick();
+  await settle();
   let tree = nodes(h.render());
   assert.equal(tree.find(n => n.type === 'textarea').props.value, 'Olá! Me chamo Ana Silva e gostaria de participar da sua banda.');
   tree.find(n => n.type === 'textarea').props.onChange({ target: { value: 'Meu rascunho' } });
@@ -166,21 +168,56 @@ test('search starts empty, edits a draft and requires confirmation before record
   const confirm = nodes(h.render()).find(n => n.props?.children === 'Confirmar pedido sem mensagem');
   confirm.props.onClick(); confirm.props.onClick(); await settle();
   assert.equal(writes, 1);
+  assert.equal(refreshed, 1);
   tree = nodes(h.render());
   assert.ok(tree.some(n => n.props?.href === '/meu-perfil' && n.props.children === 'Ir para Meu Perfil'));
   assert.ok(tree.some(n => n.props?.role === 'status' && JSON.stringify(n.props.children).includes('não foi enviada')));
   cleanup();
 });
 
-test('disabled demo gate never searches and delayed search responses are discarded on input change', async () => {
+test('missing Supabase configuration explains unavailability; delayed search responses are discarded on input change', async () => {
   const blocked = searchHarness({ discover: () => { throw Error('must not call'); } }, false);
-  const dispose = blocked.start(); assert.equal(blocked.render(), null); dispose();
+  const dispose = blocked.start();
+  const unavailable = nodes(blocked.render());
+  assert.ok(unavailable.some(n => n.props?.role === 'status' && String(n.props.children).includes('NEXT_PUBLIC_SUPABASE_URL')));
+  assert.equal(unavailable.some(n => n.type === 'form'), false);
+  dispose();
   let finish;
   const h = searchHarness({ discover: () => new Promise(resolve => { finish = resolve; }) });
   const cleanup = h.start(); await settle();
   nodes(h.render()).find(n => n.type === 'input').props.onChange({ target: { value: 'Old' } });
   nodes(h.render()).find(n => n.type === 'form').props.onSubmit({ preventDefault() {} });
   nodes(h.render()).find(n => n.type === 'input').props.onChange({ target: { value: 'New' } });
-  finish([{ band_id: 'b', display_name: 'Old', summary: '' }]); await settle();
+  finish([{ band_id: 'b', name: 'Old' }]); await settle();
   assert.equal(nodes(h.render()).some(n => n.type === 'article'), false); cleanup();
+});
+
+
+test('repeated band names retain distinct IDs across search batches', async () => {
+  const ids = Array.from({ length: 103 }, (_, i) => String(i + 1).padStart(6, '0'));
+  const api = { discover: async after => {
+    const start = after === null ? 0 : ids.indexOf(after) + 1;
+    return ids.slice(start, start + 20).map(band_id => ({ band_id, name: 'Same band name' }));
+  } };
+  const first = await searchLib.searchBandNames(api, 'same');
+  const second = await searchLib.searchBandNames(api, 'same', first.next);
+  assert.equal(first.matches.length, 100);
+  assert.equal(second.matches.length, 3);
+  assert.equal(second.next, null);
+  assert.equal(new Set([...first.matches, ...second.matches].map(b => b.band_id)).size, 103);
+});
+
+
+test('exact band ID search works independently of names, ignores case and paginates', async () => {
+  const id = 'a0000000-0000-0000-0000-000000000103';
+  const ids = Array.from({ length: 103 }, (_, i) => 'a0000000-0000-0000-0000-' + String(i + 1).padStart(12, '0'));
+  const api = { discover: async after => {
+    const start = after === null ? 0 : ids.indexOf(after) + 1;
+    return ids.slice(start, start + 20).map(band_id => ({ band_id, name: 'Unrelated name' }));
+  } };
+  const first = await searchLib.searchBandNames(api, '  ' + id.toUpperCase() + '  ');
+  assert.equal(first.matches.length, 0); assert.ok(first.next);
+  const last = await searchLib.searchBandNames(api, id, first.next);
+  assert.deepEqual(JSON.parse(JSON.stringify(last.matches)), [{ band_id: id, name: 'Unrelated name' }]);
+  assert.equal(last.next, null);
 });

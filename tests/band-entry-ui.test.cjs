@@ -15,6 +15,7 @@ function load(file, overrides = {}) {
   }).outputText, { module: mod, exports: mod.exports, require(name) {
     if (name in overrides) return overrides[name];
     if (name === 'next/link') return { __esModule: true, default: ({ children, ...props }) => React.createElement('a', props, children) };
+    if (name === '@/components/band-discovery') return load('src/components/band-discovery.tsx', overrides);
     if (name === '@/components/band-entry-panel') return load('src/components/band-entry-panel.tsx');
     if (name === '@/components/band-search') return load('src/components/band-search.tsx', overrides);
     if (name === '@/lib/band-search') return load('src/lib/band-search.ts', overrides);
@@ -100,6 +101,12 @@ function findElements(node, predicate) {
   return [...(predicate(node) ? [node] : []), ...findElements(node.props?.children, predicate)];
 }
 
+function confirmDecision(h) {
+  const control = findElements(h.render(), n => n.type === 'button' && /^Confirmar (aprova|recusa)/.test(n.props.children))[0];
+  assert.ok(control, 'decision requires explicit confirmation');
+  control.props.onClick();
+}
+
 test('history never discovers bands automatically, even after refresh', async () => {
   let reads = 0;
   const h = flowHarness({ ownRequests: async () => { reads++; return []; },
@@ -134,6 +141,7 @@ test('revoked administrator loses request data and receives no approval feedback
   }, getDiscovery: async () => null, decide: async () => { writes++; revoked = true; throw { code: '42501' }; } };
   const h = flowHarness(api, 'band-a'); await settle();
   findElements(h.render(), n => n.type === 'button' && n.props.children === 'Aprovar entrada')[0].props.onClick();
+  confirmDecision(h);
   await settle();
   assert.equal(writes, 1);
   assert.doesNotMatch(h.html(), /Private applicant|Entrada aprovada/);
@@ -147,6 +155,7 @@ test('confirmed approval refreshes members and band scope changes remount the fl
     getDiscovery: async () => null, decide: async () => { status = 'approved'; }, getRequest: async () => ({ status }) };
   const h = flowHarness(api, 'band-a', { onMembersChanged: () => updated++ }); await settle();
   findElements(h.render(), n => n.type === 'button' && n.props.children === 'Aprovar entrada')[0].props.onClick();
+  confirmDecision(h);
   await settle();
   assert.equal(updated, 1); assert.match(h.html(), /Entrada aprovada/);
   assert.equal(h.key, 'band-a');
@@ -178,6 +187,7 @@ test('member administration loads requests without discovery settings and preser
       assert.ok(control); assert.match(control.props.className, /min-h-11/);
     }
     findElements(h.render(), n => n.type === 'button' && n.props.children === (decision === 'approved' ? 'Aprovar entrada' : 'Recusar pedido'))[0].props.onClick();
+    confirmDecision(h);
     await settle();
     assert.ok(calls.some(call => JSON.stringify(call) === JSON.stringify(['decide', 'band-a', 'r', decision])));
     assert.ok(calls.some(call => JSON.stringify(call) === JSON.stringify(['confirm', 'r', 'band-a'])));
@@ -193,6 +203,7 @@ test('a successful RPC without matching persisted state never reports approval',
   let updated = 0;
   const h = flowHarness(api, 'band-a', { onMembersChanged: () => updated++ }); await settle();
   findElements(h.render(), n => n.type === 'button' && n.props.children === 'Aprovar entrada')[0].props.onClick();
+  confirmDecision(h);
   await settle();
   assert.equal(updated, 0); assert.doesNotMatch(h.html(), /Entrada aprovada/);
   assert.match(h.html(), /Não foi possível confirmar o resultado/);
@@ -207,4 +218,45 @@ test('late loading results are discarded after leaving the page', async () => {
   h.cleanup(); resolve([]); await settle();
   assert.match(h.html(), /Carregando/);
   assert.doesNotMatch(h.html(), /Meus pedidos/);
+});
+
+
+test('admin sees pending requests only and can back out without writing', async () => {
+  let writes = 0, pendingOnly;
+  const h = flowHarness({
+    adminRequests: async (band, offset, filter) => {
+      pendingOnly = filter;
+      return [{ id: 'pending', applicant_name: 'Pending musician', status: 'pending', requested_at: '2026-01-01' },
+        { id: 'old', applicant_name: 'Old musician', status: 'approved', requested_at: '2026-01-01' }];
+    }, decide: async () => { writes++; },
+  }, 'band-a');
+  await settle();
+  assert.equal(pendingOnly, true);
+  assert.doesNotMatch(h.html(), /Old musician/);
+  findElements(h.render(), n => n.props?.children === 'Aprovar entrada')[0].props.onClick();
+  assert.equal(writes, 0);
+  assert.match(h.html(), /Confirmar aprova/);
+  findElements(h.render(), n => n.props?.children === 'Voltar sem decidir')[0].props.onClick();
+  assert.equal(writes, 0);
+  assert.doesNotMatch(h.html(), /Confirmar aprova/);
+  h.cleanup();
+});
+
+test('confirmed admin decision is locked while pending and updates the pending list once', async () => {
+  let writes = 0, finish, status = 'pending', memberRefresh = 0;
+  const h = flowHarness({
+    adminRequests: async () => status === 'pending' ? [{ id: 'r', applicant_name: 'Name', status, requested_at: '2026-01-01' }] : [],
+    decide: async () => { writes++; await new Promise(resolve => { finish = resolve; }); status = 'approved'; },
+    getRequest: async () => ({ status }),
+  }, 'band-a', { onMembersChanged: () => { memberRefresh++; } });
+  await settle();
+  findElements(h.render(), n => n.props?.children === 'Aprovar entrada')[0].props.onClick();
+  const confirm = findElements(h.render(), n => n.type === 'button' && /^Confirmar aprova/.test(n.props.children))[0];
+  confirm.props.onClick(); confirm.props.onClick(); await settle();
+  assert.equal(writes, 1); assert.equal(memberRefresh, 0);
+  assert.match(h.html(), /Processando/);
+  finish(); await settle();
+  assert.equal(memberRefresh, 1);
+  assert.equal(findElements(h.render(), n => n.type === 'article').length, 0);
+  h.cleanup();
 });

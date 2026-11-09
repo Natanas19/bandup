@@ -70,7 +70,12 @@ export default function BandNavigation({
             const active = item.section === activeSection;
             return (
               <li key={item.section}>
-                <Link
+                {item.section === "links" || item.section === "perfil-publico" ? (
+                  <span aria-disabled="true" className="flex min-h-11 flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-sm text-content-subtle">
+                    <span className="inline-flex items-center gap-3"><NavigationIcon name={item.icon} />{item.label}</span>
+                    <span className="rounded-full bg-disabled-surface px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-content-subtle">Em breve</span>
+                  </span>
+                ) : <Link
                   href={`/bandas/${bandId}${item.suffix}`}
                   onClick={isSidebar ? undefined : closeNavigation}
                   aria-current={active ? "page" : undefined}
@@ -82,7 +87,7 @@ export default function BandNavigation({
                 >
                   <NavigationIcon name={item.icon} />
                   {item.label}
-                </Link>
+                </Link>}
               </li>
             );
           })}

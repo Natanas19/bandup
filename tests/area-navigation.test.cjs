@@ -45,7 +45,7 @@ for (const variant of ['sidebar', 'expandable']) {
     assert.match(personal[0].props.className, /min-h-11/);
     assert.match(personal[0].props.className, /focus:ring-focus/);
     assert.equal(personal[0].props['aria-current'], undefined);
-    for (const section of ['', '/tarefas', '/agenda', '/membros', '/links', '/perfil-publico']) {
+    for (const section of ['', '/tarefas', '/agenda', '/membros']) {
       assert.equal(links.filter(n => n.props.href === '/bandas/band-a' + section).length, 1);
     }
     assert.equal(links.filter(n => n.props['aria-current'] === 'page').length, 1);
@@ -101,3 +101,41 @@ test('band page menus hide at the same breakpoint where the desktop workspace ap
   }
   assert.match(source('src/components/legacy-band-links.tsx'), /className="md:hidden"><BandNavigation/);
 });
+
+
+function textContent(tree) {
+  if (typeof tree === 'string') return tree;
+  if (Array.isArray(tree)) return tree.map(textContent).join('');
+  return tree && typeof tree === 'object' ? textContent(tree.props?.children) : '';
+}
+
+for (const sidebar of [false, true]) {
+  for (const area of ['personal', 'band']) {
+    test(`${area} ${sidebar ? 'desktop' : 'mobile'} keeps Links and public profile visible without navigation`, () => {
+      const f = fixture();
+      const Navigation = area === 'personal'
+        ? f.load('src/components/personal-workspace.tsx').PersonalNavigation
+        : f.load('src/components/band-navigation.tsx').default;
+      const render = () => nodes(Navigation(area === 'personal' ? { sidebar }
+        : { bandId: 'band-a', activeSection: 'agenda', variant: sidebar ? 'sidebar' : 'expandable' }));
+      if (!sidebar) render().find(n => n.type === 'button').props.onClick();
+      const tree = render();
+      assert.equal(tree.find(n => n.props?.id === 'area-menu').props.hidden, false);
+      for (const label of ['Links', area === 'personal' ? 'Perfil p\u00fablico' : 'Perfil P\u00fablico']) {
+        const item = tree.find(n => n.type === 'li' && textContent(n).startsWith(label));
+        assert.ok(item, label + ' remains visible');
+        assert.equal(textContent(item), label + 'Em breve');
+        const children = nodes(item);
+        assert.ok(children.some(n => n.props?.['aria-disabled'] === 'true'));
+        assert.equal(children.some(n => n.props?.href || n.props?.onClick || n.props?.onKeyDown
+          || n.type === 'a' || n.type === 'button' || n.props?.tabIndex !== undefined), false);
+      }
+      assert.equal(tree.some(n => /\/(links|perfil-publico)$/.test(n.props?.href ?? '')), false);
+      if (!sidebar) {
+        tree.find(n => n.type === 'nav').props.onKeyDown({ key: 'Escape', preventDefault() {} });
+        assert.equal(render().find(n => n.props?.id === 'area-menu').props.hidden, true);
+        assert.equal(f.focused(), 1);
+      }
+    });
+  }
+}

@@ -15,9 +15,8 @@ const demo = { exports: {} };
 vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
 }).outputText, { module: demo, exports: demo.exports,
-  process: { env: { NODE_ENV: 'development', NEXT_PUBLIC_BAND_ENTRY_DEMO_TEST: '1',
-    NEXT_PUBLIC_SUPABASE_URL: 'https://zwmihhdvvpqgyavworgh.supabase.co' } },
-  window: { location: { hostname: '127.0.0.1' } } });
+  process: { env: { NODE_ENV: 'test', NEXT_PUBLIC_SUPABASE_URL: 'https://project.supabase.co',
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'test-publishable-key' } }, URL });
 
 const band = 'a0000000-0000-0000-0000-000000000001';
 const otherBand = 'a0000000-0000-0000-0000-000000000002';
@@ -25,14 +24,14 @@ const user = 'b0000000-0000-0000-0000-000000000001';
 const id = 'c0000000-0000-0000-0000-000000000001';
 function fixture() {
   const state = { role: 'admin', signedIn: true, calls: [], queries: [],
-    row: { id, band_id: band, requester_id: user, status: 'pending' }, error: null };
+    row: { id, band_id: band, requester_id: user, status: 'pending' }, error: null, isMember: false, searchRows: [] };
   const client = {
     auth: { async getUser() { state.calls.push('auth'); return { data: { user: state.signedIn ? { id: user } : null }, error: null }; } },
     from(table) {
       const q = { table, filters: [] }; state.queries.push(q);
       const result = () => {
-        const value = table === 'band_members' ? { role: state.role } : state.row;
-        const matches = table === 'band_members' || value && q.filters.every(([key, expected]) => value[key] === expected);
+        const value = table === 'band_members' ? (q.columns === 'user_id' ? state.isMember ? { user_id: user } : null : { role: state.role }) : state.row;
+        const matches = table === 'band_members' ? value !== null : value && q.filters.every(([key, expected]) => value[key] === expected);
         return { data: q.single ? matches ? value : null : matches ? [value] : [], error: null };
       };
       return { select(columns) { q.columns = columns; return this; }, eq(...args) { q.filters.push(args); return this; },
@@ -42,7 +41,7 @@ function fixture() {
     async rpc(name, args) {
       state.calls.push({ name, args });
       if (state.error) return { data: null, error: state.error };
-      const data = name === 'bandup_request_entry' ? id : name === 'bandup_get_discovery' ? [] : name === 'bandup_discover_bands' ? [] : null;
+      const data = name === 'bandup_request_entry' ? id : name === 'bandup_discover_bands' ? typeof state.searchRows === 'function' ? state.searchRows(args) : state.searchRows : null;
       return { data, error: null };
     },
   };
@@ -50,55 +49,34 @@ function fixture() {
 }
 const denied = (operation, code) => assert.rejects(operation, error => error.code === code);
 
-test('temporary demo gate requires development, explicit opt-in, exact project and loopback browser', async () => {
+test('feature is enabled by valid configured Supabase URL and publishable key in any deployment', async () => {
   const source = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText;
-  const enabled = { NODE_ENV: 'development', NEXT_PUBLIC_BAND_ENTRY_DEMO_TEST: '1',
-    NEXT_PUBLIC_SUPABASE_URL: 'https://zwmihhdvvpqgyavworgh.supabase.co' };
-  const load = (env, hostname) => {
+  const enabled = { NODE_ENV: 'production', NEXT_PUBLIC_SUPABASE_URL: 'https://project.supabase.co',
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'publishable-key' };
+  const load = env => {
     const gateModule = { exports: {} };
-    vm.runInNewContext(source, { module: gateModule, exports: gateModule.exports, process: { env },
-      ...(hostname === undefined ? {} : { window: { location: { hostname } } }) });
+    vm.runInNewContext(source, { module: gateModule, exports: gateModule.exports, process: { env }, URL });
     return gateModule.exports;
   };
-  for (const env of [{}, { ...enabled, NODE_ENV: 'production' }, { ...enabled, NODE_ENV: 'test' },
-    { ...enabled, NODE_ENV: 'preview' }, { ...enabled, NEXT_PUBLIC_BAND_ENTRY_DEMO_TEST: '0' },
-    { ...enabled, NEXT_PUBLIC_BAND_ENTRY_DEMO_TEST: undefined },
-    { ...enabled, NEXT_PUBLIC_SUPABASE_URL: 'https://other.supabase.co' },
-    { ...enabled, NEXT_PUBLIC_SUPABASE_URL: enabled.NEXT_PUBLIC_SUPABASE_URL + '.evil.test' },
-    { ...enabled, NEXT_PUBLIC_SUPABASE_URL: enabled.NEXT_PUBLIC_SUPABASE_URL + '/rest/v1/evil' },
-    { ...enabled, NEXT_PUBLIC_SUPABASE_URL: enabled.NEXT_PUBLIC_SUPABASE_URL + '@evil.test/rest/v1/' },
-    { ...enabled, NEXT_PUBLIC_SUPABASE_URL: enabled.NEXT_PUBLIC_SUPABASE_URL.replace('https:', 'http:') },
-    { ...enabled, NEXT_PUBLIC_SUPABASE_URL: enabled.NEXT_PUBLIC_SUPABASE_URL + ':8443' },
-    { ...enabled, NEXT_PUBLIC_SUPABASE_URL: undefined }]) {
-    const api = load(env, 'localhost');
+  for (const env of [{}, { ...enabled, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: undefined },
+    { ...enabled, NEXT_PUBLIC_SUPABASE_URL: undefined },
+    { ...enabled, NEXT_PUBLIC_SUPABASE_URL: 'http://project.supabase.co' },
+    { ...enabled, NEXT_PUBLIC_SUPABASE_URL: 'https://project.supabase.co/evil' },
+    { ...enabled, NEXT_PUBLIC_SUPABASE_URL: 'https://user:pass@project.supabase.co' },
+    { ...enabled, NEXT_PUBLIC_SUPABASE_URL: 'not-a-url' }]) {
+    const api = load(env);
     assert.equal(api.BAND_ENTRY_BACKEND_VALIDATED, false);
     await denied(() => api.createBandEntryService({}).discover(), 'blocked');
   }
   for (const suffix of ['', '/', '/rest/v1', '/rest/v1/']) {
     const env = { ...enabled, NEXT_PUBLIC_SUPABASE_URL: enabled.NEXT_PUBLIC_SUPABASE_URL + suffix };
-    const { client } = fixture();
-    const api = load(env, '127.0.0.1');
-    assert.equal(api.BAND_ENTRY_BACKEND_VALIDATED, true, `demo URL suffix: ${suffix}`);
+    const { client, state } = fixture();
+    const api = load(env);
+    assert.equal(api.BAND_ENTRY_BACKEND_VALIDATED, true, `configured URL suffix: ${suffix}`);
     await api.createBandEntryService(client).discover();
-    for (const NODE_ENV of ['production', 'preview', 'test']) {
-      const blocked = load({ ...env, NODE_ENV }, '127.0.0.1');
-      assert.equal(blocked.BAND_ENTRY_BACKEND_VALIDATED, false);
-      await denied(() => blocked.createBandEntryService({}).discover(), 'blocked');
-    }
-  }
-  for (const hostname of ['localhost', '127.0.0.1', '[::1]', 'preview.example.com', '192.168.1.2', undefined]) {
-    const { state, client } = fixture();
-    const api = load(enabled, hostname);
-    assert.equal(api.BAND_ENTRY_BACKEND_VALIDATED, true);
-    if (['localhost', '127.0.0.1', '[::1]'].includes(hostname)) {
-      await api.createBandEntryService(client).discover();
-      assert.ok(state.calls.includes('auth'));
-    } else {
-      await denied(() => api.createBandEntryService(client).discover(), 'blocked');
-      assert.equal(state.calls.length + state.queries.length, 0);
-    }
+    assert.ok(state.calls.includes('auth'));
   }
 });
 
@@ -107,22 +85,19 @@ test('production gate blocks every read/mutation before any client call', async 
   const { client, state } = fixture();
   const api = createBandEntryService(client, true); // Extra arguments cannot bypass the production gate.
   for (const op of [() => api.discover(), () => api.ownRequests(), () => api.adminRequests(band),
-    () => api.getDiscovery(band), () => api.setDiscovery({ band_id: band }), () => api.request(band, 'Name'),
+    () => api.request(band, 'Name'),
     () => api.cancel(id), () => api.decide(band, id, 'approved'), () => api.getRequest(id), () => api.pendingRequest(band)]) await denied(op, 'blocked');
   assert.equal(state.calls.length + state.queries.length, 0);
 });
 
-test('all six RPC signatures match SQL; no supplied user identity or role', async () => {
+test('search and entry RPC arguments never supply user identity or role', async () => {
   const { api, state } = fixture();
-  await api.discover(); await api.getDiscovery(band);
-  await api.setDiscovery({ band_id: band, display_name: ' Public name ', summary: 'Intro', accepting_requests: true });
+  await api.discover();
   assert.equal(await api.request(band, ' Musician '), id);
   await api.cancel(id); await api.decide(band, id, 'approved');
   const calls = JSON.parse(JSON.stringify(state.calls.filter(x => typeof x === 'object')));
   assert.deepEqual(calls, [
     { name: 'bandup_discover_bands', args: { p_after: null, p_limit: 20 } },
-    { name: 'bandup_get_discovery', args: { p_band_id: band } },
-    { name: 'bandup_set_discovery', args: { p_band_id: band, p_display_name: 'Public name', p_summary: 'Intro', p_accepting: true } },
     { name: 'bandup_request_entry', args: { p_band_id: band, p_applicant_name: 'Musician' } },
     { name: 'bandup_cancel_entry', args: { p_request_id: id } },
     { name: 'bandup_decide_entry', args: { p_request_id: id, p_decision: 'approved' } },
@@ -143,11 +118,10 @@ test('requests are scoped by current Auth user or verified administrator band an
 
 test('fresh auth and admin role are checked for every administrative operation', async () => {
   const { api, state } = fixture();
-  await api.getDiscovery(band);
+  await api.adminRequests(band);
   state.role = 'member';
-  for (const op of [() => api.getDiscovery(band), () => api.adminRequests(band),
-    () => api.setDiscovery({ band_id: band }), () => api.decide(band, id, 'approved')]) await denied(op, '42501');
-  assert.equal(state.calls.filter(x => typeof x === 'object').length, 1);
+  for (const op of [() => api.adminRequests(band), () => api.decide(band, id, 'approved')]) await denied(op, '42501');
+  assert.equal(state.calls.filter(x => typeof x === 'object').length, 0);
   state.signedIn = false;
   await denied(() => api.request(band, 'Name'), '42501');
 });
@@ -175,13 +149,12 @@ test('RPC rejection or network ambiguity is propagated without retry or fake suc
   assert.match(entryError(new Error('Lost response')).message, /Atualize os dados/);
 });
 
-test('invalid identifiers, names and discovery settings are rejected before mutation', async () => {
+test('invalid identifiers and names are rejected before mutation', async () => {
   const { api, state } = fixture();
   await denied(() => api.request('bad', 'Name'), '22023');
   await denied(() => api.request(band, '   '), '22023');
   await denied(() => api.request(band, 'x'.repeat(81)), '22023');
   await denied(() => api.decide(band, id, 'admin'), '22023');
-  await denied(() => api.setDiscovery({ band_id: band, display_name: 'N', summary: 'x'.repeat(501), accepting_requests: true }), '22023');
   assert.equal(state.calls.filter(x => typeof x === 'object').length, 0);
 });
 
@@ -195,4 +168,77 @@ test('pending request lookup is limited to authenticated actor, selected band an
   assert.equal(await api.pendingRequest(band), null);
   state.signedIn = false;
   await denied(() => api.pendingRequest(band), '42501');
+});
+
+
+test('admin pending panel filters status before pagination and rechecks role', async () => {
+  const { api, state } = fixture();
+  await api.adminRequests(band, 20, true);
+  const q = state.queries.find(q => q.table === 'band_join_requests');
+  assert.deepEqual(q.filters, [['band_id', band], ['status', 'pending']]);
+  assert.deepEqual(q.range, [20, 39]);
+  state.role = 'member';
+  await denied(() => api.adminRequests(band, 0, true), '42501');
+});
+
+
+test('existing member cannot request entry and never calls the write RPC', async () => {
+  const { api, state } = fixture(); state.isMember = true;
+  await denied(() => api.request(band, 'Name'), '23505');
+  assert.equal(state.calls.some(call => call?.name === 'bandup_request_entry'), false);
+});
+
+test('entry eligibility distinguishes current membership, pending request and eligible user', async () => {
+  const { api, state } = fixture();
+  assert.equal(await api.entryEligibility(band), 'pending');
+  let requestQuery = state.queries.at(-1);
+  assert.deepEqual(requestQuery.filters, [['requester_id', user], ['band_id', band], ['status', 'pending']]);
+
+  state.row.status = 'rejected';
+  assert.equal(await api.entryEligibility(band), 'eligible');
+  state.isMember = true;
+  assert.equal(await api.entryEligibility(band), 'member');
+  assert.equal(state.calls.filter(call => call?.name === 'bandup_request_entry').length, 0);
+});
+
+test('all-band search ignores legacy directory state and returns only ID and name', async () => {
+  const { api, state } = fixture();
+  state.searchRows = [{ band_id: band, display_name: 'Same name', description: 'private', members: ['private'] },
+    { band_id: otherBand, display_name: 'Same name', accepting_requests: false }];
+  const found = await api.discover();
+  assert.deepEqual(JSON.parse(JSON.stringify(found)), [{ band_id: band, name: 'Same name' }, { band_id: otherBand, name: 'Same name' }]);
+  assert.equal(state.queries.length, 0, 'search must not read bands or directory directly');
+  assert.equal(state.calls.find(call => call?.name).name, 'bandup_discover_bands');
+});
+
+
+for (const directory of [null, { accepting_requests: false }]) {
+  test(`band without enabled legacy directory can be searched and requested: ${JSON.stringify(directory)}`, async () => {
+    const { api, state } = fixture();
+    state.directory = directory;
+    state.searchRows = [{ band_id: band, display_name: 'Registered Band' }];
+    assert.equal((await api.discover())[0].band_id, band);
+    assert.equal(await api.request(band, 'Name'), id);
+    assert.equal(state.queries.some(q => q.table === 'bands' || q.table === 'band_join_directory'), false);
+    assert.equal(state.calls.filter(q => q?.name === 'bandup_request_entry').length, 1);
+  });
+}
+
+test('new search contract preserves UUID pagination and rejects malformed results', async () => {
+  const { api, state } = fixture();
+  state.searchRows = args => args.p_after === null ? [{ band_id: band, display_name: 'Same' }] : [{ band_id: otherBand, display_name: 'Same' }];
+  assert.equal((await api.discover())[0].band_id, band);
+  assert.equal((await api.discover(band))[0].band_id, otherBand);
+  const pages = state.calls.filter(c => c?.name === 'bandup_discover_bands');
+  assert.deepEqual(pages.map(c => c.args.p_after), [null, band]);
+  for (const rows of [null, [{ band_id: 'invalid', name: 'Band' }], [{ band_id: band, name: 'Unexpected contract' }]]) {
+    state.searchRows = rows;
+    await assert.rejects(() => api.discover());
+  }
+});
+
+test('server duplicate refusal is propagated without a repeated write', async () => {
+  const { api, state } = fixture(); state.error = { code: '23505' };
+  await denied(() => api.request(band, 'Name'), '23505');
+  assert.equal(state.calls.filter(c => c?.name === 'bandup_request_entry').length, 1);
 });

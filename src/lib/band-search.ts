@@ -6,16 +6,16 @@ export function defaultEntryMessage(name: string) {
   return `Olá! Me chamo ${name} e gostaria de participar da sua banda.`;
 }
 
-// Existing RPC exposes only authorized discovery entries, with a UUID cursor.
-// Search that directory after explicit input; bound each batch and allow continuation.
+// Search RPC exposes only band IDs and names, with a UUID cursor.
+// Search registered bands after explicit input; bound each batch and allow continuation.
 export async function searchBandNames(api: Pick<BandEntryService, "discover">, query: string, after: string | null = null) {
   const term = comparable(query.trim());
-  if (!term || query.length > 100) throw new Error("Informe um nome de banda de até 100 caracteres.");
+  if (!term || query.length > 100) throw new Error("Informe um nome ou ID de banda de até 100 caracteres.");
   const matches: DiscoveredBand[] = [];
   let cursor = after;
   for (let page = 0; page < 5; page++) {
     const rows = await api.discover(cursor);
-    matches.push(...rows.filter(row => comparable(row.display_name).includes(term)));
+    matches.push(...rows.filter(row => comparable(row.name).includes(term) || row.band_id.toLowerCase() === term));
     if (rows.length < 20) return { matches, next: null };
     const next = rows[rows.length - 1].band_id;
     if (!next || next === cursor) throw new Error("Invalid directory cursor");

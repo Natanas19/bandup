@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import BandEntryFlow from "@/components/band-entry-flow";
+import { BAND_ENTRY_BACKEND_VALIDATED } from "@/lib/band-entry";
 import BandNavigation from "@/components/band-navigation";
 import { BandWorkspaceInfo } from "@/components/band-workspace";
 import { useParams } from "next/navigation";
@@ -20,12 +22,14 @@ export default function BandMembersPage() {
   const [pageState, setPageState] = useState<PageState>("loading");
   const [bandName, setBandName] = useState("");
   const [members, setMembers] = useState<ListedMember[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [membersRevision, setMembersRevision] = useState(0);
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadMembers() {
-      setPageState("loading");
+      if (membersRevision === 0) setPageState("loading");
 
       try {
         const supabase = getSupabaseBrowserClient();
@@ -45,7 +49,7 @@ export default function BandMembersPage() {
 
         const { data: membership, error: membershipError } = await supabase
           .from("band_members")
-          .select("user_id")
+          .select("user_id, role")
           .eq("band_id", bandId)
           .eq("user_id", user.id)
           .maybeSingle();
@@ -99,6 +103,7 @@ export default function BandMembersPage() {
           label: member.user_id === user.id ? "Você" : `Integrante ${++otherMemberNumber}`,
         }));
 
+        setIsAdmin(membership.role === "admin");
         setBandName(band.name);
         setMembers(listedMembers);
         setPageState("ready");
@@ -111,7 +116,7 @@ export default function BandMembersPage() {
     return () => {
       isMounted = false;
     };
-  }, [bandId]);
+  }, [bandId, membersRevision]);
 
   if (pageState !== "ready") {
     return (
@@ -159,6 +164,10 @@ export default function BandMembersPage() {
             {members.length} {members.length === 1 ? "integrante" : "integrantes"}
           </span>
         </header>
+
+        {BAND_ENTRY_BACKEND_VALIDATED && isAdmin && <>
+          <BandEntryFlow key={`requests:${bandId}`} bandId={bandId} onMembersChanged={() => setMembersRevision(value => value + 1)} />
+        </>}
 
         {members.length === 0 ? (
           <section className="mt-7 rounded-2xl border border-dashed border-accent-border bg-surface px-5 py-10 text-center sm:py-14">

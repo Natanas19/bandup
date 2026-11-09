@@ -97,3 +97,45 @@ test('double submit sends a single request and displays loading', async () => {
   assert.ok(nodes(h.render()).some(n => n.type === 'button' && n.props.disabled));
   finish({ data: { session: null }, error: null }); await first;
 });
+
+
+test('empty and malformed emails show Portuguese feedback and never reach Supabase', async () => {
+  for (const value of ['', '   ', 'invalid', 'a@localhost', 'a@@example.com', 'a b@example.com', 'a@example..com', 'a@.com']) {
+    const h = signup(null, { 0: value });
+    await submit(h);
+    assert.equal(h.calls.length, 0);
+    assert.equal(h.states[3], value.trim() ? 'Informe um e-mail válido, como voce@exemplo.com.' : 'Informe seu e-mail.');
+    const input = nodes(h.render()).find(n => n.props?.id === 'email');
+    assert.equal(input.props['aria-invalid'], true);
+    assert.ok(input.props['aria-describedby'].includes('signup-email-error'));
+  }
+});
+
+test('email field supports mobile entry, native feedback, trimming and correction', () => {
+  const h = signup(null, { 0: '' });
+  const field = () => nodes(h.render()).find(n => n.props?.id === 'email');
+  assert.equal(field().props.type, 'email');
+  assert.equal(field().props.inputMode, 'email');
+  assert.equal(field().props.autoComplete, 'email');
+  assert.equal(field().props.autoCapitalize, 'none');
+  assert.equal(field().props.autoCorrect, 'off');
+  assert.equal(field().props.spellCheck, false);
+  assert.equal(field().props.required, true);
+  const pattern = new RegExp(`^(?:${field().props.pattern})$`);
+  assert.equal(pattern.test('a@localhost'), false);
+  assert.equal(pattern.test('ana+band@example.com.br'), true);
+  let validity;
+  const target = { value: '', setCustomValidity(message) { validity = message; } };
+  field().props.onInvalid({ currentTarget: target });
+  assert.equal(validity, 'Informe seu e-mail.');
+  target.value = 'invalid';
+  field().props.onBlur({ currentTarget: target });
+  assert.equal(field().props['aria-invalid'], true);
+  field().props.onInvalid({ currentTarget: target });
+  assert.match(validity, /e-mail válido/);
+  target.value = '  ana+band@example.com.br  ';
+  field().props.onChange({ currentTarget: target, target });
+  assert.equal(validity, '');
+  assert.equal(field().props.value, 'ana+band@example.com.br');
+  assert.equal(field().props['aria-invalid'], false);
+});

@@ -720,7 +720,13 @@ test("shared band layout reserves desktop space and retains a fixed sidebar acro
     assert.match(html, /<aside[^>]*fixed inset-y-0 left-0[^>]*hidden w-64[^>]*overflow-y-auto[^>]*md:flex lg:w-72/);
     assert.equal((html.match(/<aside /g) ?? []).length, 1);
     assert.ok(html.includes("Page content"));
-    assert.match(html, new RegExp(`aria-current="page"[^>]*href="/bandas/theme-band${section ? "/" + section : ""}"`));
+    if (["links", "perfil-publico"].includes(section)) {
+      assert.equal(html.includes('aria-current="page"'), false);
+      assert.equal(html.includes(`href="/bandas/theme-band/${section}"`), false);
+      assert.equal((html.match(/aria-disabled="true"/g) ?? []).length, 3);
+    } else {
+      assert.match(html, new RegExp(`aria-current="page"[^>]*href="/bandas/theme-band${section ? "/" + section : ""}"`));
+    }
     assert.equal((html.match(/<select /g) ?? []).length, 1);
   }
 });
@@ -783,9 +789,12 @@ test("navigation icons and Perfil Publico follow Links in desktop and mobile men
   const Navigation = loader.load("src/components/band-navigation.tsx").default;
   const { ThemeProvider } = loader.load("src/components/theme-provider.tsx");
   for (const variant of ["sidebar", "expandable"]) {
-    const html = renderToStaticMarkup(React.createElement(ThemeProvider, null, React.createElement(Navigation, { bandId: "band", activeSection: "perfil-publico", variant })));
-    assert.match(html, /aria-current="page"[^>]*href="\/bandas\/band\/perfil-publico"/);
-    assert.ok(html.indexOf('href="/bandas/band/links"') < html.indexOf('href="/bandas/band/perfil-publico"'));
+    const html = renderToStaticMarkup(React.createElement(ThemeProvider, null, React.createElement(Navigation, { bandId: "band", activeSection: "agenda", variant })));
+    assert.match(html, /aria-current="page"[^>]*href="\/bandas\/band\/agenda"/);
+    assert.equal(/href="\/bandas\/band\/(links|perfil-publico)"/.test(html), false);
+    assert.equal((html.match(/Em breve/g) ?? []).length, 3);
+    assert.match(html, /Links<\/span>[\s\S]*Perfil P\u00fablico<\/span>/);
+
     assert.equal((html.match(/<svg /g) ?? []).length, 9);
     for (const svg of html.match(/<svg[^>]*>/g)) {
       assert.match(svg, /aria-hidden="true"/); assert.match(svg, /focusable="false"/); assert.match(svg, /stroke="currentColor"/);

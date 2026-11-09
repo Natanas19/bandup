@@ -11,13 +11,14 @@ import { normalizeDisplayName } from "@/lib/display-name";
 const button = "min-h-11 rounded-xl border border-accent-border px-4 py-3 text-sm font-semibold text-brand hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus disabled:opacity-50";
 const input = "min-h-11 w-full min-w-0 rounded-xl border border-outline bg-surface px-4 py-3 text-base text-content focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus";
 
-export default function BandSearch() {
+export default function BandSearch({ onRequestsChanged }: { onRequestsChanged?: () => void } = {}) {
   const [name, setName] = useState<string | null>(null);
   const [accountReady, setAccountReady] = useState(false);
   const [accountFailed, setAccountFailed] = useState(false);
   const [query, setQuery] = useState("");
   const [bands, setBands] = useState<DiscoveredBand[]>([]);
   const [selected, setSelected] = useState<DiscoveredBand | null>(null);
+  const [entryEligibility, setEntryEligibility] = useState<"checking" | "member" | "pending" | "eligible" | "error" | null>(null);
   const [message, setMessage] = useState("");
   const [next, setNext] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
@@ -45,7 +46,10 @@ export default function BandSearch() {
     return () => { live.current = false; tracker.current++; };
   }, []);
 
-  if (!BAND_ENTRY_BACKEND_VALIDATED) return null;
+  if (!BAND_ENTRY_BACKEND_VALIDATED) return <section className="mt-7 min-w-0 space-y-3 rounded-2xl border border-nav-border bg-surface p-4 sm:p-6" aria-label="Buscar banda pelo nome ou ID">
+    <h2 className="text-xl font-semibold text-content">Busca de bandas</h2>
+    <p role="status" className="text-sm leading-6 text-content-muted">A busca e os pedidos de entrada precisam da configuração Supabase deste projeto. Configure NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY para habilitar esta tela.</p>
+  </section>;
 
   async function search(after: string | null = null) {
     if (pending.current || !query.trim()) return;
@@ -60,51 +64,75 @@ export default function BandSearch() {
       if (live.current && ticket === generation.current) { setBands([]); setNext(null); setError(entryError(cause).message); }
     } finally { if (live.current && ticket === generation.current) setLoading(false); }
   }
+  async function selectBand(band: DiscoveredBand) {
+    const ticket = ++generation.current;
+    setSelected(band); setMessage(name ? defaultEntryMessage(name) : "");
+    setConfirming(false); setOutcome(null); setError(""); setEntryEligibility("checking");
+    try {
+      const eligibility = await createBandEntryService(getSupabaseBrowserClient()).entryEligibility(band.band_id);
+      if (live.current && ticket === generation.current) setEntryEligibility(eligibility);
+    } catch (cause) {
+      if (live.current && ticket === generation.current) {
+        setEntryEligibility("error"); setError(entryError(cause).message);
+      }
+    }
+  }
   async function send() {
-    if (!confirming || !selected || !name || pending.current) return;
+    if (!confirming || !selected || !name || entryEligibility !== "eligible" || pending.current) return;
     pending.current = true; setSending(true); setError("");
     const ticket = generation.current;
     try {
       const result = await registerEntryRequest(createBandEntryService(getSupabaseBrowserClient()), selected.band_id, name);
       if (live.current && ticket === generation.current) { setOutcome(result); setConfirming(false); }
     } catch (cause) { if (live.current && ticket === generation.current) setError(entryError(cause).message); }
-    finally { pending.current = false; if (live.current) setSending(false); }
+    finally {
+      pending.current = false;
+      if (live.current) {
+        setSending(false);
+        if (ticket === generation.current) onRequestsChanged?.();
+      }
+    }
   }
 
-  return <section className="mt-7 min-w-0 space-y-5 rounded-2xl border border-nav-border bg-surface p-4 sm:p-6" aria-label="Buscar banda pelo nome">
-    <h2 className="text-xl font-semibold text-content">Encontre uma banda pelo nome</h2>
+  return <section className="mt-7 min-w-0 space-y-5 rounded-2xl border border-nav-border bg-surface p-4 sm:p-6" aria-label="Buscar banda pelo nome ou ID">
+    <h2 className="text-xl font-semibold text-content">Encontre uma banda pelo nome ou ID</h2>
     {error && <p role="alert" className="text-sm leading-6 text-danger">{error}</p>}
     <form className="space-y-3" onSubmit={event => { event.preventDefault(); void search(); }}>
-      <label htmlFor="band-search-name" className="block text-sm font-semibold text-content">Nome da banda</label>
+      <label htmlFor="band-search-name" className="block text-sm font-semibold text-content">Nome ou ID da banda</label>
       <input id="band-search-name" type="search" required maxLength={100} autoComplete="off" className={input} value={query} disabled={sending}
         onChange={event => {
           generation.current++; setQuery(event.target.value); setBands([]); setNext(null); setSearched(false);
           setSelected(null); setConfirming(false); setOutcome(null); setError(""); setLoading(false);
+          setEntryEligibility(null);
         }} />
       <button className={button} disabled={!query.trim() || loading || sending}>{loading ? "Buscando..." : "Buscar bandas"}</button>
     </form>
-    {!searched && !loading && <p role="status" className="text-sm text-content-muted">Digite o nome de uma banda para começar. Nenhuma banda é listada antes da sua busca.</p>}
-    {loading && <p role="status" className="text-sm text-content-muted">Pesquisando bandas que aceitam pedidos...</p>}
-    {searched && !loading && !bands.length && <p role="status" className="text-sm text-content-muted">{next ? "Nenhuma correspondência neste trecho da busca. Continue pesquisando mais bandas." : "Nenhuma banda encontrada para esse nome."}</p>}
+    {!searched && !loading && <p role="status" className="text-sm text-content-muted">Digite o nome ou ID de uma banda para começar. Nenhuma banda é listada antes da sua busca.</p>}
+    {loading && <p role="status" className="text-sm text-content-muted">Pesquisando bandas cadastradas...</p>}
+    {searched && !loading && !bands.length && <p role="status" className="text-sm text-content-muted">{next ? "Nenhuma correspondência neste trecho da busca. Continue pesquisando mais bandas." : "Nenhuma banda encontrada para essa pesquisa."}</p>}
     {bands.map(band => <article key={band.band_id} className="space-y-3 rounded-xl border border-nav-border p-4">
-      <h3 className="break-words font-semibold text-content [overflow-wrap:anywhere]">{band.display_name}</h3>
-      <p className="break-words text-sm text-content-muted">{band.summary}</p>
+      <h3 className="break-words font-semibold text-content [overflow-wrap:anywhere]">{band.name}</h3>
+      <p className="break-all text-xs text-content-muted">ID da banda: {band.band_id}</p>
       <button type="button" className={button} disabled={sending || loading} aria-pressed={selected?.band_id === band.band_id}
-        onClick={() => { setSelected(band); setMessage(name ? defaultEntryMessage(name) : ""); setConfirming(false); setOutcome(null); setError(""); }}>Selecionar banda</button>
+        onClick={() => void selectBand(band)}>Selecionar banda</button>
     </article>)}
     {next && <button type="button" className={button} disabled={loading || sending} onClick={() => void search(next)}>Pesquisar mais bandas</button>}
     {!accountReady && !accountFailed && <p role="status" className="text-sm text-content-muted">Verificando sua conta para solicitar entrada...</p>}
     {accountFailed && <Link href="/login" className={`${button} inline-flex items-center`}>Ir para o login</Link>}
     {accountReady && !name && <DisplayNameSettings onSaved={saved => { setName(saved); setMessage(defaultEntryMessage(saved)); }} />}
-    {selected && name && !outcome && <form className="space-y-3 border-t border-nav-border pt-5" onSubmit={event => { event.preventDefault(); setConfirming(true); }}>
-      <p className="break-words text-sm font-semibold text-content">Banda selecionada: {selected.display_name}</p>
+    {selected && entryEligibility === "checking" && <p role="status" className="text-sm text-content-muted">Verificando sua participação e solicitações para esta banda...</p>}
+    {selected && entryEligibility === "member" && <p role="status" className="rounded-xl bg-accent-soft p-4 text-sm text-content">Você já faz parte desta banda. Não é necessário solicitar entrada.</p>}
+    {selected && entryEligibility === "pending" && <p role="status" className="rounded-xl bg-accent-soft p-4 text-sm text-content">Você já tem uma solicitação pendente para esta banda. Acompanhe o status em Meu Perfil.</p>}
+    {selected && entryEligibility === "member" && <Link href={`/bandas/${selected.band_id}`} className={`${button} inline-flex items-center`}>Acessar banda</Link>}
+    {selected && name && entryEligibility === "eligible" && !outcome && <form className="space-y-3 border-t border-nav-border pt-5" onSubmit={event => { event.preventDefault(); setConfirming(true); }}>
+      <p className="break-words text-sm font-semibold text-content">Banda selecionada: {selected.name}</p>
       <label htmlFor="entry-draft" className="block text-sm font-semibold text-content">Mensagem de apresentação · rascunho não enviado</label>
       <textarea id="entry-draft" className={input} rows={4} maxLength={1000} value={message} disabled={sending} onChange={event => { setMessage(event.target.value); setConfirming(false); }} />
       <p className="text-sm leading-6 text-content-muted">O pedido registra somente seu nome de exibição. Este ambiente ainda não armazena nem envia a mensagem acima ao administrador. O rascunho será perdido ao sair.</p>
       <button className={button} disabled={sending || loading}>Revisar solicitação</button>
     </form>}
-    {confirming && !outcome && <div role="group" aria-labelledby="entry-confirm-title" className="space-y-3 rounded-xl border border-accent-border bg-accent-soft p-4">
-      <h3 id="entry-confirm-title" className="font-semibold text-content">Confirmar solicitação para {selected?.display_name}?</h3>
+    {confirming && entryEligibility === "eligible" && !outcome && <div role="group" aria-labelledby="entry-confirm-title" className="space-y-3 rounded-xl border border-accent-border bg-accent-soft p-4">
+      <h3 id="entry-confirm-title" className="font-semibold text-content">Confirmar solicitação para {selected?.name}?</h3>
       <p className="text-sm text-content-muted">Seu nome será registrado como {name}. A mensagem não será enviada. A entrada depende de aprovação.</p>
       <div className="flex flex-wrap gap-3">
         <button type="button" className={button} disabled={sending} onClick={() => void send()}>{sending ? "Registrando..." : "Confirmar pedido sem mensagem"}</button>
