@@ -118,6 +118,9 @@ export default function NewBandPage() {
                 placeholder="Ex.: Os Ensaios"
                 className="w-full rounded-xl border border-outline bg-surface px-4 py-3 text-base md:text-sm text-content outline-none transition placeholder:text-content-faint focus:border-input-focus focus:ring-4 focus:ring-input-ring"
               />
+              <p aria-live="polite" className="mt-2 text-right text-xs text-content-muted">
+                {name.length}/100 caracteres
+              </p>
             </div>
 
             <div>
@@ -134,6 +137,9 @@ export default function NewBandPage() {
                 placeholder="Conte um pouco sobre a banda"
                 className="w-full resize-y rounded-xl border border-outline bg-surface px-4 py-3 text-base md:text-sm text-content outline-none transition placeholder:text-content-faint focus:border-input-focus focus:ring-4 focus:ring-input-ring"
               />
+              <p aria-live="polite" className="mt-2 text-right text-xs text-content-muted">
+                {description.length}/500 caracteres
+              </p>
             </div>
 
             {errorMessage && (

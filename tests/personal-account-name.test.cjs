@@ -108,5 +108,5 @@ test('only the sidebar card renders the account name; navigation and responsive 
   assert.match(source, /<SpaceSwitcherHeader settingsHref="\/dashboard\/configuracoes"\s*\/>[\s\S]*<PersonalNavigation\s*\/>/);
   const header = fs.readFileSync('src/components/space-switcher.tsx', 'utf8');
   assert.match(header, /justify-between/);
-  assert.match(header, /<SpaceSwitcher bandId=\{bandId\} bandName=\{bandName\}\s*\/>[\s\S]*<WorkspaceSettingsMenu href=\{settingsHref\}\s*\/>/);
+  assert.match(header, /<SpaceSwitcher bandId=\{bandId\} bandName=\{bandName\}\s*\/>[\s\S]*<WorkspaceSettingsMenu href=\{settingsHref\} showBandFeatures=\{!!bandId\}\s*\/>/);
 });

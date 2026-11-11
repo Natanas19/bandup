@@ -8,13 +8,16 @@ import BandNavigation from "@/components/band-navigation";
 import { BandWorkspaceInfo } from "@/components/band-workspace";
 import { useParams } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { loadMemberNames } from "@/lib/display-name";
+import { recordWriteError } from "@/lib/record-permissions";
+import LeaveBandButton from "@/components/leave-band-button";
 
 type Member = {
   user_id: string;
   role: "admin" | "member";
 };
 
-type ListedMember = Member & { label: string };
+type ListedMember = Member & { label: string; isCurrentUser: boolean };
 type PageState = "loading" | "unauthenticated" | "unavailable" | "error" | "ready";
 
 export default function BandMembersPage() {
@@ -24,6 +27,64 @@ export default function BandMembersPage() {
   const [members, setMembers] = useState<ListedMember[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [membersRevision, setMembersRevision] = useState(0);
+  const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
+  const [memberActionError, setMemberActionError] = useState("");
+  const [leaving, setLeaving] = useState(false);
+  const [left, setLeft] = useState(false);
+
+  async function removeMember(member: ListedMember) {
+    if (!isAdmin || member.role !== "member" || member.isCurrentUser || removingMemberId || leaving || left) return;
+    if (!window.confirm(`Remover ${member.label} da banda? Essa pessoa perderá o acesso à banda.`)) return;
+
+    setMemberActionError("");
+    setRemovingMemberId(member.user_id);
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const user = sessionData.session?.user;
+      if (sessionError || !user) {
+        setMemberActionError("Sua sessão expirou. Entre novamente para remover integrantes.");
+        return;
+      }
+
+      const { data: currentMembership, error: membershipError } = await supabase
+        .from("band_members")
+        .select("role")
+        .eq("band_id", bandId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (membershipError || currentMembership?.role !== "admin") {
+        setMemberActionError("Somente administradores da banda podem remover integrantes.");
+        setMembersRevision((revision) => revision + 1);
+        return;
+      }
+
+      const { data: removedMembership, error: removeError } = await supabase
+        .from("band_members")
+        .delete()
+        .eq("band_id", bandId)
+        .eq("user_id", member.user_id)
+        .eq("role", "member")
+        .select("id")
+        .maybeSingle();
+
+      if (removeError) {
+        setMemberActionError(recordWriteError(removeError, "remover este integrante"));
+        return;
+      }
+      if (!removedMembership) {
+        setMemberActionError("O integrante ou seu papel mudou. A lista será atualizada.");
+        setMembersRevision((revision) => revision + 1);
+        return;
+      }
+
+      setMembersRevision((revision) => revision + 1);
+    } catch {
+      setMemberActionError("Não foi possível remover o integrante agora. Tente novamente.");
+    } finally {
+      setRemovingMemberId(null);
+    }
+  }
 
   useEffect(() => {
     let isMounted = true;
@@ -92,15 +153,22 @@ export default function BandMembersPage() {
           return;
         }
 
+        // Membership was verified above. The RPC returns only presentation names
+        // for this band and fails closed when unavailable; it never exposes Auth data.
+        const memberNames = await loadMemberNames(supabase, bandId, true);
+        if (!isMounted) return;
+
         const orderedMembers = [...((memberRows ?? []) as Member[])].sort((first, second) => {
           if (first.user_id === user.id) return -1;
           if (second.user_id === user.id) return 1;
           return first.user_id.localeCompare(second.user_id);
         });
-        let otherMemberNumber = 1;
+        let otherMemberNumber = 0;
         const listedMembers = orderedMembers.map((member) => ({
           ...member,
-          label: member.user_id === user.id ? "Você" : `Integrante ${++otherMemberNumber}`,
+          isCurrentUser: member.user_id === user.id,
+          label: memberNames.get(member.user_id)
+            ?? (member.user_id === user.id ? "Você" : `Integrante ${++otherMemberNumber}`),
         }));
 
         setIsAdmin(membership.role === "admin");
@@ -117,6 +185,8 @@ export default function BandMembersPage() {
       isMounted = false;
     };
   }, [bandId, membersRevision]);
+
+  if (left) return <main className="flex-1 p-8"><p role="status">Seu acesso à banda terminou. Abrindo seu painel...</p><button type="button" onClick={() => window.location.replace("/dashboard")}>Ir para meu painel</button></main>;
 
   if (pageState !== "ready") {
     return (
@@ -169,28 +239,43 @@ export default function BandMembersPage() {
           <BandEntryFlow key={`requests:${bandId}`} bandId={bandId} onMembersChanged={() => setMembersRevision(value => value + 1)} />
         </>}
 
+        {memberActionError && <p role="alert" className="mt-5 rounded-xl border border-danger-border bg-danger-surface px-4 py-3 text-sm text-danger">{memberActionError}</p>}
+
         {members.length === 0 ? (
           <section className="mt-7 rounded-2xl border border-dashed border-accent-border bg-surface px-5 py-10 text-center sm:py-14">
             <h2 className="text-lg font-semibold text-content">Nenhum integrante encontrado.</h2>
             <p className="mt-2 text-sm text-content-muted">Os integrantes da banda aparecerão aqui.</p>
           </section>
         ) : (
-          <section aria-label="Lista de integrantes" className="mt-7 space-y-3">
+          <section aria-label="Lista de integrantes" aria-busy={removingMemberId !== null} className="mt-7 space-y-3">
             {members.map((member) => (
               <article key={member.user_id} className="flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-nav-border bg-surface p-4 shadow-app-card sm:p-5">
                 <div className="flex min-w-0 items-center gap-3">
                   <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-soft text-sm font-semibold text-accent">
-                    {member.label === "Você" ? "V" : "♪"}
+                    {member.isCurrentUser ? "V" : "♪"}
                   </span>
                   <p className="truncate text-sm font-semibold text-content sm:text-base">{member.label}</p>
                 </div>
-                <span className="shrink-0 rounded-full bg-disabled-surface px-3 py-1.5 text-xs font-semibold text-content-label sm:text-sm">
-                  {member.role === "admin" ? "Administrador" : "Membro"}
-                </span>
+                <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
+                  <span className="rounded-full bg-disabled-surface px-3 py-1.5 text-xs font-semibold text-content-label sm:text-sm">
+                    {member.role === "admin" ? "Administrador" : "Membro"}
+                  </span>
+                  {isAdmin && member.role === "member" && !member.isCurrentUser && <button
+                    type="button"
+                    aria-label={`Remover ${member.label} da banda`}
+                    disabled={removingMemberId !== null || leaving}
+                    onClick={() => void removeMember(member)}
+                    className="min-h-10 rounded-xl border border-danger-border px-3 py-2 text-xs font-semibold text-danger transition hover:bg-danger-surface focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {removingMemberId === member.user_id ? "Removendo..." : "Remover integrante"}
+                  </button>}
+                </div>
               </article>
             ))}
           </section>
         )}
+        <LeaveBandButton key={bandId} bandId={bandId} disabled={removingMemberId !== null}
+          onBusyChange={setLeaving} onLeft={() => { setLeft(true); setMembers([]); setIsAdmin(false); }} />
       </div>
     </main>
   );

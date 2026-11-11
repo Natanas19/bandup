@@ -12,6 +12,10 @@ const icons = {
   Bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></>,
   ShieldCheck: <><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z" /><path d="m9 12 2 2 4-4" /></>,
   LogOut: <><path d="M10 17l5-5-5-5M15 12H3" /><path d="M12 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5" /></>,
+  Plus: <><path d="M12 5v14M5 12h14" /></>,
+  Search: <><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4 4" /></>,
+  Store: <><path d="M3 10h18M5 10v10h14V10M3 10l1-6h16l1 6M9 20v-6h6v6" /></>,
+  Ticket: <><path d="M3 5h18v5a2 2 0 0 0 0 4v5H3v-5a2 2 0 0 0 0-4V5Z" /><path d="M13 5v2m0 3v2m0 3v2" /></>,
   Palette: <><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-3.7 1 1 0 0 1 .5-1.8H17a4 4 0 0 0 4-4A8.7 8.7 0 0 0 12 3Z" /><circle cx="7.5" cy="10" r=".5" /><circle cx="10" cy="6.5" r=".5" /><circle cx="14.5" cy="7" r=".5" /><circle cx="17" cy="10.5" r=".5" /></>,
 } satisfies Record<string, ReactNode>;
 

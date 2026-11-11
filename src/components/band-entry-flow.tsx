@@ -96,7 +96,6 @@ function EntryFlow({ bandId, onMembersChanged }: { bandId?: string; onMembersCha
 
   return <section className="mt-7 space-y-6" aria-label={admin ? "Gerenciar solicitações" : "Descoberta e meus pedidos"} aria-busy={busy}>
     {feedback && <p role={feedback.error ? "alert" : "status"} className={`rounded-xl border p-4 text-sm ${feedback.error ? "text-danger" : "text-content"}`}>{feedback.text}</p>}
-    <button type="button" className={button} disabled={busy} onClick={() => { setFeedback(null); void load().catch(() => {}); }}>Atualizar dados e permissões</button>
     <div className="space-y-4 rounded-2xl border border-nav-border bg-surface p-5">
       <h2 className="text-lg font-semibold text-content">{admin ? "Pedidos recebidos" : "Meus pedidos"}</h2>
       {admin && <p className="text-sm text-content-muted">Somente solicitações pendentes são exibidas.</p>}
