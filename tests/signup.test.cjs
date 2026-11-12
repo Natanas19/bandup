@@ -49,7 +49,7 @@ function harness(file, result, initial = {}) {
   const mod = { exports: {} };
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
-  }).outputText, { module: mod, exports: mod.exports, window: { location: { origin: 'http://localhost:3000' } },
+  }).outputText, { module: mod, exports: mod.exports, window: { location: { origin: initial.origin ?? 'http://localhost:3000' } },
     URL: {
       createObjectURL(file) { const url = `blob:${file.name}`; objectUrls.push(['create', url]); return url; },
       revokeObjectURL(url) { objectUrls.push(['revoke', url]); },
@@ -108,6 +108,16 @@ test('signup with session navigates only to dashboard and trims email', async ()
   assert.equal(h.calls[0].options.emailRedirectTo, 'http://localhost:3000/login');
   assert.deepEqual(h.calls.slice(1), ['/dashboard']);
   assert.equal(h.states[1], '');
+});
+
+test('confirmation-required signup returns to the allowed login URL on Vercel and localhost without creating a session', async () => {
+  for (const origin of ['https://bandup-theta.vercel.app', 'http://localhost:3000']) {
+    const h = signup({ data: { user: { id: 'unverified-user' }, session: null }, error: null }, { origin });
+    await submit(h);
+    assert.equal(h.calls[0].options.emailRedirectTo, origin + '/login');
+    assert.equal(h.states[5], true); assert.equal(h.calls.includes('/dashboard'), false);
+    assert.equal(h.avatarCalls.length, 0);
+  }
 });
 
 test('signup defers every photo to authenticated completion, regardless of signup session or user ID', async () => {

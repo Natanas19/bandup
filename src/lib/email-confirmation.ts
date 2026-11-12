@@ -18,19 +18,34 @@ export async function resolveLoginSession(client: SupabaseClient, url: URL): Pro
   const hash = new URLSearchParams(url.hash.slice(1));
   const param = (key: string) => url.searchParams.get(key) ?? hash.get(key);
   try {
-    // The existing SDK consumes implicit-flow tokens and persists the session.
-    // Await its actual initialization result: getSession alone can hide a URL error
-    // while retaining an older session. Never exchange or replay tokens ourselves.
+    // The SDK consumes implicit-flow tokens. Initialization may also recover an
+    // older session, so the callback must be bound to its own verification result.
     const initialized = await client.auth.initialize();
     if (initialized.error || ["error", "error_code", "error_description"].some(key => url.searchParams.has(key) || hash.has(key))) return fail();
     // This screen confirms signup, not password recovery or arbitrary OTP types.
-    if (callback && param("type") && param("type") !== "signup") return fail();
-    if (param("token_hash") || param("code")) return fail(); // Unsupported by the current implicit signup configuration.
-    if (callback && (!param("access_token") || !param("refresh_token"))) return fail();
+    const type = param("type");
+    if (callback && type && type !== "signup" && type !== "email") return fail();
+    if (param("code")) return fail(); // PKCE requires a different client configuration.
+    let expectedToken: string | null = null;
+    if (callback) {
+      const tokenHash = param("token_hash");
+      if (tokenHash) {
+        // Custom templates can target /login or /auth/confirm. A failed or
+        // sessionless verification must never fall back to a previously logged-in user.
+        if ((type !== "email" && type !== "signup") || param("access_token") || param("refresh_token")) return fail();
+        const { data: confirmation, error: confirmationError } = await client.auth.verifyOtp({ token_hash: tokenHash, type });
+        if (confirmationError || !confirmation.session?.access_token) return fail();
+        expectedToken = confirmation.session.access_token;
+      } else {
+        if (!param("access_token") || !param("refresh_token")) return fail();
+        expectedToken = param("access_token");
+      }
+    }
     const { data, error } = await client.auth.getSession();
     const session = data.session;
     if (error) return fail();
     if (!session) return callback ? fail() : { authenticated: false, message: "" };
+    if (expectedToken && session.access_token !== expectedToken) return fail();
     const verified = await client.auth.getUser();
     if (verified.error || !verified.data.user?.email_confirmed_at
       || verified.data.user.id !== session.user.id
