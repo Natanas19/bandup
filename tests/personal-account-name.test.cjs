@@ -20,7 +20,7 @@ const settle = async () => { for (let i = 0; i < 6; i++) await new Promise(setIm
 function fixture(account = user('a', 'Ana Silva')) {
   let state = null, effect, callback, reader = async () => result(account), inCallback = false;
   let reads = 0, writes = 0, unsubscribed = 0, timerId = 0;
-  const timers = new Map();
+  const timers = new Map(), events = new Map();
   const client = { auth: {
     getUser() { assert.equal(inCallback, false, 'Auth calls must not run inside Auth notifications'); reads++; return reader(); },
     onAuthStateChange(fn) { callback = fn; return { data: { subscription: { unsubscribe() { unsubscribed++; } } } }; },
@@ -31,12 +31,14 @@ function fixture(account = user('a', 'Ana Silva')) {
     if (name === '@/lib/supabase/client') return { getSupabaseBrowserClient: () => client };
     return require(name);
   }, { window: {
+    addEventListener(name, fn) { events.set(name, fn); }, removeEventListener(name) { events.delete(name); },
     setTimeout(fn) { timers.set(++timerId, fn); return timerId; }, clearTimeout(id) { timers.delete(id); },
   } }).default;
   Component();
   return {
     render: () => Component(), start: () => effect(),
     reader(fn) { reader = fn; },
+    profileUpdated() { events.get('bandup:personal-profile-updated')?.(); },
     emit(event, account) { inCallback = true; try { callback(event, account ? { user: account } : null); } finally { inCallback = false; } },
     async flush() { const pending = [...timers.values()]; timers.clear(); pending.forEach(fn => fn()); await settle(); },
     stats: () => ({ reads, writes, unsubscribed, timers: timers.size }),
@@ -51,6 +53,13 @@ test('sidebar name starts with fallback and uses the normalized name of the veri
   assert.match(h.render().props.className, /break-words/);
   assert.match(h.render().props.className, /overflow-wrap:anywhere/);
   dispose(); assert.equal(h.stats().unsubscribed, 1);
+});
+
+test('explicit profile save refreshes the sidebar name without relying on shared SDK events', async () => {
+  const h = fixture(); const dispose = h.start(); await settle();
+  h.reader(async () => result(user('a', 'Updated Name')));
+  h.profileUpdated(); await settle();
+  assert.equal(h.render().props.children, 'Updated Name'); dispose();
 });
 test('missing or invalid names, signed-out accounts and Auth errors keep the fallback', async () => {
   for (const account of [null, user('a'), user('a', ''), user('a', 'private@example.com'), user('a', {})]) {
@@ -108,5 +117,5 @@ test('only the sidebar card renders the account name; navigation and responsive 
   assert.match(source, /<SpaceSwitcherHeader settingsHref="\/dashboard\/configuracoes"\s*\/>[\s\S]*<PersonalNavigation\s*\/>/);
   const header = fs.readFileSync('src/components/space-switcher.tsx', 'utf8');
   assert.match(header, /justify-between/);
-  assert.match(header, /<SpaceSwitcher bandId=\{bandId\} bandName=\{bandName\}\s*\/>[\s\S]*<WorkspaceSettingsMenu href=\{settingsHref\}\s*\/>/);
+  assert.match(header, /<SpaceSwitcher bandId=\{bandId\} bandName=\{bandName\}\s*\/>[\s\S]*<WorkspaceSettingsMenu href=\{settingsHref\} showBandFeatures=\{!!bandId\}\s*\/>/);
 });

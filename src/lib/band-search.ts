@@ -6,7 +6,7 @@ export function defaultEntryMessage(name: string) {
   return `Olá! Me chamo ${name} e gostaria de participar da sua banda.`;
 }
 
-// Search RPC exposes only band IDs and names, with a UUID cursor.
+// Search RPC exposes band IDs, names and optional public logos, with a UUID cursor.
 // Search registered bands after explicit input; bound each batch and allow continuation.
 export async function searchBandNames(api: Pick<BandEntryService, "discover">, query: string, after: string | null = null) {
   const term = comparable(query.trim());

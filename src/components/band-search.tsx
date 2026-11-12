@@ -7,6 +7,8 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { BAND_ENTRY_BACKEND_VALIDATED, createBandEntryService, entryError, type DiscoveredBand } from "@/lib/band-entry";
 import { defaultEntryMessage, registerEntryRequest, searchBandNames } from "@/lib/band-search";
 import { normalizeDisplayName } from "@/lib/display-name";
+import ProfileAvatar from "@/components/profile-avatar";
+import { safeBandLogo } from "@/lib/public-band-data";
 
 const button = "min-h-11 rounded-xl border border-accent-border px-4 py-3 text-sm font-semibold text-brand hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus disabled:opacity-50";
 const input = "min-h-11 w-full min-w-0 rounded-xl border border-outline bg-surface px-4 py-3 text-base text-content focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus";
@@ -111,7 +113,10 @@ export default function BandSearch({ onRequestsChanged }: { onRequestsChanged?: 
     {loading && <p role="status" className="text-sm text-content-muted">Pesquisando bandas cadastradas...</p>}
     {searched && !loading && !bands.length && <p role="status" className="text-sm text-content-muted">{next ? "Nenhuma correspondência neste trecho da busca. Continue pesquisando mais bandas." : "Nenhuma banda encontrada para essa pesquisa."}</p>}
     {bands.map(band => <article key={band.band_id} className="space-y-3 rounded-xl border border-nav-border p-4">
-      <h3 className="break-words font-semibold text-content [overflow-wrap:anywhere]">{band.name}</h3>
+      <div className="flex min-w-0 items-center gap-3">
+        <ProfileAvatar name={band.name} imageUrl={safeBandLogo(band.logo_url, process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://invalid.local")} />
+        <h3 className="min-w-0 break-words font-semibold text-content [overflow-wrap:anywhere]">{band.name}</h3>
+      </div>
       <p className="break-all text-xs text-content-muted">ID da banda: {band.band_id}</p>
       <button type="button" className={button} disabled={sending || loading} aria-pressed={selected?.band_id === band.band_id}
         onClick={() => void selectBand(band)}>Selecionar banda</button>

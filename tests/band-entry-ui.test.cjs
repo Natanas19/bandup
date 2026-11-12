@@ -14,6 +14,8 @@ function load(file, overrides = {}) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
   }).outputText, { module: mod, exports: mod.exports, require(name) {
     if (name in overrides) return overrides[name];
+    if (name === '@/components/profile-avatar') return { __esModule: true, default: () => null };
+    if (name === '@/lib/public-band-data') return { safeBandLogo: () => null };
     if (name === 'next/link') return { __esModule: true, default: ({ children, ...props }) => React.createElement('a', props, children) };
     if (name === '@/components/band-discovery') return load('src/components/band-discovery.tsx', overrides);
     if (name === '@/components/band-entry-panel') return load('src/components/band-entry-panel.tsx');
@@ -107,14 +109,30 @@ function confirmDecision(h) {
   control.props.onClick();
 }
 
-test('history never discovers bands automatically, even after refresh', async () => {
+test('history loads requests automatically without discovery or a manual refresh button', async () => {
   let reads = 0;
   const h = flowHarness({ ownRequests: async () => { reads++; return []; },
     discover: async () => { throw Error('Directory must require explicit search'); } });
   await settle();
   assert.match(h.html(), /Meus pedidos/);
+  assert.doesNotMatch(h.html(), /Atualizar pedidos/);
   assert.equal(findElements(h.render(), n => n.type === 'form').length, 0);
-  findElements(h.render(), n => n.type === 'button' && n.props.children === 'Atualizar dados e permissões')[0].props.onClick();
+  assert.equal(reads, 1);
+  h.cleanup();
+});
+
+test('request load errors keep the separate access retry control available', async () => {
+  let reads = 0;
+  const h = flowHarness({ ownRequests: async () => {
+    reads++;
+    if (reads === 1) throw { code: '42501' };
+    return [];
+  }, discover: async () => [] });
+  await settle();
+  const retry = findElements(h.render(), n => n.type === 'button' && n.props.children === 'Atualizar acesso')[0];
+  assert.ok(retry);
+  assert.doesNotMatch(h.html(), /Atualizar pedidos/);
+  retry.props.onClick();
   await settle();
   assert.equal(reads, 2);
   h.cleanup();
@@ -180,6 +198,7 @@ test('member administration loads requests without discovery settings and preser
     const h = flowHarness(api, 'band-a', { onMembersChanged: () => updated++ }); await settle();
     const html = h.html();
     assert.match(html, /Pedidos recebidos/);
+    assert.doesNotMatch(html, /Atualizar pedidos/);
     assert.match(html, /Musician/);
     assert.doesNotMatch(html, /Descoberta da banda|Nome para descoberta|Aceitar solicitações de entrada|Salvar descoberta|<form|<textarea|type="checkbox"/);
     for (const label of ['Aprovar entrada', 'Recusar pedido']) {
@@ -191,6 +210,7 @@ test('member administration loads requests without discovery settings and preser
     await settle();
     assert.ok(calls.some(call => JSON.stringify(call) === JSON.stringify(['decide', 'band-a', 'r', decision])));
     assert.ok(calls.some(call => JSON.stringify(call) === JSON.stringify(['confirm', 'r', 'band-a'])));
+    assert.ok(calls.filter(call => call[0] === 'requests').length >= 2, 're-load requests after each decision');
     assert.equal(updated, decision === 'approved' ? 1 : 0);
     assert.match(h.html(), decision === 'approved' ? /Entrada aprovada/ : /Pedido recusado/);
     h.cleanup();

@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { loadPersonalOverview, type PersonalOverview } from "@/lib/personal-profile";
+import ProfileAvatar from "@/components/profile-avatar";
+import { safeBandLogo } from "@/lib/public-band-data";
 
 export default function PersonalBandsPage() {
   const [overview, setOverview] = useState<PersonalOverview | null>(null);
@@ -34,7 +36,10 @@ export default function PersonalBandsPage() {
       </section> : !overview ? <p role="status" className="mt-7 text-sm text-content-muted">Carregando suas bandas...</p> : overview.bands.length ? <ul className="mt-7 space-y-3">
         {overview.bands.map(({ band, role }) => <li key={band.id}>
           <Link href={`/bandas/${band.id}`} className="flex min-h-11 flex-col gap-3 rounded-2xl border border-nav-border bg-surface p-4 hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus sm:flex-row sm:items-center sm:justify-between">
-            <span className="min-w-0 break-words font-semibold text-content [overflow-wrap:anywhere]">{band.name}</span>
+            <span className="flex min-w-0 items-center gap-3">
+              <ProfileAvatar name={band.name} imageUrl={safeBandLogo(band.logo_url, process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://invalid.local")} />
+              <span className="min-w-0 break-words font-semibold text-content [overflow-wrap:anywhere]">{band.name}</span>
+            </span>
             <span className="shrink-0 text-sm text-content-muted">{role === "admin" ? "Administrador" : "Membro"} · Abrir painel</span>
           </Link>
         </li>)}

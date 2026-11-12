@@ -12,7 +12,7 @@ function loadBandSearch() {
   const mod = { exports: {} };
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-  }).outputText, { module: mod, exports: mod.exports, require(name) {
+  }).outputText, { module: mod, exports: mod.exports, process: { env: {} }, require(name) {
     if (name === '@/lib/display-name') return { normalizeDisplayName: value =>
       typeof value === 'string' && value.trim() ? value.trim() : null };
     throw new Error(`Unexpected import ${name}`);
@@ -93,7 +93,7 @@ function componentFixture(eligibility) {
   const mod = { exports: {} };
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
-  }).outputText, { module: mod, exports: mod.exports, require(name) {
+  }).outputText, { module: mod, exports: mod.exports, process: { env: {} }, require(name) {
     if (name === 'react') return hooks;
     if (name === 'react/jsx-runtime') return {
       jsx: (type, props, key) => React.createElement(type, { ...props, key }),
@@ -101,6 +101,8 @@ function componentFixture(eligibility) {
       Fragment: React.Fragment,
     };
     if (name === 'next/link') return { __esModule: true, default: ({ children, ...props }) => React.createElement('a', props, children) };
+    if (name === '@/components/profile-avatar') return { __esModule: true, default: () => null };
+    if (name === '@/lib/public-band-data') return { safeBandLogo: () => null };
     if (name === '@/components/display-name-settings') return { __esModule: true, default: () => null };
     if (name === '@/lib/supabase/client') return { getSupabaseBrowserClient: () => ({ auth: {
       async getUser() { return { data: { user: { user_metadata: { display_name: 'Musician' } } }, error: null }; },

@@ -136,28 +136,20 @@ test('home hides band navigation and onboarding while loading, signed out or in 
   }
 });
 
-test('overview offers name completion only when the saved display name is missing or invalid', () => {
-  for (const name of [undefined, null, '', '   ', 'private@example.com', {}, 'Ana Silva']) {
+test('overview links to profile management without duplicate editors and preserves saved identity', () => {
+  for (const name of [undefined, 'Ana Silva']) {
     const h = harness('src/app/dashboard/page.tsx', null, {
-      0: { id: 'u', user_metadata: { display_name: name } }, 1: [], 2: false,
+      0: { id: 'u', user_metadata: { display_name: name, existing: 'preserved' } },
+      1: [{ role: 'admin', band: { id: 'b', name: 'My band' } }], 2: false,
     });
-    const forms = nodes(h.render()).filter(n => typeof n.props?.onSaved === 'function');
-    assert.equal(forms.length, name === 'Ana Silva' ? 0 : 1);
+    const tree = nodes(h.render());
+    assert.ok(tree.some(n => n.props?.href === '/dashboard/perfil'));
+    assert.equal(tree.some(n => typeof n.props?.onSaved === 'function'), false);
+    assert.equal(tree.some(n => n.props?.userId === 'u' && n.props?.key?.startsWith('avatar:')), false);
+    assert.ok(tree.some(n => n.props?.href === '/dashboard/tarefas'));
+    assert.equal(h.states[0].user_metadata.existing, 'preserved');
+    assert.equal(h.calls.length, 0);
   }
-});
-
-test('successful name completion updates the greeting and retains overview destinations', () => {
-  const h = harness('src/app/dashboard/page.tsx', null, {
-    0: { id: 'u', user_metadata: { existing: 'preserved' } },
-    1: [{ role: 'admin', band: { id: 'b', name: 'Minha banda' } }], 2: false,
-  });
-  nodes(h.render()).find(n => typeof n.props?.onSaved === 'function').props.onSaved('Ana Silva');
-  const tree = nodes(h.render());
-  assert.ok(tree.some(n => n.props?.href === '/dashboard/tarefas'));
-  assert.ok(tree.some(n => n.type === 'h1' && n.props.children === 'Boas-vindas, Ana Silva.'));
-  assert.equal(tree.some(n => typeof n.props?.onSaved === 'function'), false);
-  assert.equal(h.states[0].user_metadata.display_name, 'Ana Silva');
-  assert.equal(h.states[0].user_metadata.existing, 'preserved');
-  assert.ok(tree.some(n => n.props?.href === '/dashboard/bandas'));
-  assert.equal(h.calls.length, 0);
+  const source = fs.readFileSync('src/app/dashboard/page.tsx', 'utf8');
+  assert.doesNotMatch(source, /AvatarCompletion|DisplayNameSettings/);
 });

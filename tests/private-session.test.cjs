@@ -92,12 +92,13 @@ test('public/login routes are unaffected and all private routes share a scope pe
   const { api } = fixture();
   for (const route of ['/', '/login', '/b/public-slug', '/dashboard-other', '/bandas']) assert.equal(api.getPrivateScope(route), null);
   assert.equal(api.getPrivateScope('/dashboard'), '/dashboard');
+  assert.equal(api.getPrivateScope('/dashboard/perfil'), '/dashboard');
   for (const page of ['', '/tarefas', '/agenda', '/links', '/perfil-publico', '/configuracoes']) {
     assert.equal(api.getPrivateScope('/meu-perfil' + page), '/meu-perfil');
   }
   assert.equal(api.getPrivateScope('/meu-perfil-outro'), null);
   assert.equal(api.getPrivateScope('/bandas/nova'), '/bandas/nova');
-  for (const page of ['', '/tarefas', '/agenda', '/membros', '/links', '/perfil-publico']) assert.equal(api.getPrivateScope('/bandas/band-a' + page), 'band:band-a');
+  for (const page of ['', '/tarefas', '/agenda', '/membros', '/links', '/perfil-publico', '/perfil']) assert.equal(api.getPrivateScope('/bandas/band-a' + page), 'band:band-a');
 });
 test('one listener per private scope; membership query uses verified account and current band', async () => {
   const f = fixture(), c = f.start('band-a'); await c.check();

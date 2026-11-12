@@ -43,10 +43,12 @@ function fixture(initialStates = {}, cryptoSource = { randomUUID: () => "1234567
         useState: (initial) => { const i = cursor++; if (!(i in states)) states[i] = initial;
           return [states[i], (value) => { states[i] = typeof value === "function" ? value(states[i]) : value; }]; },
         useEffect: () => {},
+        useRef: (initial) => { const i = cursor++; return states[i] ??= { current: initial }; },
       };
-      if (name === "next/navigation") return { useParams: () => ({ bandId: "band" }), useRouter: () => ({ replace: (url) => calls.push(["navigate", url]) }) };
+      if (name === "next/navigation") return { useParams: () => ({ bandId: "band" }), useRouter: () => ({ replace: (url) => calls.push(["navigate", url]), refresh() {} }) };
       if (name === "next/link") return { __esModule: true, default: () => null };
       if (name === "@/lib/supabase/client") return { getSupabaseBrowserClient: () => client };
+      if (name === "@/lib/band-logo-upload") return { BandLogoError: class extends Error {}, bandPhotoSession: async () => ({ scoped: client, verify: async () => {} }) };
       if (name.startsWith("@/components/")) return { __esModule: true, default: () => null, LinkifiedText: () => null };
       if (name.startsWith("@/lib/")) return load("src/" + name.slice(2) + ".ts");
       return require(name);
@@ -55,8 +57,8 @@ function fixture(initialStates = {}, cryptoSource = { randomUUID: () => "1234567
       compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2017 },
     }).outputText;
     vm.runInNewContext(code, { process: { env: { NEXT_PUBLIC_BANDUP_PUBLICATION_ENABLED: "true" } }, module: loadedModule, exports: loadedModule.exports, require: localRequire,
-      crypto: cryptoSource, Uint8Array, Error, Date, Intl, URL,
-      window: { confirm: () => true, scrollTo: () => {} },
+      crypto: cryptoSource, Uint8Array, Error, Date, Intl, URL, AbortController,
+      window: { confirm: () => true, scrollTo: () => {}, setTimeout, clearTimeout },
     }, { filename });
     return loadedModule.exports;
   }

@@ -11,6 +11,13 @@ const navigationItems = [
   { icon: "Users", section: "membros", label: "Membros", suffix: "/membros" },
 ] as const;
 
+const comingSoonItems = [
+  { icon: "Globe", label: "Perfil público" },
+  { icon: "Link", label: "Links" },
+  { icon: "Store", label: "Loja" },
+  { icon: "Ticket", label: "Ingressos" },
+] as const;
+
 type BandSection = (typeof navigationItems)[number]["section"] | "links" | "perfil-publico";
 type BandNavigationProps = {
   bandId: string;
@@ -66,6 +73,12 @@ export default function BandNavigation({ bandId, activeSection, variant = "botto
             <NavigationIcon name={item.icon} />{item.label}
           </Link></li>;
         })}
+        {isSidebar && comingSoonItems.map(item => <li key={item.label}>
+          <span aria-disabled="true" className="flex min-h-11 items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-content-faint">
+            <span className="flex min-w-0 items-center gap-3"><NavigationIcon name={item.icon} />{item.label}</span>
+            <span className="shrink-0 rounded-full bg-disabled-surface px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-content-subtle">Em breve</span>
+          </span>
+        </li>)}
       </ul>
     </div>
   </nav>;

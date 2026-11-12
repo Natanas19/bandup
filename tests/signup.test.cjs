@@ -8,17 +8,52 @@ const ts = require('typescript');
 const React = require('react');
 
 function harness(file, result, initial = {}) {
-  const states = { ...initial }, refs = [], calls = [], effects = [];
+  const states = { ...initial }, refs = [], calls = [], effects = [], avatarCalls = [], objectUrls = [], draftCalls = [];
   let cursor = 0, refCursor = 0;
-  const client = { auth: { signUp: async args => {
-    calls.push(args);
-    if (result instanceof Error) throw result;
-    return typeof result === 'function' ? result() : result;
-  } } };
+  const client = {
+    auth: {
+      async signUp(args) {
+        calls.push(args);
+        if (result instanceof Error) throw result;
+        return typeof result === 'function' ? result() : result;
+      },
+      async getUser() {
+        avatarCalls.push('getUser');
+        return { data: { user: { id: initial.authenticatedUserId ?? 'new' } }, error: initial.authError ?? null };
+      },
+      async updateUser(args) {
+        avatarCalls.push(['updateUser', args]);
+        return { error: initial.profileUpdateError ?? null };
+      },
+    },
+    storage: {
+      from(bucket) {
+        avatarCalls.push(['from', bucket]);
+        return {
+          async upload(path, uploadedFile, options) {
+            avatarCalls.push(['upload', path, uploadedFile.type, options]);
+            return { error: initial.avatarUploadState?.error ?? initial.avatarUploadError ?? null };
+          },
+          getPublicUrl(path) {
+            avatarCalls.push(['getPublicUrl', path]);
+            return { data: { publicUrl: `https://project.supabase.co/storage/v1/object/public/avatars/${path}` } };
+          },
+          async remove(paths) {
+            avatarCalls.push(['remove', paths]);
+            return { error: initial.removeError ?? null };
+          },
+        };
+      },
+    },
+  };
   const mod = { exports: {} };
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
   }).outputText, { module: mod, exports: mod.exports, window: { location: { origin: 'http://localhost:3000' } },
+    URL: {
+      createObjectURL(file) { const url = `blob:${file.name}`; objectUrls.push(['create', url]); return url; },
+      revokeObjectURL(url) { objectUrls.push(['revoke', url]); },
+    },
     require(name) {
       if (name === 'react') return { ...React,
         useState(value) { const i = cursor++; if (!(i in states)) states[i] = value;
@@ -28,6 +63,21 @@ function harness(file, result, initial = {}) {
       };
       if (name === 'next/navigation') return { useRouter: () => ({ replace: url => calls.push(url) }) };
       if (name === '@/lib/supabase/client') return { getSupabaseBrowserClient: () => client };
+      if (name === '@/lib/avatar-draft') return {
+        async saveAvatarDraft(file, email) {
+          draftCalls.push(['save', file, email]);
+          if (initial.draftError) throw Error('Browser storage unavailable');
+          return { id: 'draft', file, email };
+        },
+        async discardAvatarDraft() { draftCalls.push(['discard']); },
+      };
+      if (name === '@/lib/avatar-upload') {
+        const avatar = { exports: {} };
+        vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(__dirname, '../src/lib/avatar-upload.ts'), 'utf8'), {
+          compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+        }).outputText, { module: avatar, exports: avatar.exports, require() { return {}; } });
+        return avatar.exports;
+      }
       if (name === 'next/link' || name.startsWith('@/components/')) return { __esModule: true, default: () => null };
       if (name === '@/lib/display-name') {
       const names = { exports: {} };
@@ -39,7 +89,7 @@ function harness(file, result, initial = {}) {
     return require(name);
     },
   });
-  return { states, calls, render() { cursor = refCursor = 0; return mod.exports.default(); } };
+  return { states, calls, avatarCalls, objectUrls, effects, draftCalls, render() { cursor = refCursor = 0; return mod.exports.default(); } };
 }
 function nodes(tree) {
   if (!tree || typeof tree !== 'object') return [];
@@ -59,6 +109,63 @@ test('signup with session navigates only to dashboard and trims email', async ()
   assert.deepEqual(h.calls.slice(1), ['/dashboard']);
   assert.equal(h.states[1], '');
 });
+
+test('signup defers every photo to authenticated completion, regardless of signup session or user ID', async () => {
+  const file = { name: 'profile.png', type: 'image/png', size: 1024 };
+  for (const session of [null, { user: { id: 'new-user' } }]) {
+    const h = signup({ data: { user: { id: 'obfuscated-or-unverified' }, session }, error: null }, { 8: file });
+    await submit(h);
+    assert.equal(h.avatarCalls.length, 0, 'no Storage or Auth metadata calls during signup');
+    assert.deepEqual(h.draftCalls, [['save', file, 'person@example.com']]);
+    assert.equal(h.states[8], null);
+    assert.equal(h.states[11], true);
+    if (session) assert.deepEqual(h.calls.slice(1), ['/dashboard']);
+    else {
+      assert.equal(h.states[5], true);
+      assert.ok(nodes(h.render()).some(n => JSON.stringify(n.props?.children).includes('confirme o envio da foto')));
+    }
+  }
+});
+
+test('local draft failure never turns an accepted signup into an account failure', async () => {
+  for (const session of [null, { user: { id: 'new-user' } }]) {
+    const h = signup({ data: { session }, error: null }, {
+      8: { name: 'profile.webp', type: 'image/webp', size: 2048 }, draftError: true,
+    });
+    await submit(h);
+    assert.equal(h.avatarCalls.length, 0); assert.equal(h.states[3], '');
+    assert.equal(h.states[12], true);
+    if (session) assert.equal(h.calls.includes('/dashboard'), true);
+    else assert.ok(nodes(h.render()).some(n => JSON.stringify(n.props?.children).includes('selecione-a novamente')));
+  }
+});
+
+test('signup without photo clears a stale draft and keeps the normal session redirect', async () => {
+  const h = signup({ data: { session: {} }, error: null }); await submit(h);
+  assert.deepEqual(h.draftCalls, [['discard']]); assert.equal(h.avatarCalls.length, 0);
+  assert.equal(h.calls.includes('/dashboard'), true);
+});
+
+test('signup image input is optional, previews valid images and rejects unsupported files', () => {
+  const h = signup(null);
+  const imageInput = () => nodes(h.render()).find(node => node.props?.id === 'avatar-file');
+  assert.equal(imageInput().props.type, 'file');
+  assert.equal(imageInput().props.required, undefined);
+  assert.equal(imageInput().props.accept, 'image/jpeg,image/png,image/webp');
+
+  const input = imageInput();
+  const validFile = { name: 'profile.webp', type: 'image/webp', size: 1024 };
+  input.props.onChange({ currentTarget: { files: [validFile], value: 'profile.webp' } });
+  assert.equal(h.states[8], validFile);
+  assert.equal(h.states[9], 'blob:profile.webp');
+  assert.ok(nodes(h.render()).some(node => JSON.stringify(node.props?.children).includes('Prévia da foto selecionada')));
+
+  imageInput().props.onChange({ currentTarget: { files: [{ name: 'bad.svg', type: 'image/svg+xml', size: 10 }], value: 'bad.svg' } });
+  assert.equal(h.states[8], null);
+  assert.match(h.states[10], /JPG, PNG ou WebP/);
+  assert.ok(h.objectUrls.some(call => call[0] === 'revoke' && call[1] === 'blob:profile.webp'));
+});
+
 test('confirmation and duplicate accounts display the same neutral response without redirect', async () => {
   for (const result of [
     { data: { session: null }, error: null },

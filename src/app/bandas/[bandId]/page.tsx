@@ -204,19 +204,7 @@ export default function BandPage() {
 
       <BandWorkspaceInfo name={band.name} role={band.role} />
       <div className="min-w-0 flex-1">
-        <header className="border-b border-nav-border bg-surface px-4 py-3 md:hidden">
-          <div className="flex min-w-0 items-center justify-between gap-3">
-            <div className="min-w-0">
-              <Link href="/dashboard" className="text-lg font-bold tracking-tight text-content">
-                Band<span className="text-accent">Up</span>
-              </Link>
-              <p className="truncate text-xs text-content-subtle">{band.name}</p>
-            </div>
-          </div>
-          <div className="mt-3">
-            <BandNavigation bandId={band.id} activeSection="overview" />
-          </div>
-        </header>
+        <BandNavigation bandId={band.id} activeSection="overview" />
 
         <div className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6 sm:py-8 lg:px-10 lg:py-10">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

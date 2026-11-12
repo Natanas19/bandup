@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import DisplayNameSettings from "@/components/display-name-settings";
 import WelcomeOnboarding from "@/components/welcome-onboarding";
 import NavigationIcon from "@/components/navigation-icon";
 import { BAND_ENTRY_BACKEND_VALIDATED } from "@/lib/band-entry";
@@ -12,6 +11,7 @@ import { normalizeDisplayName } from "@/lib/display-name";
 import { loadPersonalTasks, PersonalTasksLoadError, type PersonalTask } from "@/lib/personal-tasks";
 import { loadPersonalAgenda, PersonalAgendaLoadError, type PersonalEvent } from "@/lib/personal-agenda";
 import { formatTaskDate } from "@/lib/date-time";
+import { BandDeletionRecovery } from "@/components/band-deletion-panel";
 
 type BandMembership = { role: string; band: { id: string; name: string } | null };
 
@@ -72,7 +72,14 @@ export default function DashboardPage() {
         if (sessionError) { setLoadError("Não foi possível carregar sua conta agora. Tente novamente."); return; }
         const session = sessionData.session;
         if (!session) { setUser(null); return; }
-        setUser(session.user);
+        // Read current metadata: the profile editor intentionally keeps its
+        // isolated Auth writes out of the shared SDK session cache.
+        const { data: account, error: accountError } = await supabase.auth.getUser();
+        if (!active) return;
+        if (accountError || !account.user || account.user.id !== session.user.id) {
+          setLoadError("Não foi possível verificar sua conta agora. Tente novamente."); return;
+        }
+        setUser(account.user);
 
         const { data, error } = await supabase.from("band_members")
           .select("role, band:bands!inner(id, name)")
@@ -113,9 +120,9 @@ export default function DashboardPage() {
   }, [revision]);
 
   const displayName = user ? accountName(user) : null;
-  const savedDisplayName = user ? normalizeDisplayName(user.user_metadata?.display_name) : null;
   const content = <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 sm:py-8 lg:px-10 lg:py-10">
     <div className="mx-auto w-full max-w-7xl">
+      <BandDeletionRecovery />
       {isLoading ? <section aria-busy="true" className="mt-8 rounded-panel border border-outline bg-surface p-6 sm:p-8"><p role="status" className="text-sm text-content-muted">Carregando seu espaço...</p></section>
         : loadError ? <section className="mt-8 rounded-panel border border-danger-border bg-surface p-6 sm:p-8"><p role="alert" className="text-sm text-danger">{loadError}</p>{retryButton(() => setRevision(value => value + 1))}</section>
           : !user ? <section className="mt-8 rounded-panel border border-outline bg-surface p-6 text-center sm:p-10">
@@ -135,9 +142,7 @@ export default function DashboardPage() {
               {bands.length > 0 && <Link href="/dashboard/bandas" className="relative mt-5 inline-flex min-h-11 items-center gap-2 rounded-control border border-outline px-4 py-2 text-sm font-semibold text-content hover:border-accent-border hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus lg:mt-0">Ver minhas bandas <NavigationIcon name="Users" className="h-4 w-4" /></Link>}
             </section>
 
-            {!savedDisplayName && <DisplayNameSettings key={user.id} initialName={user.user_metadata?.display_name} onSaved={name => {
-              setUser(current => current && current.id === user.id ? { ...current, user_metadata: { ...current.user_metadata, display_name: name } } : current);
-            }} />}
+            <Link href="/dashboard/perfil" className="mt-6 inline-flex min-h-11 items-center rounded-control border border-accent-border px-4 py-2 text-sm font-semibold text-brand hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">Gerenciar meu perfil</Link>
 
             {bands.length === 0 && <section className="mt-6 grid gap-6 rounded-panel border border-accent-border bg-accent-soft/40 p-5 sm:p-7 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center lg:gap-7 lg:p-8">
               <div aria-hidden="true" className="flex h-14 w-14 items-center justify-center rounded-panel border border-accent-border bg-surface text-accent"><NavigationIcon name="Users" className="h-7 w-7" /></div>

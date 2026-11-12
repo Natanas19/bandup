@@ -52,7 +52,7 @@ function fixture(options = {}) {
       const call = { table }; calls.push(call);
       return { select(columns) { call.columns = columns; return this; }, async eq(key, value) {
         call.filter = [key, value];
-        return { data: options.rows ?? [{ role: 'admin', band: { id: 'b', name: 'Minha banda' } }], error: options.queryError };
+        return { data: options.rows ?? [{ role: 'admin', band: { id: 'b', name: 'Minha banda', logo_url: null } }], error: options.queryError };
       } };
     },
   };
@@ -66,9 +66,21 @@ test('personal overview reads only current account and own memberships, without 
   assert.equal(data.bands.length, 1);
   assert.equal(f.calls[0], 'auth');
   assert.equal(f.calls[1].table, 'band_members');
-  assert.equal(f.calls[1].columns, 'role, band:bands!inner(id, name)');
+  assert.equal(f.calls[1].columns, 'role, band:bands!inner(id, name, logo_url)');
   assert.equal(JSON.stringify(f.calls[1].filter), JSON.stringify(['user_id', 'self']));
   assert.equal((await service.loadPersonalOverview(fixture({ name: 'private@example.com', rows: [] }).client)).name, null);
+});
+
+test('band photos travel with the existing membership query, including bands without photos', async () => {
+  const rows = [
+    { role: 'admin', band: { id: 'a', name: 'Com foto', logo_url: 'https://project.supabase.co/storage/v1/object/public/band-logos/a/photo.png' } },
+    { role: 'member', band: { id: 'b', name: 'Sem foto', logo_url: null } },
+  ];
+  const f = fixture({ rows });
+  const result = await service.loadPersonalOverview(f.client);
+  assert.equal(result.bands[0].band.logo_url, rows[0].band.logo_url);
+  assert.equal(result.bands[1].band.logo_url, null);
+  assert.equal(f.calls.filter(call => typeof call === 'object').length, 1);
 });
 
 test('missing authentication prevents membership reads and failures never expose service details', async () => {

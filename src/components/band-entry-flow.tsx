@@ -8,9 +8,12 @@ import { BAND_ENTRY_BACKEND_VALIDATED, createBandEntryService, entryError,
   type BandEntryService, type EntryRequest } from "@/lib/band-entry";
 
 import { normalizeDisplayName } from "@/lib/display-name";
+import ProfileAvatar from "@/components/profile-avatar";
+import { safeBandLogo } from "@/lib/public-band-data";
 
 const button = "min-h-11 rounded-xl border border-accent-border px-4 py-2 text-sm font-semibold text-accent disabled:cursor-not-allowed disabled:opacity-50";
 const statusLabels = { pending: "Pendente", approved: "Aprovado", rejected: "Recusado", cancelled: "Cancelado" };
+const supabaseOrigin = typeof process !== "undefined" ? process.env.NEXT_PUBLIC_SUPABASE_URL : undefined;
 
 function EntryFlow({ bandId, onMembersChanged }: { bandId?: string; onMembersChanged?: () => void }) {
   const admin = !!bandId;
@@ -25,11 +28,13 @@ function EntryFlow({ bandId, onMembersChanged }: { bandId?: string; onMembersCha
   const generation = useRef(0);
   const actionPending = useRef(false);
   const [decision, setDecision] = useState<{ row: EntryRequest; status: "approved" | "rejected" } | null>(null);
+  const [avatars, setAvatars] = useState<Map<string, string | null>>(new Map());
 
   const load = useCallback(async () => {
     if (!BAND_ENTRY_BACKEND_VALIDATED) return;
     const ticket = ++generation.current;
     setPhase("loading");
+    setAvatars(new Map());
     try {
       const api = service.current ??= createBandEntryService(getSupabaseBrowserClient());
       const rows = bandId ? await api.adminRequests(bandId, offset, true) : await api.ownRequests(offset);
@@ -37,6 +42,15 @@ function EntryFlow({ bandId, onMembersChanged }: { bandId?: string; onMembersCha
       setRequests(bandId ? rows.filter(row => row.status === "pending") : rows);
       setDecision(null);
       setPhase("ready");
+      if (bandId) {
+        const ids = rows.filter(row => row.band_id === bandId && row.status === "pending").slice(0, 20).map(row => row.id);
+        if (ids.length) {
+          // Optional presentation only: never delay the list, pagination or actions.
+          void Promise.resolve().then(() => api.pendingRequestAvatars(bandId, ids)).then(images => {
+            if (live.current && ticket === generation.current) setAvatars(images);
+          }).catch(() => { /* Keep initials and the actionable request list. */ });
+        }
+      }
     } catch (error) {
       if (!live.current || ticket !== generation.current) return;
       const failure = entryError(error);
@@ -96,13 +110,16 @@ function EntryFlow({ bandId, onMembersChanged }: { bandId?: string; onMembersCha
 
   return <section className="mt-7 space-y-6" aria-label={admin ? "Gerenciar solicitações" : "Descoberta e meus pedidos"} aria-busy={busy}>
     {feedback && <p role={feedback.error ? "alert" : "status"} className={`rounded-xl border p-4 text-sm ${feedback.error ? "text-danger" : "text-content"}`}>{feedback.text}</p>}
-    <button type="button" className={button} disabled={busy} onClick={() => { setFeedback(null); void load().catch(() => {}); }}>Atualizar dados e permissões</button>
     <div className="space-y-4 rounded-2xl border border-nav-border bg-surface p-5">
       <h2 className="text-lg font-semibold text-content">{admin ? "Pedidos recebidos" : "Meus pedidos"}</h2>
       {admin && <p className="text-sm text-content-muted">Somente solicitações pendentes são exibidas.</p>}
       {!requests.length && <p role="status" className="text-sm text-content-muted">Nenhum pedido nesta página.</p>}
       {requests.map(row => <article key={row.id} className="space-y-3 rounded-xl border border-nav-border p-4">
-        <p className="break-words font-semibold text-content">{admin ? (normalizeDisplayName(row.applicant_name) ?? "Solicitante sem nome") : `Banda: ${row.band_id}`}</p>
+        {admin ? <div className="flex min-w-0 items-center gap-3">
+          <ProfileAvatar name={normalizeDisplayName(row.applicant_name) ?? "Solicitante sem nome"}
+            imageUrl={safeBandLogo(avatars.get(row.id) ?? null, supabaseOrigin ?? "https://invalid.local")} />
+          <p className="min-w-0 break-words font-semibold text-content [overflow-wrap:anywhere]">{normalizeDisplayName(row.applicant_name) ?? "Solicitante sem nome"}</p>
+        </div> : <p className="break-words font-semibold text-content">Banda: {row.band_id}</p>}
         <p className="break-all text-xs text-content-muted">Pedido {row.id}</p>
         <p className="text-sm text-content">{statusLabels[row.status]}</p>
         <time dateTime={row.requested_at} className="text-xs text-content-muted">{new Date(row.requested_at).toLocaleString("pt-BR")}</time>

@@ -27,9 +27,6 @@ export default function BandWorkspace({ bandId, children }: { bandId: string; ch
     <BandInfoContext.Provider value={setInfo}>
       <div className="flex min-w-0 flex-1 flex-col md:pl-64 lg:pl-72">
         <aside aria-label="Menu lateral da banda" className="fixed inset-y-0 left-0 z-20 hidden w-64 flex-col gap-7 overflow-y-auto overscroll-contain border-r border-nav-border bg-surface px-5 py-6 md:flex lg:w-72 lg:px-6">
-          <Link href="/dashboard" className="rounded text-xl font-bold tracking-tight text-content focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">
-            Band<span className="text-accent">Up</span>
-          </Link>
           {info && <div className="min-w-0 rounded-2xl bg-accent-soft p-4">
             <p className="text-[11px] font-semibold tracking-[0.16em] text-accent-strong uppercase">Banda ativa</p>
             <p className="mt-2 break-words text-base font-semibold text-content [overflow-wrap:anywhere]">{info.name}</p>

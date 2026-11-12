@@ -39,9 +39,12 @@ export default function PersonalAccountName() {
         timer = window.setTimeout(() => { void refresh(nextId); }, 0);
       });
       void refresh();
+      const onProfileUpdated = () => { void refresh(verifiedUserId || undefined); };
+      window.addEventListener("bandup:personal-profile-updated", onProfileUpdated);
       return () => {
         active = false; generation++; window.clearTimeout(timer);
         listener.subscription.unsubscribe();
+        window.removeEventListener("bandup:personal-profile-updated", onProfileUpdated);
       };
     } catch { setName(null); }
     return () => { active = false; generation++; window.clearTimeout(timer); };

@@ -1,12 +1,14 @@
 "use client";
 
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import Link from "next/link";
 import PasswordInput from "@/components/password-input";
+import ProfileAvatar from "@/components/profile-avatar";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-
 import { normalizeDisplayName } from "@/lib/display-name";
+import { validateAvatarFile } from "@/lib/avatar-upload";
+import { discardAvatarDraft, saveAvatarDraft } from "@/lib/avatar-draft";
 
 const emailPattern = String.raw`[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+`;
 
@@ -28,6 +30,44 @@ export default function CadastroPage() {
   const submitting = useRef(false);
   const [displayName, setDisplayName] = useState("");
   const [emailError, setEmailError] = useState("");
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarError, setAvatarError] = useState("");
+  const [photoPending, setPhotoPending] = useState(false);
+  const [draftUnavailable, setDraftUnavailable] = useState(false);
+  const previewUrl = useRef<string | null>(null);
+  const avatarInput = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => () => {
+    if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
+  }, []);
+
+  function clearAvatarSelection() {
+    if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
+    previewUrl.current = null;
+    setAvatarFile(null);
+    setAvatarPreview(null);
+    if (avatarInput.current) avatarInput.current.value = "";
+  }
+
+  function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0] ?? null;
+    setAvatarError("");
+    if (!file) return;
+
+    const validationError = validateAvatarFile(file);
+    if (validationError) {
+      clearAvatarSelection();
+      setAvatarError(validationError);
+      event.currentTarget.value = "";
+      return;
+    }
+
+    if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
+    previewUrl.current = URL.createObjectURL(file);
+    setAvatarFile(file);
+    setAvatarPreview(previewUrl.current);
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -70,7 +110,19 @@ export default function CadastroPage() {
       }
       setPassword("");
       setConfirmation("");
-      if (!signUpError && data.session) {
+
+      // No Storage or profile mutation during signup, regardless of its session.
+      // Never bind a draft to an unverified/obfuscated signUp user ID.
+      try {
+        if (avatarFile) {
+          await saveAvatarDraft(avatarFile, normalizedEmail);
+          setPhotoPending(true);
+        } else await discardAvatarDraft();
+      } catch {
+        setDraftUnavailable(Boolean(avatarFile));
+      }
+      clearAvatarSelection();
+      if (!signUpError && data?.session) {
         router.replace("/dashboard");
         return;
       }
@@ -125,6 +177,8 @@ export default function CadastroPage() {
                 <div role="status" className="rounded-xl border border-accent-border bg-accent-soft p-5 text-sm leading-6 text-content">
                   <h3 className="font-semibold">Confira seu e-mail</h3>
                   <p className="mt-2">Se o cadastro puder ser concluído com este e-mail, você receberá as instruções de confirmação. Você precisa ter acesso ao e-mail cadastrado. Confira a caixa de entrada e o spam e abra o link mais recente. Após uma confirmação válida, sua sessão será verificada para abrir o dashboard automaticamente. Se a sessão não for iniciada ou você já possui uma conta, acesse o login.</p>
+                  {photoPending && <p className="mt-3">Após entrar nesta conta, confirme o envio da foto no seu painel. A seleção pode ser retomada neste navegador por até 24 horas.</p>}
+                  {draftUnavailable && <p className="mt-3">Não foi possível guardar a foto neste navegador. Após entrar, selecione-a novamente no painel. Você pode continuar sem foto.</p>}
                 </div>
               ) : <form onSubmit={handleSubmit} className="space-y-5">
                 <div>
@@ -133,6 +187,22 @@ export default function CadastroPage() {
                     value={displayName} onChange={event => setDisplayName(event.target.value)} aria-describedby="display-name-help"
                     className="w-full min-w-0 rounded-xl border border-outline bg-surface px-4 py-3 text-base text-content outline-none focus:border-input-focus focus:ring-4 focus:ring-input-ring" />
                   <p id="display-name-help" className="mt-2 text-xs text-content-muted">Como deseja se apresentar às bandas. Não use seu e-mail.</p>
+                </div>
+                <div>
+                  <label htmlFor="avatar-file" className="mb-2 block text-sm font-medium text-content-label">Foto de perfil <span className="font-normal text-content-muted">(opcional)</span></label>
+                  <div className="flex items-center gap-4">
+                    <ProfileAvatar name={displayName.trim() || "Seu perfil"} imageUrl={avatarPreview} />
+                    <div className="min-w-0 flex-1">
+                      <input ref={avatarInput} id="avatar-file" name="avatar" type="file" accept="image/jpeg,image/png,image/webp"
+                        aria-describedby="avatar-file-help" disabled={isLoading} onChange={handleAvatarChange}
+                        className="block w-full min-w-0 text-sm text-content-muted file:mr-3 file:min-h-10 file:rounded-lg file:border-0 file:bg-accent-soft file:px-3 file:py-2 file:font-semibold file:text-brand" />
+                      {avatarPreview && <button type="button" onClick={clearAvatarSelection} disabled={isLoading}
+                        className="mt-2 min-h-9 text-xs font-semibold text-content-muted underline disabled:opacity-60">Remover foto</button>}
+                    </div>
+                  </div>
+                  <p id="avatar-file-help" className="mt-2 text-xs text-content-muted">JPG, PNG ou WebP, até 2 MB. A foto ficará temporariamente neste navegador; o envio será confirmado no painel após entrar na conta.</p>
+                  {avatarError && <p role="alert" className="mt-2 text-sm text-danger">{avatarError}</p>}
+                  {avatarPreview && <p role="status" className="mt-2 text-xs text-content-muted">Prévia da foto selecionada.</p>}
                 </div>
                 <div>
                   <label htmlFor="email" className="mb-2 block text-sm font-medium text-content-label">

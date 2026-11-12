@@ -17,7 +17,7 @@ function hasSupabaseConfiguration() {
 }
 export const BAND_ENTRY_BACKEND_VALIDATED = hasSupabaseConfiguration();
 export type EntryStatus = "pending" | "approved" | "rejected" | "cancelled";
-export type DiscoveredBand = { band_id: string; name: string };
+export type DiscoveredBand = { band_id: string; name: string; logo_url: string | null };
 export type EntryRequest = {
   id: string; band_id: string; requester_id: string; applicant_name: string;
   status: EntryStatus; requested_at: string; decided_at: string | null;
@@ -91,10 +91,11 @@ export function createBandEntryService(client: SupabaseClient) {
     async discover(after: string | null = null): Promise<DiscoveredBand[]> {
       await actor();
       if (after) requireId(after);
-      const rows = await rpc<unknown>("bandup_discover_bands", { p_after: after, p_limit: pageSize });
+      const rows = await rpc<unknown>("bandup_discover_bands_v2", { p_after: after, p_limit: pageSize });
       if (!Array.isArray(rows) || rows.some(row => !row || !uuid(row.band_id) || typeof row.display_name !== "string")) throw entryError(null);
       // Keep the public search contract narrow even if a server returns extra fields.
-      return rows.map(row => ({ band_id: row.band_id, name: row.display_name }));
+      return rows.map(row => ({ band_id: row.band_id, name: row.display_name,
+        logo_url: typeof row.logo_url === "string" ? row.logo_url : null }));
     },
     ownRequests: (offset = 0) => requests(undefined, offset),
     async pendingRequest(bandId: string): Promise<EntryRequest | null> {
@@ -121,6 +122,21 @@ export function createBandEntryService(client: SupabaseClient) {
       return "eligible";
     },
     adminRequests: (bandId: string, offset = 0, pendingOnly = false) => requests(bandId, offset, pendingOnly),
+    async pendingRequestAvatars(bandId: string, requestIds: string[]): Promise<Map<string, string | null>> {
+      if (requestIds.length > pageSize) throw entryError({ code: "22023" });
+      requestIds.forEach(requireId);
+      const ids = [...new Set(requestIds)];
+      const avatars = new Map<string, string | null>();
+      if (!ids.length) return avatars;
+      await actor(bandId);
+      const rows = await rpc<unknown>("bandup_pending_request_avatars", { p_band_id: bandId, p_request_ids: ids });
+      if (!Array.isArray(rows)) throw entryError(null);
+      for (const row of rows) {
+        if (!row || typeof row.request_id !== "string" || !ids.includes(row.request_id)) continue;
+        avatars.set(row.request_id, typeof row.avatar_url === "string" ? row.avatar_url : null);
+      }
+      return avatars;
+    },
     async getRequest(id: string, bandId?: string): Promise<EntryRequest | null> {
       requireId(id);
       const userId = await actor(bandId);

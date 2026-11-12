@@ -41,13 +41,43 @@ function fixture() {
     async rpc(name, args) {
       state.calls.push({ name, args });
       if (state.error) return { data: null, error: state.error };
-      const data = name === 'bandup_request_entry' ? id : name === 'bandup_discover_bands' ? typeof state.searchRows === 'function' ? state.searchRows(args) : state.searchRows : null;
+      const data = name === 'bandup_request_entry' ? id : name === 'bandup_pending_request_avatars' ? state.avatarRows
+        : name === 'bandup_discover_bands_v2' ? typeof state.searchRows === 'function' ? state.searchRows(args) : state.searchRows : null;
       return { data, error: null };
     },
   };
   return { state, client, api: demo.exports.createBandEntryService(client) };
 }
 const denied = (operation, code) => assert.rejects(operation, error => error.code === code);
+
+test('request avatars use one bounded RPC and associate only requested IDs regardless of return order', async () => {
+  const f = fixture(), second = 'c0000000-0000-0000-0000-000000000002';
+  f.state.avatarRows = [{ request_id: second, avatar_url: 'second-photo' },
+    { request_id: id, avatar_url: null }, { request_id: otherBand, avatar_url: 'unrequested' }];
+  const result = await f.api.pendingRequestAvatars(band, [id, second, id]);
+  assert.equal(result.get(second), 'second-photo'); assert.equal(result.get(id), null);
+  assert.equal(result.has(otherBand), false);
+  assert.deepEqual(JSON.parse(JSON.stringify(f.state.calls.filter(c => c?.name))), [{
+    name: 'bandup_pending_request_avatars', args: { p_band_id: band, p_request_ids: [id, second] },
+  }]);
+  assert.equal(f.state.queries.some(q => q.table !== 'band_members'), false);
+});
+
+test('request avatar service skips empty batches, rejects invalid/oversized input and enforces admin checks', async () => {
+  const f = fixture(); assert.equal((await f.api.pendingRequestAvatars(band, [])).size, 0);
+  assert.equal(f.state.calls.length, 0);
+  for (const ids of [Array(21).fill(id), ['invalid']]) await denied(() => f.api.pendingRequestAvatars(band, ids), '22023');
+  assert.equal(f.state.calls.length, 0);
+  f.state.role = 'member'; await denied(() => f.api.pendingRequestAvatars(band, [id]), '42501');
+  assert.equal(f.state.calls.filter(c => c?.name).length, 0);
+});
+
+test('request avatar RPC errors propagate independently and non-string URLs become missing avatars', async () => {
+  const f = fixture(); f.state.error = { code: '42501' };
+  await denied(() => f.api.pendingRequestAvatars(band, [id]), '42501');
+  f.state.error = null; f.state.avatarRows = [{ request_id: id, avatar_url: {} }];
+  assert.equal((await f.api.pendingRequestAvatars(band, [id])).get(id), null);
+});
 
 test('feature is enabled by valid configured Supabase URL and publishable key in any deployment', async () => {
   const source = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
@@ -97,7 +127,7 @@ test('search and entry RPC arguments never supply user identity or role', async 
   await api.cancel(id); await api.decide(band, id, 'approved');
   const calls = JSON.parse(JSON.stringify(state.calls.filter(x => typeof x === 'object')));
   assert.deepEqual(calls, [
-    { name: 'bandup_discover_bands', args: { p_after: null, p_limit: 20 } },
+    { name: 'bandup_discover_bands_v2', args: { p_after: null, p_limit: 20 } },
     { name: 'bandup_request_entry', args: { p_band_id: band, p_applicant_name: 'Musician' } },
     { name: 'bandup_cancel_entry', args: { p_request_id: id } },
     { name: 'bandup_decide_entry', args: { p_request_id: id, p_decision: 'approved' } },
@@ -201,14 +231,14 @@ test('entry eligibility distinguishes current membership, pending request and el
   assert.equal(state.calls.filter(call => call?.name === 'bandup_request_entry').length, 0);
 });
 
-test('all-band search ignores legacy directory state and returns only ID and name', async () => {
+test('all-band search ignores legacy directory state and returns only ID, name and optional logo', async () => {
   const { api, state } = fixture();
   state.searchRows = [{ band_id: band, display_name: 'Same name', description: 'private', members: ['private'] },
     { band_id: otherBand, display_name: 'Same name', accepting_requests: false }];
   const found = await api.discover();
-  assert.deepEqual(JSON.parse(JSON.stringify(found)), [{ band_id: band, name: 'Same name' }, { band_id: otherBand, name: 'Same name' }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(found)), [{ band_id: band, name: 'Same name', logo_url: null }, { band_id: otherBand, name: 'Same name', logo_url: null }]);
   assert.equal(state.queries.length, 0, 'search must not read bands or directory directly');
-  assert.equal(state.calls.find(call => call?.name).name, 'bandup_discover_bands');
+  assert.equal(state.calls.find(call => call?.name).name, 'bandup_discover_bands_v2');
 });
 
 
@@ -229,12 +259,27 @@ test('new search contract preserves UUID pagination and rejects malformed result
   state.searchRows = args => args.p_after === null ? [{ band_id: band, display_name: 'Same' }] : [{ band_id: otherBand, display_name: 'Same' }];
   assert.equal((await api.discover())[0].band_id, band);
   assert.equal((await api.discover(band))[0].band_id, otherBand);
-  const pages = state.calls.filter(c => c?.name === 'bandup_discover_bands');
+  const pages = state.calls.filter(c => c?.name === 'bandup_discover_bands_v2');
   assert.deepEqual(pages.map(c => c.args.p_after), [null, band]);
   for (const rows of [null, [{ band_id: 'invalid', name: 'Band' }], [{ band_id: band, name: 'Unexpected contract' }]]) {
     state.searchRows = rows;
     await assert.rejects(() => api.discover());
   }
+});
+
+test('discovery v2 forwards nullable logos and strips all other server fields without extra queries', async () => {
+  const { api, state } = fixture();
+  const logo = 'https://project.supabase.co/storage/v1/object/public/band-logos/' + band + '/photo.png';
+  for (const [value, expected] of [[logo, logo], [null, null], [undefined, null], [42, null]]) {
+    state.searchRows = [{ band_id: band, display_name: 'Band', logo_url: value,
+      summary: 'private', description: 'private', members: ['private'] }];
+    assert.deepEqual(JSON.parse(JSON.stringify(await api.discover())), [{ band_id: band, name: 'Band', logo_url: expected }]);
+  }
+  assert.equal(state.queries.length, 0);
+  state.signedIn = false;
+  const before = state.calls.filter(c => c?.name).length;
+  await denied(() => api.discover(), '42501');
+  assert.equal(state.calls.filter(c => c?.name).length, before);
 });
 
 test('server duplicate refusal is propagated without a repeated write', async () => {

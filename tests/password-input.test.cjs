@@ -29,7 +29,15 @@ function fixture(file, initial = {}, result = { data: { session: {} }, error: nu
         signInWithPassword: async args => { calls.push(args); return result; },
       } }) };
       if (name === '@/lib/display-name') return { normalizeDisplayName: value => value || null };
+      if (name === '@/lib/avatar-upload') {
+        const avatar = { exports: {} };
+        vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(__dirname, '../src/lib/avatar-upload.ts'), 'utf8'), {
+          compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+        }).outputText, { module: avatar, exports: avatar.exports });
+        return avatar.exports;
+      }
       if (name === '@/lib/email-confirmation') return {};
+      if (name === '@/lib/avatar-draft') return {};
       return require(name);
     },
   });

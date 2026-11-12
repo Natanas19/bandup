@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/band-logo-cleanup",
+      "schedule": "0 4 * * *"
+    }
+  ]
+}
