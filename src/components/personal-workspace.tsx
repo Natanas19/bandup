@@ -34,10 +34,10 @@ export function PersonalNavigation({ sidebar = false }: { sidebar?: boolean }) {
 }
 
 export default function PersonalWorkspace({ children }: { children: ReactNode }) {
-  return <div className="flex min-w-0 flex-1 flex-col md:pl-64 lg:pl-72">
-    <aside aria-label="Menu lateral do Meu Painel" className="fixed inset-y-0 left-0 z-20 hidden w-64 flex-col gap-7 overflow-y-auto overscroll-contain border-r border-nav-border bg-surface px-5 py-6 md:flex lg:w-72 lg:px-6">
-      <Link href="/dashboard" className="rounded text-xl font-bold tracking-tight text-content focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">Band<span className="text-accent">Up</span></Link>
-      <div className="rounded-2xl bg-accent-soft p-4">
+  return <div className="workspace-theme flex min-w-0 flex-1 flex-col md:pl-64 lg:pl-72">
+    <aside aria-label="Menu lateral do Meu Painel" className="fixed inset-y-0 left-0 z-20 hidden w-64 flex-col gap-8 overflow-y-auto overscroll-contain border-r border-nav-border bg-surface px-5 py-6 md:flex lg:w-72 lg:px-6">
+      <Link href="/dashboard" className="flex min-h-16 w-full shrink-0 items-center rounded text-[2.625rem] leading-none font-bold tracking-tight text-content focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">Band<span className="text-accent">Up</span></Link>
+      <div className="min-w-0 shrink-0 rounded-2xl bg-accent-soft p-4">
         <p className="text-xs font-semibold uppercase tracking-widest text-accent">Área pessoal</p>
         <PersonalAccountName />
         <p className="mt-1 text-xs leading-5 text-content-subtle">Seu espaço em todas as suas bandas.</p>

@@ -139,10 +139,10 @@ export default function DashboardPage() {
                 </h1>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-content-muted sm:text-base">Acompanhe o que está acontecendo nas bandas de que você participa.</p>
               </div>
-              {bands.length > 0 && <Link href="/dashboard/bandas" className="relative mt-5 inline-flex min-h-11 items-center gap-2 rounded-control border border-outline px-4 py-2 text-sm font-semibold text-content hover:border-accent-border hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus lg:mt-0">Ver minhas bandas <NavigationIcon name="Users" className="h-4 w-4" /></Link>}
+              {bands.length > 0 && <Link href="/dashboard/bandas" className="workspace-primary-action relative mt-5 inline-flex min-h-11 items-center gap-2 rounded-control border border-outline px-4 py-2 text-sm font-semibold text-content hover:border-accent-border hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus lg:mt-0">Ver minhas bandas <NavigationIcon name="Users" className="h-4 w-4" /></Link>}
             </section>
 
-            <Link href="/dashboard/perfil" className="mt-6 inline-flex min-h-11 items-center rounded-control border border-accent-border px-4 py-2 text-sm font-semibold text-brand hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">Gerenciar meu perfil</Link>
+            <Link href="/dashboard/perfil" className="workspace-primary-action mt-6 inline-flex min-h-11 items-center rounded-control border border-accent-border px-4 py-2 text-sm font-semibold text-brand hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">Gerenciar meu perfil</Link>
 
             {bands.length === 0 && <section className="mt-6 grid gap-6 rounded-panel border border-accent-border bg-accent-soft/40 p-5 sm:p-7 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center lg:gap-7 lg:p-8">
               <div aria-hidden="true" className="flex h-14 w-14 items-center justify-center rounded-panel border border-accent-border bg-surface text-accent"><NavigationIcon name="Users" className="h-7 w-7" /></div>

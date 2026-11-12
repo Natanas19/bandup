@@ -127,7 +127,7 @@ export default function NewBandPage() {
   }
 
   return (
-    <main className="flex flex-1 items-center justify-center px-6 py-16">
+    <main className="workspace-theme flex flex-1 items-center justify-center px-6 py-16">
       <section className="w-full max-w-xl rounded-3xl border border-nav-border bg-surface p-8 shadow-app-dashboard sm:p-12">
         <Link href="/dashboard" className="text-sm font-semibold text-accent hover:text-accent-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">
           ← Voltar ao dashboard

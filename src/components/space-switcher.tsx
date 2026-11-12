@@ -80,7 +80,7 @@ export default function SpaceSwitcher({ bandId, bandName }: { bandId?: string; b
     supabaseOrigin ?? "https://invalid.local",
   );
 
-  return <section aria-label="Alternar espaço" className="w-full min-w-0 sm:w-auto sm:min-w-72">
+  return <section aria-label="Alternar espaço" className="workspace-profile-switcher w-full min-w-0 sm:w-auto sm:min-w-72">
     <details ref={selector} className="group relative">
       <summary aria-label={`Perfis. Perfil selecionado: ${selectedName}. Abrir seletor`} className="flex min-h-14 w-full cursor-pointer list-none items-center gap-3 rounded-panel border border-outline bg-surface px-3 py-2.5 text-left shadow-app-card transition hover:border-accent-border focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus [&::-webkit-details-marker]:hidden">
         <ProfileAvatar name={selectedName} imageUrl={selectedImage} />

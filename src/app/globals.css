@@ -212,3 +212,228 @@ body {
   color: var(--foreground);
   font-family: var(--font-inter), var(--font-sans);
 }
+
+/* Workspace colors are light-only; login and both dark modes retain their palette. */
+:root[data-theme="light"] .workspace-theme {
+  --background: #f3effb;
+  --surface: 254 253 255;
+  --surface-muted: 248 245 253;
+  --surface-raised: 243 239 252;
+  --accent-soft: 243 239 252;
+  --outline: 220 210 239;
+  --outline-subtle: 234 226 246;
+  --outline-strong: 151 133 178;
+  --nav-border: 221 211 241;
+  --focus: 139 92 246;
+  background-color: var(--background);
+}
+
+:root[data-theme="light"] .workspace-theme > aside {
+  --content: 255 255 255;
+  --content-strong: 255 255 255;
+  --content-muted: 237 233 254;
+  --content-subtle: 221 214 254;
+  --content-faint: 237 233 254;
+  --brand: 255 255 255;
+  --accent: 221 214 254;
+  --accent-strong: 221 214 254;
+  --accent-soft: 76 29 149;
+  --disabled-surface: 76 29 149;
+  --outline-subtle: 139 92 246;
+  --nav-border: 124 58 237;
+  --focus: 221 214 254;
+  --danger-text: 254 226 226;
+  background-image:
+    radial-gradient(circle at 110% 0%, transparent 139px, rgb(255 255 255 / 0.06) 140px, transparent 141px),
+    radial-gradient(circle at -25% 100%, transparent 189px, rgb(255 255 255 / 0.05) 190px, transparent 191px),
+    linear-gradient(135deg, #6d28d9, #5b21b6, #1e1b4b);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .workspace-theme {
+    --background: #f3effb;
+    --surface: 254 253 255;
+    --surface-muted: 248 245 253;
+    --surface-raised: 243 239 252;
+    --accent-soft: 243 239 252;
+    --outline: 220 210 239;
+    --outline-subtle: 234 226 246;
+    --outline-strong: 151 133 178;
+    --nav-border: 221 211 241;
+    --focus: 139 92 246;
+    background-color: var(--background);
+  }
+
+  :root:not([data-theme]) .workspace-theme > aside {
+    --content: 255 255 255;
+    --content-strong: 255 255 255;
+    --content-muted: 237 233 254;
+    --content-subtle: 221 214 254;
+    --content-faint: 237 233 254;
+    --brand: 255 255 255;
+    --accent: 221 214 254;
+    --accent-strong: 221 214 254;
+    --accent-soft: 76 29 149;
+    --disabled-surface: 76 29 149;
+    --outline-subtle: 139 92 246;
+    --nav-border: 124 58 237;
+    --focus: 221 214 254;
+    --danger-text: 254 226 226;
+    background-image:
+      radial-gradient(circle at 110% 0%, transparent 139px, rgb(255 255 255 / 0.06) 140px, transparent 141px),
+      radial-gradient(circle at -25% 100%, transparent 189px, rgb(255 255 255 / 0.05) 190px, transparent 191px),
+      linear-gradient(135deg, #6d28d9, #5b21b6, #1e1b4b);
+  }
+}
+
+/* Shared light-only workspace accents. Decorative arcs are non-interactive backgrounds. */
+:root[data-theme="light"] .workspace-theme > aside > .rounded-2xl {
+  background-color: rgb(76 29 149 / 0.65);
+  box-shadow: inset 0 0 0 1px rgb(221 214 254 / 0.5);
+}
+
+:root[data-theme="light"] .workspace-theme > aside a[aria-current="page"] {
+  background-color: #7c3aed;
+  color: #fff;
+}
+
+:root[data-theme="light"] .workspace-theme .workspace-primary-action {
+  border-color: rgb(var(--primary));
+  background-color: rgb(var(--primary));
+  color: rgb(var(--on-primary));
+}
+
+:root[data-theme="light"] .workspace-theme .workspace-primary-action:hover {
+  border-color: rgb(var(--primary-hover));
+  background-color: rgb(var(--primary-hover));
+}
+
+:root[data-theme="light"] .workspace-theme .workspace-profile-switcher > details > summary {
+  border-color: rgb(var(--accent-border));
+  background-image: linear-gradient(135deg, rgb(var(--surface)), rgb(var(--surface-raised)));
+}
+
+:root[data-theme="light"] .workspace-theme .workspace-profile-switcher > details > summary > span > span:first-child,
+:root[data-theme="light"] .workspace-theme .workspace-profile-switcher > details > summary > svg {
+  color: rgb(var(--accent));
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .workspace-theme > aside > .rounded-2xl {
+    background-color: rgb(76 29 149 / 0.65);
+    box-shadow: inset 0 0 0 1px rgb(221 214 254 / 0.5);
+  }
+
+  :root:not([data-theme]) .workspace-theme > aside a[aria-current="page"] {
+    background-color: #7c3aed;
+    color: #fff;
+  }
+
+  :root:not([data-theme]) .workspace-theme .workspace-primary-action {
+    border-color: rgb(var(--primary));
+    background-color: rgb(var(--primary));
+    color: rgb(var(--on-primary));
+  }
+
+  :root:not([data-theme]) .workspace-theme .workspace-primary-action:hover {
+    border-color: rgb(var(--primary-hover));
+    background-color: rgb(var(--primary-hover));
+  }
+
+  :root:not([data-theme]) .workspace-theme .workspace-profile-switcher > details > summary {
+    border-color: rgb(var(--accent-border));
+    background-image: linear-gradient(135deg, rgb(var(--surface)), rgb(var(--surface-raised)));
+  }
+
+  :root:not([data-theme]) .workspace-theme .workspace-profile-switcher > details > summary > span > span:first-child,
+  :root:not([data-theme]) .workspace-theme .workspace-profile-switcher > details > summary > svg {
+    color: rgb(var(--accent));
+  }
+}
+
+/* Final light-only selector and mobile accents; geometry and dark styles are unchanged. */
+:root[data-theme="light"] .workspace-theme .workspace-profile-switcher > details > div {
+  border-color: rgb(var(--accent-border));
+}
+
+:root[data-theme="light"] .workspace-theme header.sticky {
+  border-color: rgb(var(--accent-border));
+  background-color: rgb(var(--surface-raised) / 0.96);
+}
+
+:root[data-theme="light"] .workspace-theme nav.fixed {
+  --focus: 221 214 254;
+  border-color: #7c3aed;
+  background-color: #6d28d9;
+  background-image: linear-gradient(135deg, #6d28d9, #5b21b6, #1e1b4b);
+}
+
+:root[data-theme="light"] .workspace-theme nav.fixed a {
+  color: #fff;
+}
+
+:root[data-theme="light"] .workspace-theme nav.fixed a[aria-current="page"],
+:root[data-theme="light"] .workspace-theme nav.fixed a:hover {
+  background-color: #7c3aed;
+  color: #fff;
+}
+
+:root[data-theme="light"] .workspace-theme nav.fixed a[aria-current="page"]::before {
+  background-color: #fff;
+}
+
+:root[data-theme="light"] .workspace-theme nav.relative > button[aria-expanded] {
+  border-color: rgb(var(--accent-border));
+  background-color: rgb(var(--accent-soft));
+  color: rgb(var(--brand));
+}
+
+:root[data-theme="light"] .workspace-theme nav.relative > button[aria-expanded]:hover,
+:root[data-theme="light"] .workspace-theme nav.relative > button[aria-expanded="true"] {
+  border-color: rgb(var(--primary));
+  background-color: rgb(var(--surface-raised));
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .workspace-theme .workspace-profile-switcher > details > div {
+    border-color: rgb(var(--accent-border));
+  }
+
+  :root:not([data-theme]) .workspace-theme header.sticky {
+    border-color: rgb(var(--accent-border));
+    background-color: rgb(var(--surface-raised) / 0.96);
+  }
+
+  :root:not([data-theme]) .workspace-theme nav.fixed {
+    --focus: 221 214 254;
+    border-color: #7c3aed;
+    background-color: #6d28d9;
+    background-image: linear-gradient(135deg, #6d28d9, #5b21b6, #1e1b4b);
+  }
+
+  :root:not([data-theme]) .workspace-theme nav.fixed a {
+    color: #fff;
+  }
+
+  :root:not([data-theme]) .workspace-theme nav.fixed a[aria-current="page"],
+  :root:not([data-theme]) .workspace-theme nav.fixed a:hover {
+    background-color: #7c3aed;
+    color: #fff;
+  }
+
+  :root:not([data-theme]) .workspace-theme nav.fixed a[aria-current="page"]::before {
+    background-color: #fff;
+  }
+
+  :root:not([data-theme]) .workspace-theme nav.relative > button[aria-expanded] {
+    border-color: rgb(var(--accent-border));
+    background-color: rgb(var(--accent-soft));
+    color: rgb(var(--brand));
+  }
+
+  :root:not([data-theme]) .workspace-theme nav.relative > button[aria-expanded]:hover,
+  :root:not([data-theme]) .workspace-theme nav.relative > button[aria-expanded="true"] {
+    border-color: rgb(var(--primary));
+    background-color: rgb(var(--surface-raised));
+  }
+}
