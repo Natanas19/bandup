@@ -14,12 +14,19 @@ function loader(overrides = {}, globals = {}) {
     const mod = { exports: {} }; cache.set(file, mod);
     vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8'), {
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
-    }).outputText, { module: mod, exports: mod.exports, ...globals, require(name) {
+    }).outputText, { module: mod, exports: mod.exports, URL,
+      process: { env: { NODE_ENV: 'test', NEXT_PUBLIC_SUPABASE_URL: 'https://fixture.supabase.co' } },
+      ...globals, require(name) {
       if (name in overrides) return overrides[name];
       if (name === 'next/link' || name === '@/components/theme-selector' || name === '@/components/display-name-settings') return { __esModule: true, default: () => null };
       if (name.startsWith('@/')) {
         const base = path.join('src', name.slice(2));
         return load([base + '.ts', base + '.tsx'].find(file => fs.existsSync(file)));
+      }
+      if (name.startsWith('./') || name.startsWith('../')) {
+        const base = path.resolve(path.dirname(file), name);
+        const target = [base + '.ts', base + '.tsx'].find(file => fs.existsSync(file));
+        if (target) return load(target);
       }
       return require(name);
     } });

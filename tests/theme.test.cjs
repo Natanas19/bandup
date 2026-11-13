@@ -567,11 +567,11 @@ test("description link variants use semantic colors while preserving safe URLs a
 test("members themes cover loading, access failures, empty list and both member roles", () => {
   const file = "src/app/bandas/[bandId]/membros/page.tsx";
   for (const state of ["loading", "unauthenticated", "unavailable", "error", "ready"]) {
-    const html = renderWorkspace(file, [state, "Band", []]);
+    const html = renderWorkspace(file, [state, "Band", null, []]);
     assertThemedPlanningPage(html);
     if (state === "error") assert.match(html, /role="alert"/);
   }
-  const html = renderWorkspace(file, ["ready", "Band", [{ user_id: "one", role: "admin", label: "Admin" }, { user_id: "two", role: "member", label: "Member" }]]);
+  const html = renderWorkspace(file, ["ready", "Band", null, [{ user_id: "one", role: "admin", label: "Admin" }, { user_id: "two", role: "member", label: "Member" }]]);
   assertThemedPlanningPage(html);
   assert.equal((html.match(/<article /g) ?? []).length, 2);
   assert.match(html, /bg-disabled-surface text-content-label|bg-disabled-surface[^\"]*text-content-label/);
@@ -728,7 +728,12 @@ test("shared band layout reserves desktop space and retains a fixed sidebar acro
     assert.equal((html.match(/<aside /g) ?? []).length, 1);
     assert.ok(html.includes("Page content"));
     if (section === "links") {
-      assert.equal(html.includes('aria-current="page"'), false);
+      // The profile switcher independently marks the current band profile.
+      // Only the workspace section navigation has no active destination here.
+      const navigation = html.match(/<nav aria-label="Navegação da banda"[\s\S]*?<\/nav>/)?.[0];
+      assert.ok(navigation);
+      assert.doesNotMatch(navigation, /aria-current="page"/);
+      assert.match(html, /<a\b[^>]*aria-current="page"[^>]*href="\/bandas\/theme-band"/);
       assert.equal(html.includes(`href="/bandas/theme-band/${section}"`), false);
       assert.equal((html.match(/aria-disabled="true"/g) ?? []).length, 12);
     } else if (section === "perfil-publico") {

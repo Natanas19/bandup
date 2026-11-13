@@ -268,9 +268,9 @@ test('personal profile alone and a loading band keep one current row and no empt
   }
 });
 
-test('band layout removes duplicate branding but keeps desktop navigation and the primary profile header', () => {
+test('band layout keeps one sidebar brand, desktop navigation and the primary profile header', () => {
   const band = source('src/components/band-workspace.tsx');
-  assert.doesNotMatch(band, /Band<span/);
+  assert.equal((band.match(/Band<span/g) ?? []).length, 1);
   assert.match(band, /<SpaceSwitcherHeader bandId=\{bandId\}/);
   assert.match(band, /<BandNavigation bandId=\{bandId\} activeSection=\{activeSection\} variant="sidebar"/);
   assert.match(band, /hidden w-64[\s\S]*md:flex/);
@@ -278,7 +278,7 @@ test('band layout removes duplicate branding but keeps desktop navigation and th
   assert.match(band, /Banda ativa/);
   assert.match(band, /\{info.name\}/);
   assert.match(band, /info.role === "admin" \? "Administrador" : "Membro"/);
-  assert.match(band, /min-w-0 rounded-2xl bg-accent-soft p-4/);
+  assert.match(band, /min-w-0 shrink-0 rounded-2xl bg-accent-soft p-4/);
   assert.match(band, /href="\/dashboard"/);
   assert.match(source('src/components/personal-workspace.tsx'), /Band<span className="text-accent">Up<\/span>/);
 });

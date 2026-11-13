@@ -93,6 +93,7 @@ test('members header uses its existing band read and preserves mobile counter pl
       '@/lib/supabase/client': { getSupabaseBrowserClient: () => client },
       '@/lib/band-entry': { BAND_ENTRY_BACKEND_VALIDATED: false },
       '@/lib/display-name': { loadMemberNames: async () => new Map([['self', 'Você']]) },
+      '@/lib/member-avatars': { loadMemberAvatars: async () => new Map() },
       '@/lib/record-permissions': { recordWriteError: () => '' },
       '@/components/band-workspace': { BandWorkspaceInfo: () => null },
     });
