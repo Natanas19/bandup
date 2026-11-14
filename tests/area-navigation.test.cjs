@@ -296,7 +296,7 @@ test('settings and account actions are grouped in both desktop sidebars', () => 
     assert.match(source(file), /<WorkspaceSettingsNavigation/);
   }
   const header = source('src/components/space-switcher.tsx');
-  assert.match(header, /<WorkspaceSettingsMenu href=\{settingsHref\} showBandFeatures=\{!!bandId\}/);
+  assert.match(header, /<WorkspaceSettingsMenu href=\{settingsHref\}\s*\/>/);
   assert.match(header, /justify-between/);
   assert.match(header, /md:flex md:justify-end/);
   assert.match(header, /shrink-0 md:hidden/);

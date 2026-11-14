@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 // Same lightweight, currentColor SVG approach as SocialPlatformIcon.
 const icons = {
+  ArrowUpRight: <path d="M7 17 17 7M7 7h10v10" />,
   LayoutDashboard: <><rect x="3" y="3" width="7" height="9" rx="1" /><rect x="14" y="3" width="7" height="5" rx="1" /><rect x="14" y="12" width="7" height="9" rx="1" /><rect x="3" y="16" width="7" height="5" rx="1" /></>,
   ListTodo: <><path d="m3 6 2 2 4-4M13 6h8M13 12h8M13 18h8" /><rect x="3" y="11" width="5" height="5" rx="1" /><path d="M3 21h5" /></>,
   CalendarDays: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 11h18M8 15h.01M12 15h.01M16 15h.01M8 18h.01M12 18h.01M16 18h.01" /></>,

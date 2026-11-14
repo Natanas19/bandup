@@ -403,6 +403,18 @@ test("dashboard themes cover loading, signed out, empty, populated and error sta
   }
 });
 
+test("personal overview task links use a decorative thin SVG arrow and preserve user emojis", () => {
+  const task = { id: "task-1", band_id: "band-1", bandName: "Band", title: "Ensaio ↗ 🎵", status: "todo", priority: "medium", due_date: null };
+  const html = renderWorkspace("src/app/dashboard/page.tsx", [{ id: "test-user" }, [], false, "", [task], 1, "", [], "", 0]);
+  const link = html.match(/<a\b[^>]*href="\/bandas\/band-1\/tarefas"[\s\S]*?<\/a>/)?.[0];
+  assert.ok(link);
+  assert.ok(link.includes(task.title));
+  assert.match(link, /<svg aria-hidden="true" focusable="false"[^>]*stroke="currentColor"/);
+  assert.match(link, /h-4 w-4 text-content-faint/);
+  assert.match(link, /<path d="M7 17 17 7M7 7h10v10"/);
+  assert.doesNotMatch(link, />↗<\/span>/);
+});
+
 test("overview has no secondary mobile header and preserves band identity and bottom navigation", () => {
   const name = "Band name preserved in content";
   const html = renderWorkspace("src/app/bandas/[bandId]/page.tsx", [
@@ -735,10 +747,10 @@ test("shared band layout reserves desktop space and retains a fixed sidebar acro
       assert.doesNotMatch(navigation, /aria-current="page"/);
       assert.match(html, /<a\b[^>]*aria-current="page"[^>]*href="\/bandas\/theme-band"/);
       assert.equal(html.includes(`href="/bandas/theme-band/${section}"`), false);
-      assert.equal((html.match(/aria-disabled="true"/g) ?? []).length, 12);
+      assert.equal((html.match(/aria-disabled="true"/g) ?? []).length, 8);
     } else if (section === "perfil-publico") {
       assert.match(html, /aria-current="page"[^>]*href="\/bandas\/theme-band\/perfil-publico"/);
-      assert.equal((html.match(/aria-disabled="true"/g) ?? []).length, 12);
+      assert.equal((html.match(/aria-disabled="true"/g) ?? []).length, 8);
     } else {
       assert.match(html, new RegExp(`aria-current="page"[^>]*href="/bandas/theme-band${section ? "/" + section : ""}"`));
     }
@@ -836,21 +848,21 @@ test("band bottom navigation keeps four active destinations and collapsed inform
   assert.match(html, /fixed inset-x-0 bottom-0[^\"]*md:hidden/);
 });
 
-test("band settings menu shows upcoming band sections only in the mobile band menu", () => {
+test("mobile settings retain functional controls without duplicating upcoming band destinations", () => {
   const loader = modules();
   const { WorkspaceSettingsMenu } = loader.load("src/components/workspace-settings.tsx");
   const bandHtml = renderToStaticMarkup(React.createElement(WorkspaceSettingsMenu, {
-    href: "/bandas/band/settings", showBandFeatures: true,
+    href: "/bandas/band/settings",
   }));
   const personalHtml = renderToStaticMarkup(React.createElement(WorkspaceSettingsMenu, {
     href: "/dashboard/configuracoes",
   }));
-  assert.equal((bandHtml.match(/aria-disabled="true"/g) ?? []).length, 6);
+  assert.equal((bandHtml.match(/aria-disabled="true"/g) ?? []).length, 2);
   assert.equal((personalHtml.match(/aria-disabled="true"/g) ?? []).length, 2);
   assert.ok(bandHtml.includes("Notifica"));
   assert.ok(bandHtml.includes("Privacidade"));
   for (const label of ["Perfil público", "Links", "Loja", "Ingressos"]) {
-    assert.ok(bandHtml.includes(label), `missing ${label} from band settings`);
+    assert.equal(bandHtml.includes(label), false);
     assert.equal(bandHtml.includes(`>${label}</a>`), false);
     assert.equal(personalHtml.includes(label), false);
     assert.equal(new RegExp(`<a[^>]*>[\\s\\S]*?${label}[\\s\\S]*?<\\/a>`).test(bandHtml), false);
@@ -858,7 +870,8 @@ test("band settings menu shows upcoming band sections only in the mobile band me
   assert.match(bandHtml, /max-h-\[calc\(100dvh-6rem\)\][^\"]*overflow-y-auto/);
   assert.equal(/tabindex=/i.test(bandHtml), false);
   assert.equal(/onclick=/i.test(bandHtml), false);
-  assert.match(fs.readFileSync(path.join(root, "src/components/workspace-settings.tsx"), "utf8"), /showBandFeatures && bandComingSoonItems\.map\(item => <span key=\{item\.label\} aria-disabled="true"/);
+  assert.match(bandHtml, /href="\/bandas\/band\/settings"/);
+  assert.match(bandHtml, />Sair<\/button>/);
 });
 
 function linksInteractionFixture(options = {}) {

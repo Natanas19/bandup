@@ -146,7 +146,7 @@ export function SpaceSwitcherHeader({ bandId, bandName, settingsHref }: { bandId
       <div className="min-w-0 flex-1 md:flex md:justify-end">
         <div className="w-full min-w-0 sm:w-auto"><SpaceSwitcher bandId={bandId} bandName={bandName} /></div>
       </div>
-      <div className="shrink-0 md:hidden"><WorkspaceSettingsMenu href={settingsHref} showBandFeatures={!!bandId} /></div>
+      <div className="shrink-0 md:hidden"><WorkspaceSettingsMenu href={settingsHref} /></div>
     </div>
   </header>;
 }

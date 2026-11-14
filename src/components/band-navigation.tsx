@@ -114,7 +114,7 @@ export default function BandNavigation({ bandId, activeSection, variant = "botto
     {isBottom && <div id={`${panelId}-extras`} aria-hidden={!isOpen}
       className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none ${isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
       <div className="min-h-0 overflow-hidden">
-        <ul className="mx-auto grid max-w-xl grid-cols-4 border-t border-nav-border">
+        <ul className="mx-auto grid max-w-xl grid-cols-4">
           {[comingSoonItems[0], comingSoonItems[1], comingSoonItems[3], comingSoonItems[2]].map(item => <li key={item.label}>
             <span aria-disabled="true" className="flex min-h-20 flex-col items-center justify-center gap-1 px-1 py-2 text-center text-[0.65rem] font-semibold text-content-faint">
               <NavigationIcon name={item.icon} />

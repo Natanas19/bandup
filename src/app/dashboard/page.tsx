@@ -172,7 +172,7 @@ export default function DashboardPage() {
                       : <ul className="mt-5 divide-y divide-outline-subtle">{tasks.slice(0, 4).map(task => <li key={`${task.band_id}:${task.id}`} className="py-4 first:pt-0 last:pb-0">
                         <Link href={`/bandas/${task.band_id}/tarefas`} className="group block rounded-control focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">
                           <p className="text-xs font-semibold text-accent">{task.bandName}</p>
-                          <div className="mt-1 flex items-start justify-between gap-3"><h3 className="min-w-0 break-words font-semibold text-content group-hover:text-brand">{task.title}</h3><span aria-hidden="true" className="text-content-faint">↗</span></div>
+                          <div className="mt-1 flex items-start justify-between gap-3"><h3 className="min-w-0 break-words font-semibold text-content group-hover:text-brand">{task.title}</h3><NavigationIcon name="ArrowUpRight" className="mt-0.5 h-4 w-4 text-content-faint" /></div>
                           <p className="mt-1 text-xs text-content-muted">{task.due_date ? `Prazo: ${formatTaskDate(task.due_date)}` : "Sem prazo definido"}</p>
                         </Link>
                       </li>)}</ul>}

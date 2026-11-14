@@ -46,6 +46,8 @@ test('handle toggles mobile extras while all four routes and the active state re
     const panel = tree.find(n => n.props?.id === trigger.props['aria-controls']);
     assert.equal(panel.props['aria-hidden'], !expanded);
     assert.match(panel.props.className, /motion-reduce:transition-none/);
+    assert.doesNotMatch(nodes(panel).find(n => n.type === 'ul').props.className, /border/);
+    assert.match(tree[0].props.className, /border-t border-nav-border/);
     const links = tree.filter(n => n.props?.href);
     assert.deepEqual(links.map(n => n.props.href), ['/bandas/band-a','/bandas/band-a/tarefas','/bandas/band-a/agenda','/bandas/band-a/membros']);
     assert.equal(links.find(n => n.props['aria-current'] === 'page').props.href, '/bandas/band-a/agenda');
