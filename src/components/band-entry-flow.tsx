@@ -39,7 +39,7 @@ function EntryFlow({ bandId, onMembersChanged }: { bandId?: string; onMembersCha
       const api = service.current ??= createBandEntryService(getSupabaseBrowserClient());
       const rows = bandId ? await api.adminRequests(bandId, offset, true) : await api.ownRequests(offset);
       if (!live.current || ticket !== generation.current) return;
-      setRequests(bandId ? rows.filter(row => row.status === "pending") : rows);
+      setRequests(rows.filter(row => row.status === "pending"));
       setDecision(null);
       setPhase("ready");
       if (bandId) {
@@ -113,14 +113,14 @@ function EntryFlow({ bandId, onMembersChanged }: { bandId?: string; onMembersCha
     <div className="space-y-4 rounded-2xl border border-nav-border bg-surface p-5">
       <h2 className="text-lg font-semibold text-content">{admin ? "Pedidos recebidos" : "Meus pedidos"}</h2>
       {admin && <p className="text-sm text-content-muted">Somente solicitações pendentes são exibidas.</p>}
-      {!requests.length && <p role="status" className="text-sm text-content-muted">Nenhum pedido nesta página.</p>}
+      {!requests.length && <p role="status" className="text-sm text-content-muted">{admin ? "Nenhum pedido nesta página." : offset === 0 ? "Você não tem pedidos pendentes." : "Nenhum pedido pendente nesta página."}</p>}
       {requests.map(row => <article key={row.id} className="space-y-3 rounded-xl border border-nav-border p-4">
         {admin ? <div className="flex min-w-0 items-center gap-3">
           <ProfileAvatar name={normalizeDisplayName(row.applicant_name) ?? "Solicitante sem nome"}
             imageUrl={safeBandLogo(avatars.get(row.id) ?? null, supabaseOrigin ?? "https://invalid.local")} />
           <p className="min-w-0 break-words font-semibold text-content [overflow-wrap:anywhere]">{normalizeDisplayName(row.applicant_name) ?? "Solicitante sem nome"}</p>
         </div> : <p className="break-words font-semibold text-content">Banda: {row.band_id}</p>}
-        <p className="break-all text-xs text-content-muted">Pedido {row.id}</p>
+        {!admin && <p className="break-all text-xs text-content-muted">Pedido {row.id}</p>}
         <p className="text-sm text-content">{statusLabels[row.status]}</p>
         <time dateTime={row.requested_at} className="text-xs text-content-muted">{new Date(row.requested_at).toLocaleString("pt-BR")}</time>
         {row.status === "pending" && <div className="flex flex-col gap-3 sm:flex-row">{admin ? <>

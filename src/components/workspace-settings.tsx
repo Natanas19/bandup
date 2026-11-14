@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import NavigationIcon from "@/components/navigation-icon";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { bindDetailsDismiss } from "@/lib/details-dismiss";
 
 function SignOutButton() {
   const router = useRouter();
@@ -79,6 +80,9 @@ export function WorkspaceSettingsNavigation({ href }: { href: string }) {
 
 export function WorkspaceSettingsMenu({ href, showBandFeatures = false }: { href: string; showBandFeatures?: boolean }) {
   const menu = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    if (menu.current) return bindDetailsDismiss(menu.current);
+  }, []);
   const close = () => { if (menu.current) menu.current.open = false; };
   return <details ref={menu} className="group relative">
     <summary aria-label="Abrir configurações" className="flex h-11 w-11 cursor-pointer list-none items-center justify-center rounded-control border border-outline bg-surface text-content-muted hover:border-accent-border hover:text-accent focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus [&::-webkit-details-marker]:hidden">

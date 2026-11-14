@@ -32,6 +32,13 @@ export default function BandSearch({ onRequestsChanged }: { onRequestsChanged?: 
   const live = useRef(false);
   const generation = useRef(0);
   const pending = useRef(false);
+  const checkingEligibility = useRef(false);
+  const dialog = useRef<HTMLDialogElement>(null);
+  const draft = useRef<HTMLTextAreaElement>(null);
+  const opener = useRef<HTMLButtonElement>(null);
+  const success = useRef<HTMLParagraphElement>(null);
+  const uncertainBands = useRef(new Set<string>());
+  const [uncertain, setUncertain] = useState(false);
   useEffect(() => {
     live.current = true;
     const tracker = generation;
@@ -48,13 +55,24 @@ export default function BandSearch({ onRequestsChanged }: { onRequestsChanged?: 
     return () => { live.current = false; tracker.current++; };
   }, []);
 
+  useEffect(() => {
+    const modal = dialog.current;
+    if (confirming && modal && !modal.open) {
+      modal.showModal();
+      draft.current?.focus();
+    } else if (!confirming && modal?.open) {
+      modal.close();
+      (success.current ?? opener.current)?.focus();
+    }
+  }, [confirming]);
+
   if (!BAND_ENTRY_BACKEND_VALIDATED) return <section className="mt-7 min-w-0 space-y-3 rounded-2xl border border-nav-border bg-surface p-4 sm:p-6" aria-label="Buscar banda pelo nome ou ID">
     <h2 className="text-xl font-semibold text-content">Busca de bandas</h2>
     <p role="status" className="text-sm leading-6 text-content-muted">A busca e os pedidos de entrada precisam da configuração Supabase deste projeto. Configure NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY para habilitar esta tela.</p>
   </section>;
 
   async function search(after: string | null = null) {
-    if (pending.current || !query.trim()) return;
+    if (pending.current || checkingEligibility.current || !query.trim()) return;
     const ticket = ++generation.current;
     setLoading(true); setError(""); setSelected(null); setConfirming(false); setOutcome(null);
     try {
@@ -66,27 +84,47 @@ export default function BandSearch({ onRequestsChanged }: { onRequestsChanged?: 
       if (live.current && ticket === generation.current) { setBands([]); setNext(null); setError(entryError(cause).message); }
     } finally { if (live.current && ticket === generation.current) setLoading(false); }
   }
-  async function selectBand(band: DiscoveredBand) {
+  async function openEntryDialog(band: DiscoveredBand) {
+    if (pending.current || checkingEligibility.current || !accountReady || !name) return;
+    checkingEligibility.current = true;
     const ticket = ++generation.current;
     setSelected(band); setMessage(name ? defaultEntryMessage(name) : "");
     setConfirming(false); setOutcome(null); setError(""); setEntryEligibility("checking");
+    setUncertain(uncertainBands.current.has(band.band_id));
     try {
       const eligibility = await createBandEntryService(getSupabaseBrowserClient()).entryEligibility(band.band_id);
-      if (live.current && ticket === generation.current) setEntryEligibility(eligibility);
+      if (live.current && ticket === generation.current) {
+        setEntryEligibility(eligibility);
+        if (eligibility === "eligible") setConfirming(true);
+      }
     } catch (cause) {
       if (live.current && ticket === generation.current) {
         setEntryEligibility("error"); setError(entryError(cause).message);
       }
-    }
+    } finally { checkingEligibility.current = false; }
   }
   async function send() {
     if (!confirming || !selected || !name || entryEligibility !== "eligible" || pending.current) return;
     pending.current = true; setSending(true); setError("");
     const ticket = generation.current;
     try {
-      const result = await registerEntryRequest(createBandEntryService(getSupabaseBrowserClient()), selected.band_id, name);
-      if (live.current && ticket === generation.current) { setOutcome(result); setConfirming(false); }
-    } catch (cause) { if (live.current && ticket === generation.current) setError(entryError(cause).message); }
+      const api = createBandEntryService(getSupabaseBrowserClient());
+      let result: "created" | "pending";
+      if (uncertainBands.current.has(selected.band_id)) {
+        if (!await api.pendingRequest(selected.band_id)) throw new Error("Unconfirmed request");
+        result = "pending";
+      } else {
+        uncertainBands.current.add(selected.band_id);
+        result = await registerEntryRequest(api, selected.band_id, name);
+      }
+      uncertainBands.current.delete(selected.band_id);
+      if (live.current && ticket === generation.current) { setOutcome(result); setEntryEligibility("pending"); setConfirming(false); }
+    } catch (cause) {
+      if (live.current && ticket === generation.current) {
+        setUncertain(true);
+        setError(`${entryError(cause).message} O resultado não foi confirmado. Verifique o pedido antes de tentar novamente; nenhuma nova solicitação será enviada nesta tentativa.`);
+      }
+    }
     finally {
       pending.current = false;
       if (live.current) {
@@ -117,9 +155,15 @@ export default function BandSearch({ onRequestsChanged }: { onRequestsChanged?: 
         <ProfileAvatar name={band.name} imageUrl={safeBandLogo(band.logo_url, process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://invalid.local")} />
         <h3 className="min-w-0 break-words font-semibold text-content [overflow-wrap:anywhere]">{band.name}</h3>
       </div>
-      <p className="break-all text-xs text-content-muted">ID da banda: {band.band_id}</p>
-      <button type="button" className={button} disabled={sending || loading} aria-pressed={selected?.band_id === band.band_id}
-        onClick={() => void selectBand(band)}>Selecionar banda</button>
+      <button ref={selected?.band_id === band.band_id ? opener : undefined} type="button" className={button}
+        aria-label={`Solicitar entrada em ${band.name}`}
+        disabled={sending || loading || !accountReady || !name || entryEligibility === "checking"
+          || (selected?.band_id === band.band_id && (entryEligibility === "member" || entryEligibility === "pending"))}
+        onClick={() => void openEntryDialog(band)}>
+        {selected?.band_id === band.band_id && entryEligibility === "checking" ? "Verificando..."
+          : selected?.band_id === band.band_id && entryEligibility === "member" ? "Você já é integrante"
+          : selected?.band_id === band.band_id && entryEligibility === "pending" ? "Pedido pendente" : "Solicitar entrada"}
+      </button>
     </article>)}
     {next && <button type="button" className={button} disabled={loading || sending} onClick={() => void search(next)}>Pesquisar mais bandas</button>}
     {!accountReady && !accountFailed && <p role="status" className="text-sm text-content-muted">Verificando sua conta para solicitar entrada...</p>}
@@ -129,23 +173,24 @@ export default function BandSearch({ onRequestsChanged }: { onRequestsChanged?: 
     {selected && entryEligibility === "member" && <p role="status" className="rounded-xl bg-accent-soft p-4 text-sm text-content">Você já faz parte desta banda. Não é necessário solicitar entrada.</p>}
     {selected && entryEligibility === "pending" && <p role="status" className="rounded-xl bg-accent-soft p-4 text-sm text-content">Você já tem uma solicitação pendente para esta banda. Acompanhe o status no Meu Painel.</p>}
     {selected && entryEligibility === "member" && <Link href={`/bandas/${selected.band_id}`} className={`${button} inline-flex items-center`}>Acessar banda</Link>}
-    {selected && name && entryEligibility === "eligible" && !outcome && <form className="space-y-3 border-t border-nav-border pt-5" onSubmit={event => { event.preventDefault(); setConfirming(true); }}>
-      <p className="break-words text-sm font-semibold text-content">Banda selecionada: {selected.name}</p>
+    <dialog ref={dialog} aria-labelledby="entry-confirm-title" aria-describedby="entry-confirm-description" aria-busy={sending}
+      onCancel={event => { event.preventDefault(); if (!pending.current) setConfirming(false); }}
+      className="m-auto max-h-[calc(100dvh_-_2rem)] w-[calc(100%_-_2rem)] max-w-lg overflow-y-auto overscroll-contain rounded-2xl border border-accent-border bg-surface p-5 text-content shadow-xl backdrop:bg-shadow-tint/60 sm:p-6">
+      {confirming && <div className="space-y-4">
+      <h3 id="entry-confirm-title" className="break-words text-lg font-semibold text-content">Confirmar solicitação para {selected?.name}?</h3>
+      <p id="entry-confirm-description" className="text-sm text-content-muted">Seu nome será registrado como {name}. A mensagem não será enviada. A entrada depende de aprovação.</p>
       <label htmlFor="entry-draft" className="block text-sm font-semibold text-content">Mensagem de apresentação · rascunho não enviado</label>
-      <textarea id="entry-draft" className={input} rows={4} maxLength={1000} value={message} disabled={sending} onChange={event => { setMessage(event.target.value); setConfirming(false); }} />
+      <textarea ref={draft} id="entry-draft" className={input} rows={4} maxLength={1000} value={message} disabled={sending} onChange={event => setMessage(event.target.value)} />
       <p className="text-sm leading-6 text-content-muted">O pedido registra somente seu nome de exibição. Este ambiente ainda não armazena nem envia a mensagem acima ao administrador. O rascunho será perdido ao sair.</p>
-      <button className={button} disabled={sending || loading}>Revisar solicitação</button>
-    </form>}
-    {confirming && entryEligibility === "eligible" && !outcome && <div role="group" aria-labelledby="entry-confirm-title" className="space-y-3 rounded-xl border border-accent-border bg-accent-soft p-4">
-      <h3 id="entry-confirm-title" className="font-semibold text-content">Confirmar solicitação para {selected?.name}?</h3>
-      <p className="text-sm text-content-muted">Seu nome será registrado como {name}. A mensagem não será enviada. A entrada depende de aprovação.</p>
-      <div className="flex flex-wrap gap-3">
-        <button type="button" className={button} disabled={sending} onClick={() => void send()}>{sending ? "Registrando..." : "Confirmar pedido sem mensagem"}</button>
-        <button type="button" className={button} disabled={sending} onClick={() => setConfirming(false)}>Voltar</button>
+      {error && <p role="alert" className="text-sm leading-6 text-danger">{error}</p>}
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <button type="button" className={button} disabled={sending} onClick={() => void send()}>{sending ? "Registrando..." : uncertain ? "Verificar pedido" : "Confirmar pedido sem mensagem"}</button>
+        <button type="button" className={button} disabled={sending} onClick={() => { if (!pending.current) setConfirming(false); }}>Cancelar</button>
       </div>
-    </div>}
+      </div>}
+    </dialog>
     {outcome && <div className="space-y-3 rounded-xl bg-accent-soft p-4">
-      <p role="status" className="text-sm leading-6 text-content">{outcome === "pending" ? "Você já tem uma solicitação pendente para esta banda." : "Solicitação registrada no sistema. Aguarde a decisão de um administrador."} A mensagem de apresentação não foi enviada.</p>
+      <p ref={success} tabIndex={-1} role="status" className="text-sm leading-6 text-content">{outcome === "pending" ? "Você já tem uma solicitação pendente para esta banda." : "Solicitação registrada no sistema. Aguarde a decisão de um administrador."} A mensagem de apresentação não foi enviada.</p>
       <Link href="/dashboard" className={`${button} inline-flex items-center`}>Ir para Meu Painel</Link>
     </div>}
   </section>;

@@ -6,6 +6,7 @@ const vm = require('node:vm');
 const ts = require('typescript');
 const { test } = require('node:test');
 const React = require('react');
+const { renderToStaticMarkup } = require('react-dom/server');
 
 function loadBandSearch() {
   const file = path.join(__dirname, '../src/lib/band-search.ts');
@@ -69,9 +70,10 @@ test('an existing pending request is reported without issuing another request', 
   assert.equal(writes, 0);
 });
 
-function componentFixture(eligibility) {
-  const state = { slots: [], cursor: 0, effects: [], scheduled: [] };
-  const api = { async entryEligibility() { return eligibility; } };
+function componentFixture(eligibility, options = {}) {
+  const state = { slots: [], cursor: 0, effects: [], scheduled: [], writes: 0, focus: null, checks: 0, eligibilityChecks: [], targets: [] };
+  const modal = { open: false, showModal() { this.open = true; }, close() { this.open = false; } };
+  const api = { async entryEligibility(band) { state.eligibilityChecks.push(band); return options.eligibility ? options.eligibility(band) : eligibility; }, async pendingRequest() { state.checks++; return options.persisted ?? null; } };
   const hooks = { ...React,
     useState(initial) {
       const index = state.cursor++;
@@ -84,9 +86,12 @@ function componentFixture(eligibility) {
       const index = state.cursor++;
       return state.slots[index] ??= { current: initial };
     },
-    useEffect(fn) {
+    useEffect(fn, deps) {
       const index = state.cursor++;
-      if (!state.effects[index]) state.scheduled.push(() => { state.effects[index] = fn(); });
+      const old = state.effects[index];
+      if (!old || deps.some((value, i) => value !== old.deps[i])) state.scheduled.push(() => {
+        old?.cleanup?.(); state.effects[index] = { deps, cleanup: fn() };
+      });
     },
   };
   const file = path.join(__dirname, '../src/components/band-search.tsx');
@@ -110,8 +115,8 @@ function componentFixture(eligibility) {
     if (name === '@/lib/band-entry') return { BAND_ENTRY_BACKEND_VALIDATED: true, entryError: () => ({ message: 'Falha' }),
       createBandEntryService: () => api };
     if (name === '@/lib/band-search') return { defaultEntryMessage: () => '',
-      async searchBandNames() { return { matches: [{ band_id: id(77), name: 'Band' }], next: null }; },
-      async registerEntryRequest() { throw new Error('Should not submit in this test'); } };
+      async searchBandNames() { return { matches: options.bands ?? [{ band_id: id(77), name: 'Band' }], next: null }; },
+      async registerEntryRequest(_api, band) { state.writes++; state.targets.push(band); return options.submit ? options.submit() : 'created'; } };
     if (name === '@/lib/display-name') return { normalizeDisplayName: value => value };
     throw new Error(`Unexpected import ${name}`);
   } });
@@ -119,10 +124,15 @@ function componentFixture(eligibility) {
   function render() {
     state.cursor = 0;
     const tree = component();
+    for (const node of nodes(tree)) {
+      if (node.props?.ref) node.props.ref.current = node.type === 'dialog' ? modal : {
+        focus() { state.focus = node.type; },
+      };
+    }
     while (state.scheduled.length) state.scheduled.shift()();
     return tree;
   }
-  return { render };
+  return { render, state, modal };
 }
 
 function nodes(tree) {
@@ -131,6 +141,69 @@ function nodes(tree) {
   return [tree, ...nodes(tree.props?.children)];
 }
 const settle = async () => { for (let index = 0; index < 8; index++) await new Promise(resolve => setImmediate(resolve)); };
+
+async function openEntry(h) {
+  h.render(); await settle();
+  nodes(h.render()).find(n => n.type === 'input').props.onChange({ target: { value: 'band' } });
+  nodes(h.render()).find(n => n.type === 'form').props.onSubmit({ preventDefault() {} });
+  await settle();
+  nodes(h.render()).find(n => n.props?.children === 'Solicitar entrada').props.onClick();
+  await settle();
+  return nodes(h.render());
+}
+
+test('entry modal opens above the page, focuses draft, cancels and restores focus without writing', async () => {
+  const h = componentFixture('eligible');
+  let tree = await openEntry(h);
+  assert.equal(h.modal.open, true); assert.equal(h.state.focus, 'textarea');
+  const cards = tree.filter(n => n.type === 'article');
+  assert.equal(cards.length, 1);
+  assert.doesNotMatch(renderToStaticMarkup(cards[0]), /ID da banda|a0000000|Selecionar banda/);
+  assert.ok(nodes(cards[0]).some(n => n.props?.children === 'Solicitar entrada'));
+  assert.equal(tree.filter(n => n.props?.children === 'Solicitar entrada').length, 1);
+  const dialog = tree.find(n => n.type === 'dialog');
+  assert.equal(dialog.props['aria-labelledby'], 'entry-confirm-title');
+  assert.match(dialog.props.className, /backdrop:|overflow-y-auto/);
+  assert.ok(tree.some(n => String(n.props?.children).includes('A mensagem não será enviada')));
+  tree.find(n => n.props?.children === 'Cancelar').props.onClick(); h.render();
+  assert.equal(h.modal.open, false); assert.equal(h.state.focus, 'button'); assert.equal(h.state.writes, 0);
+  nodes(h.render()).find(n => n.props?.children === 'Solicitar entrada').props.onClick(); await settle(); tree = nodes(h.render());
+  let prevented = false;
+  tree.find(n => n.type === 'dialog').props.onCancel({ preventDefault() { prevented = true; } }); h.render();
+  assert.equal(prevented, true); assert.equal(h.modal.open, false); assert.equal(h.state.writes, 0);
+});
+
+test('confirm sends once, locks cancel and Escape while loading, and closes only after confirmed success', async () => {
+  let resolve;
+  const h = componentFixture('eligible', { submit: () => new Promise(done => { resolve = done; }) });
+  const tree = await openEntry(h);
+  const confirm = tree.find(n => n.props?.children === 'Confirmar pedido sem mensagem');
+  confirm.props.onClick(); confirm.props.onClick(); await settle();
+  let current = nodes(h.render());
+  assert.equal(h.state.writes, 1); assert.equal(h.modal.open, true);
+  assert.deepEqual(h.state.targets, [id(77)]);
+  assert.ok(current.find(n => n.props?.children === 'Registrando...').props.disabled);
+  assert.ok(current.find(n => n.props?.children === 'Cancelar').props.disabled);
+  current.find(n => n.type === 'dialog').props.onCancel({ preventDefault() {} }); h.render();
+  assert.equal(h.modal.open, true);
+  resolve('created'); await settle(); current = nodes(h.render());
+  assert.equal(h.modal.open, false); assert.equal(h.state.focus, 'p');
+  assert.ok(current.some(n => n.props?.role === 'status' && String(n.props.children).includes('Solicitação registrada')));
+});
+
+test('uncertain response keeps modal open and subsequent confirmation only reads, never resends', async () => {
+  const options = { submit: async () => { throw new Error('Lost response'); }, persisted: null };
+  const h = componentFixture('eligible', options);
+  let tree = await openEntry(h);
+  tree.find(n => n.props?.children === 'Confirmar pedido sem mensagem').props.onClick(); await settle();
+  tree = nodes(h.render()); assert.equal(h.modal.open, true);
+  assert.ok(tree.some(n => n.props?.role === 'alert' && String(n.props.children).includes('não foi confirmado')));
+  tree.find(n => n.props?.children === 'Verificar pedido').props.onClick(); await settle(); h.render();
+  assert.equal(h.state.writes, 1); assert.equal(h.modal.open, true);
+  options.persisted = { id: 'existing' };
+  nodes(h.render()).find(n => n.props?.children === 'Verificar pedido').props.onClick(); await settle(); h.render();
+  assert.equal(h.state.writes, 1); assert.equal(h.modal.open, false); assert.equal(h.state.checks, 2);
+});
 
 for (const eligibility of ['member', 'pending']) {
   test(`band search explains ${eligibility} status and hides the entry form`, async () => {
@@ -141,12 +214,33 @@ for (const eligibility of ['member', 'pending']) {
     tree = nodes(h.render());
     tree.find(node => node.type === 'form').props.onSubmit({ preventDefault() {} });
     await settle(); tree = nodes(h.render());
-    tree.find(node => node.type === 'button' && node.props.children === 'Selecionar banda').props.onClick();
+    tree.find(node => node.type === 'button' && node.props.children === 'Solicitar entrada').props.onClick();
     await settle(); tree = nodes(h.render());
     assert.ok(tree.some(node => node.props?.role === 'status' && String(node.props.children).includes(
       eligibility === 'member' ? 'Você já faz parte' : 'solicitação pendente')));
     assert.equal(tree.some(node => node.type === 'textarea' && node.props.id === 'entry-draft'), false);
+    assert.equal(h.modal.open, false);
+    assert.equal(h.state.writes, 0);
+    assert.ok(tree.find(node => node.type === 'button' && node.props.children ===
+      (eligibility === 'member' ? 'Você já é integrante' : 'Pedido pendente')).props.disabled);
     if (eligibility === 'member') assert.ok(tree.some(node => node.props?.href === `/bandas/${id(77)}`
       && node.props.children === 'Acessar banda'));
   });
 }
+
+test('duplicate card clicks share one eligibility check; failures never open a modal or send', async () => {
+  let reject;
+  const h = componentFixture('eligible', { eligibility: () => new Promise((_resolve, fail) => { reject = fail; }) });
+  h.render(); await settle();
+  nodes(h.render()).find(n => n.type === 'input').props.onChange({ target: { value: 'band' } });
+  nodes(h.render()).find(n => n.type === 'form').props.onSubmit({ preventDefault() {} }); await settle();
+  const card = nodes(h.render()).find(n => n.props?.children === 'Solicitar entrada');
+  card.props.onClick(); card.props.onClick();
+  assert.deepEqual(h.state.eligibilityChecks, [id(77)]);
+  assert.ok(nodes(h.render()).find(n => n.props?.children === 'Verificando...').props.disabled);
+  reject(new Error('Denied')); await settle();
+  const tree = nodes(h.render());
+  assert.equal(h.modal.open, false); assert.equal(h.state.writes, 0);
+  assert.ok(tree.some(n => n.props?.role === 'alert'));
+  assert.equal(tree.find(n => n.props?.children === 'Solicitar entrada').props.disabled, false);
+});

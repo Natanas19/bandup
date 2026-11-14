@@ -820,7 +820,7 @@ test("only band sidebar navigation includes disabled upcoming sections", () => {
   }
 });
 
-test("band bottom navigation contains only the four active destinations", () => {
+test("band bottom navigation keeps four active destinations and collapsed informational extras", () => {
   const loader = modules();
   const Navigation = loader.load("src/components/band-navigation.tsx").default;
   const { ThemeProvider } = loader.load("src/components/theme-provider.tsx");
@@ -829,8 +829,10 @@ test("band bottom navigation contains only the four active destinations", () => 
   for (const href of ["/bandas/band", "/bandas/band/tarefas", "/bandas/band/agenda", "/bandas/band/membros"]) {
     assert.equal((html.match(new RegExp(`href="${href}"`, "g")) ?? []).length, 1);
   }
-  assert.equal((html.match(/aria-disabled="true"/g) ?? []).length, 0);
-  assert.equal((html.match(/Em breve/g) ?? []).length, 0);
+  assert.equal((html.match(/aria-disabled="true"/g) ?? []).length, 4);
+  assert.match(html, /aria-expanded="false"/);
+  assert.match(html, /aria-hidden="true"[^>]*grid-rows-\[0fr\]/);
+  assert.equal((html.match(/Em breve/g) ?? []).length, 4);
   assert.match(html, /fixed inset-x-0 bottom-0[^\"]*md:hidden/);
 });
 

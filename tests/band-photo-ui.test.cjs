@@ -127,15 +127,15 @@ test('shared avatar falls back after image failure and recovers when the URL cha
   f.unmount();
 });
 
-test('search results show validated logos with fallbacks and preserve selection actions', async () => {
-  const p = photoPresentation(); let searches = 0, eligibilityChecks = 0;
+test('search results show validated logos with fallbacks and open entry directly from eligible cards', async () => {
+  const p = photoPresentation(); let searches = 0, eligibilityChecks = 0, eligibility = 'member';
   const f = harness('src/components/band-search.tsx', {
     ...p.modules,
     '@/lib/supabase/client': { getSupabaseBrowserClient: () => ({ auth: {
       getUser: async () => ({ data: { user: { user_metadata: { display_name: 'Nome' } } } }),
     } }) },
     '@/lib/band-entry': { BAND_ENTRY_BACKEND_VALIDATED: true, entryError: () => ({ message: 'Error' }),
-      createBandEntryService: () => ({ entryEligibility: async () => { eligibilityChecks++; return 'member'; } }) },
+      createBandEntryService: () => ({ entryEligibility: async () => { eligibilityChecks++; return eligibility; } }) },
     '@/lib/band-search': { defaultEntryMessage: () => '',
       async searchBandNames() { searches++; return { matches: [photoUrl, null, 'https://evil.example/logo.png'].map((logo_url, i) => ({
         band_id: String(i), name: longBandName, logo_url,
@@ -151,10 +151,22 @@ test('search results show validated logos with fallbacks and preserve selection 
   assert.ok(tree.filter(n => n.type === 'h3').every(n => n.props.className.includes('[overflow-wrap:anywhere]')));
   assert.ok(tree.some(n => n.type === 'button' && n.props.children === 'Pesquisar mais bandas'));
   assert.equal(searches, 1);
-  tree.find(n => n.type === 'button' && n.props.children === 'Selecionar banda').props.onClick();
+  assert.equal(tree.filter(n => n.type === 'button' && n.props.children === 'Solicitar entrada').length, 3);
+  assert.equal(tree.some(n => n.props.children === 'Selecionar banda'), false);
+  tree.find(n => n.type === 'button' && n.props.children === 'Solicitar entrada').props.onClick();
   await settle(); tree = f.render();
   assert.equal(eligibilityChecks, 1);
   assert.ok(tree.some(n => n.props.href === '/bandas/0'));
+  assert.ok(tree.find(n => n.props.children === 'Você já é integrante').props.disabled);
+  assert.equal(tree.some(n => n.props.children === 'Confirmar pedido sem mensagem'), false);
+  eligibility = 'eligible';
+  tree.find(n => n.type === 'button' && n.props.children === 'Solicitar entrada').props.onClick();
+  await settle(); tree = f.render();
+  assert.equal(eligibilityChecks, 2);
+  const modal = tree.find(n => n.type === 'dialog');
+  assert.equal(modal.props['aria-labelledby'], 'entry-confirm-title');
+  assert.equal(nodes(modal).filter(n => n.props.children === 'Confirmar pedido sem mensagem').length, 1);
+  assert.deepEqual(tree.filter(n => n.type === p.Avatar).map(n => n.props.imageUrl), [photoUrl, null, null]);
   f.unmount();
 });
 test('picker validates, supports removal/replacement and revokes preview on change/unmount', () => {

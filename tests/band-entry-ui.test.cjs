@@ -115,10 +115,29 @@ test('history loads requests automatically without discovery or a manual refresh
     discover: async () => { throw Error('Directory must require explicit search'); } });
   await settle();
   assert.match(h.html(), /Meus pedidos/);
+  assert.match(h.html(), /Você não tem pedidos pendentes/);
   assert.doesNotMatch(h.html(), /Atualizar pedidos/);
   assert.equal(findElements(h.render(), n => n.type === 'form').length, 0);
   assert.equal(reads, 1);
   h.cleanup();
+});
+
+test('my requests renders pending requests only and retains terminal history outside the list', async () => {
+  const rows = ['pending', 'approved', 'rejected', 'cancelled'].map(status => ({
+    id: `request-${status}`, band_id: `band-${status}`, status, requested_at: '2026-01-01T00:00:00Z',
+  }));
+  const h = flowHarness({ ownRequests: async () => rows });
+  await settle();
+  assert.equal(findElements(h.render(), n => n.type === 'article').length, 1);
+  assert.match(h.html(), /request-pending/);
+  assert.doesNotMatch(h.html(), /request-approved|request-rejected|request-cancelled/);
+  assert.equal(rows.length, 4);
+  h.cleanup();
+  const empty = flowHarness({ ownRequests: async () => rows.slice(1) });
+  await settle();
+  assert.match(empty.html(), /Você não tem pedidos pendentes/);
+  assert.equal(findElements(empty.render(), n => n.type === 'article').length, 0);
+  empty.cleanup();
 });
 
 test('request load errors keep the separate access retry control available', async () => {
@@ -147,7 +166,9 @@ test('cancel confirmation updates history; duplicate clicks cannot issue duplica
   const cancel = findElements(h.render(), n => n.type === 'button' && n.props.children === 'Cancelar pedido')[0];
   cancel.props.onClick(); cancel.props.onClick(); await settle();
   assert.equal(writes, 1); release(); await settle();
-  assert.match(h.html(), /Pedido cancelado/); assert.match(h.html(), /Cancelado/);
+  assert.match(h.html(), /Pedido cancelado/);
+  assert.match(h.html(), /Você não tem pedidos pendentes/);
+  assert.equal(findElements(h.render(), n => n.type === 'article').length, 0);
   h.cleanup();
 });
 
@@ -259,6 +280,26 @@ test('admin sees pending requests only and can back out without writing', async 
   findElements(h.render(), n => n.props?.children === 'Voltar sem decidir')[0].props.onClick();
   assert.equal(writes, 0);
   assert.doesNotMatch(h.html(), /Confirmar aprova/);
+  h.cleanup();
+});
+
+test('received requests hide technical identifiers while approval keeps its exact request ID', async () => {
+  const requestId = 'c0000000-0000-0000-0000-000000000001';
+  const bandId = 'a0000000-0000-0000-0000-000000000001';
+  const calls = [];
+  let status = 'pending';
+  const h = flowHarness({
+    adminRequests: async () => [{ id: requestId, band_id: bandId, applicant_name: 'Musician', status, requested_at: '2026-01-01' }],
+    decide: async (...args) => { calls.push(args); status = 'approved'; },
+    getRequest: async () => ({ status }),
+  }, bandId);
+  await settle();
+  assert.match(h.html(), /Musician/);
+  assert.equal(h.html().includes(requestId), false);
+  assert.equal(h.html().includes(bandId), false);
+  findElements(h.render(), n => n.props?.children === 'Aprovar entrada')[0].props.onClick();
+  confirmDecision(h); await settle();
+  assert.deepEqual(calls, [[bandId, requestId, 'approved']]);
   h.cleanup();
 });
 

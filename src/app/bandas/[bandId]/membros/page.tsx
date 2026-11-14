@@ -277,7 +277,7 @@ export default function BandMembersPage() {
                     aria-label={`Remover ${member.label} da banda`}
                     disabled={removingMemberId !== null || leaving}
                     onClick={() => void removeMember(member)}
-                    className="min-h-10 rounded-xl border border-danger-border px-3 py-2 text-xs font-semibold text-danger transition hover:bg-danger-surface focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
+                    className="min-h-11 rounded-xl border border-danger-border px-2.5 py-1.5 text-xs font-semibold text-danger transition hover:bg-danger-surface focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60 md:min-h-9"
                   >
                     {removingMemberId === member.user_id ? "Removendo..." : "Remover integrante"}
                   </button>}

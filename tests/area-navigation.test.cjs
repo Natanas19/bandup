@@ -36,6 +36,7 @@ function fixture(pathname = '/dashboard/agenda', profileData = {}) {
       if (name === '@/lib/display-name') return { normalizeDisplayName: value => typeof value === 'string' && value.trim() ? value.trim() : null };
       if (name === '@/lib/development-lab') return { isLaboratoryHttpOrigin: origin => origin === 'http://192.168.0.6:55321' };
       if (name === '@/lib/public-band-data') return { safeBandLogo: value => value };
+      if (name === '@/lib/details-dismiss') return load('src/lib/details-dismiss.ts');
       throw Error('Unexpected dependency: ' + name);
     } });
     return mod.exports;
@@ -61,7 +62,7 @@ for (const variant of ['sidebar', 'bottom', 'expandable']) {
     assert.equal(links.find(node => node.props['aria-current'] === 'page').props.href, '/bandas/band-a/agenda');
     assert.equal(links.some(node => /meu-perfil|\/links|perfil-publico|configuracoes/.test(node.props.href)), false);
     const comingSoon = tree.filter(node => node.props?.['aria-disabled'] === 'true');
-    assert.equal(comingSoon.length, variant === 'sidebar' ? 4 : 0);
+    assert.equal(comingSoon.length, variant === 'expandable' ? 0 : 4);
     if (variant === 'sidebar') {
       assert.deepEqual(comingSoon.map(node => node.props.children[0].props.children[1]), [
         'Perfil público', 'Links', 'Loja', 'Ingressos',
@@ -96,7 +97,7 @@ test('band navigation keeps coming-soon destinations non-interactive in every va
   for (const variant of ['sidebar', 'bottom', 'expandable']) {
     const Navigation = fixture().load('src/components/band-navigation.tsx').default;
     const tree = nodes(Navigation({ bandId: 'band-a', activeSection: 'agenda', variant }));
-    const expectedLabels = variant === 'sidebar' ? ['Perfil público', 'Links', 'Loja', 'Ingressos'] : [];
+    const expectedLabels = variant === 'expandable' ? [] : ['Perfil público', 'Links', 'Loja', 'Ingressos'];
     assert.equal(tree.filter(node => node.props?.href).length, 4);
     for (const label of expectedLabels) {
       const item = tree.find(node => node.props?.['aria-disabled'] === 'true'
@@ -216,7 +217,8 @@ test('personal routes and layouts remain mobile and desktop compatible', () => {
   assert.match(personal, /md:pl-64/);
   assert.match(band, /hidden w-64[\s\S]*md:flex/);
   assert.match(band, /md:pl-64/);
-  assert.match(band, /pb-\[calc\(5rem\+env\(safe-area-inset-bottom\)\)\]/);
+  assert.match(band, /pb-\[calc\(7\.5rem\+env\(safe-area-inset-bottom\)\)\]/);
+  assert.match(band, /group-has-\[\[data-band-nav-expanded=true\]\]\/band:pb-\[calc\(13rem/);
   assert.match(source('src/app/meu-perfil/page.tsx'), /redirect\("\/dashboard"\)/);
   assert.match(source('src/app/meu-perfil/[section]/page.tsx'), /redirect\(`\/dashboard/);
 });

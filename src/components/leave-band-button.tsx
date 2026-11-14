@@ -86,7 +86,7 @@ export default function LeaveBandButton({ bandId, disabled = false, onBusyChange
     <p className="text-sm text-content-muted">Ao sair, você perde o acesso à banda. Suas tarefas permanecem na banda, sem atribuição a você.</p>
     {message && <p role="alert" className="mt-3 text-sm text-danger">{message}</p>}
     <button type="button" disabled={disabled || phase === "busy" || phase === "left"}
-      onClick={() => void act()} className="mt-3 min-h-11 rounded-xl border border-danger-border px-4 py-2 text-sm font-semibold text-danger hover:bg-danger-surface focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60">
+      onClick={() => void act()} className="mt-3 min-h-11 rounded-xl border border-danger-border px-2.5 py-1.5 text-xs font-semibold text-danger hover:bg-danger-surface focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60 md:min-h-9">
       {phase === "busy" ? "Verificando saída..." : phase === "left" ? "Saída confirmada" : phase === "uncertain" ? "Verificar meu acesso" : "Sair da banda"}
     </button>
     {phase === "uncertain" && <button type="button" onClick={() => window.location.replace("/dashboard")} className="ml-4 inline-flex min-h-11 items-center text-sm text-brand">Ir para meu painel</button>}

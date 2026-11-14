@@ -25,7 +25,7 @@ export default function BandWorkspace({ bandId, children }: { bandId: string; ch
 
   return (
     <BandInfoContext.Provider value={setInfo}>
-      <div className="workspace-theme flex min-w-0 flex-1 flex-col md:pl-64 lg:pl-72">
+      <div className="workspace-theme group/band flex min-w-0 flex-1 flex-col md:pl-64 lg:pl-72">
         <aside aria-label="Menu lateral da banda" className="fixed inset-y-0 left-0 z-20 hidden w-64 flex-col gap-8 overflow-y-auto overscroll-contain border-r border-nav-border bg-surface px-5 py-6 md:flex lg:w-72 lg:px-6">
           <Link href="/dashboard" className="flex min-h-16 w-full shrink-0 items-center rounded text-[2.625rem] leading-none font-bold tracking-tight text-content focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">Band<span className="text-accent">Up</span></Link>
           {info && <div className="min-w-0 shrink-0 rounded-2xl bg-accent-soft p-4">
@@ -46,7 +46,7 @@ export default function BandWorkspace({ bandId, children }: { bandId: string; ch
         </aside>
         <div className="flex min-w-0 flex-1 flex-col">
           <SpaceSwitcherHeader bandId={bandId} bandName={info?.name} settingsHref={`/bandas/${bandId}/perfil-publico`} />
-          <div className="flex min-w-0 flex-1 flex-col pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0">{children}</div>
+          <div className="flex min-w-0 flex-1 flex-col pb-[calc(7.5rem+env(safe-area-inset-bottom))] group-has-[[data-band-nav-expanded=true]]/band:pb-[calc(13rem+env(safe-area-inset-bottom))] motion-safe:transition-[padding-bottom] motion-safe:duration-200 md:pb-0 md:group-has-[[data-band-nav-expanded=true]]/band:pb-0">{children}</div>
         </div>
       </div>
     </BandInfoContext.Provider>

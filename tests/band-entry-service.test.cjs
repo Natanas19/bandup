@@ -138,12 +138,24 @@ test('requests are scoped by current Auth user or verified administrator band an
   const { api, state } = fixture();
   await api.ownRequests(20); await api.adminRequests(band);
   const queries = JSON.parse(JSON.stringify(state.queries.filter(x => x.table === 'band_join_requests')));
-  assert.deepEqual(queries[0].filters, [['requester_id', user]]);
+  assert.deepEqual(queries[0].filters, [['requester_id', user], ['status', 'pending']]);
   assert.deepEqual(queries[0].range, [20, 39]);
   assert.deepEqual(queries[1].filters, [['band_id', band]]);
   assert.deepEqual(queries[1].range, [0, 19]);
   assert.equal(queries[0].orders.length, 2);
   await denied(() => api.ownRequests(-1), '22023');
+});
+
+test('own requests show only pending status while individual lookup preserves terminal history', async () => {
+  const { api, state } = fixture();
+  for (const status of ['pending', 'approved', 'rejected', 'cancelled']) {
+    state.row.status = status;
+    const rows = await api.ownRequests();
+    assert.equal(rows.length, status === 'pending' ? 1 : 0, status);
+    assert.equal((await api.getRequest(id)).status, status);
+    assert.equal(state.row.status, status, 'listing does not modify the stored request');
+  }
+  assert.equal(state.calls.some(call => call?.name), false, 'listing never calls a mutation RPC');
 });
 
 test('fresh auth and admin role are checked for every administrative operation', async () => {

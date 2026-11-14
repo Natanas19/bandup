@@ -97,7 +97,7 @@ export function createBandEntryService(client: SupabaseClient) {
       return rows.map(row => ({ band_id: row.band_id, name: row.display_name,
         logo_url: typeof row.logo_url === "string" ? row.logo_url : null }));
     },
-    ownRequests: (offset = 0) => requests(undefined, offset),
+    ownRequests: (offset = 0) => requests(undefined, offset, true),
     async pendingRequest(bandId: string): Promise<EntryRequest | null> {
       requireId(bandId);
       const userId = await actor();

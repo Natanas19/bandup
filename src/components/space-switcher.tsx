@@ -9,6 +9,7 @@ import { safeBandLogo } from "@/lib/public-band-data";
 import ProfileAvatar from "@/components/profile-avatar";
 import NavigationIcon from "@/components/navigation-icon";
 import { WorkspaceSettingsMenu } from "@/components/workspace-settings";
+import { bindDetailsDismiss } from "@/lib/details-dismiss";
 
 type SpaceMembership = { band_id: string; band: { id: string; name: string; logo_url: string | null } | null };
 type PersonalProfile = { name: string; imageUrl: string | null };
@@ -29,6 +30,10 @@ export default function SpaceSwitcher({ bandId, bandName }: { bandId?: string; b
   const [loadFailed, setLoadFailed] = useState(false);
   const [profileRevision, setProfileRevision] = useState(0);
   const selector = useRef<HTMLDetailsElement>(null);
+
+  useEffect(() => {
+    if (selector.current) return bindDetailsDismiss(selector.current);
+  }, []);
 
   useEffect(() => {
     const refresh = () => setProfileRevision(value => value + 1);

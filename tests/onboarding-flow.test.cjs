@@ -165,12 +165,12 @@ test('search starts empty, edits a draft and requires confirmation before record
   assert.equal(searches, 0); assert.equal(nodes(h.render()).some(n => n.type === 'article'), false);
   nodes(h.render()).find(n => n.type === 'input').props.onChange({ target: { value: 'Minha' } });
   nodes(h.render()).find(n => n.type === 'form').props.onSubmit({ preventDefault() {} }); await settle();
-  nodes(h.render()).find(n => n.props?.children === 'Selecionar banda').props.onClick();
+  nodes(h.render()).find(n => n.props?.children === 'Solicitar entrada').props.onClick();
   await settle();
   let tree = nodes(h.render());
   assert.equal(tree.find(n => n.type === 'textarea').props.value, 'Olá! Me chamo Ana Silva e gostaria de participar da sua banda.');
   tree.find(n => n.type === 'textarea').props.onChange({ target: { value: 'Meu rascunho' } });
-  tree = nodes(h.render()); tree.filter(n => n.type === 'form')[1].props.onSubmit({ preventDefault() {} });
+  tree = nodes(h.render());
   assert.equal(writes, 0);
   const confirm = nodes(h.render()).find(n => n.props?.children === 'Confirmar pedido sem mensagem');
   confirm.props.onClick(); confirm.props.onClick(); await settle();
