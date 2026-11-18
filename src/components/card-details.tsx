@@ -1,6 +1,6 @@
 "use client";
 
-import type { MouseEvent, ReactNode } from "react";
+import { useState, type MouseEvent, type ReactNode } from "react";
 import { LinkifiedText } from "@/components/linkified-text";
 
 // The card is a pointer shortcut; summary provides native keyboard/VoiceOver support.
@@ -14,14 +14,16 @@ export function toggleCardDetails(event: MouseEvent<HTMLElement>) {
   if (details) details.open = !details.open;
 }
 
-export default function CardDetails({ title, description, children }: {
+export default function CardDetails({ title, description, children, deferredDetails }: {
   title: string;
   description: string | null;
   children?: ReactNode;
+  deferredDetails?: ReactNode;
 }) {
-  if (!description?.trim() && !children) return null;
+  const [expanded, setExpanded] = useState(false);
+  if (!description?.trim() && !children && !deferredDetails) return null;
   return (
-    <details data-card-details className="group mt-3">
+    <details data-card-details className="group mt-3" onToggle={deferredDetails ? event => setExpanded(event.currentTarget.open) : undefined}>
       <summary aria-label={`Detalhes de ${title}`} className="flex min-h-11 w-fit cursor-pointer list-none items-center gap-2 rounded-lg px-1 text-xs font-medium text-brand focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus [&::-webkit-details-marker]:hidden">
         <span className="group-open:hidden">Ver detalhes</span>
         <span className="hidden group-open:inline">Recolher detalhes</span>
@@ -31,6 +33,7 @@ export default function CardDetails({ title, description, children }: {
         <LinkifiedText text={description} variant="themed" />
       </p>}
       {children}
+      {expanded && deferredDetails}
     </details>
   );
 }

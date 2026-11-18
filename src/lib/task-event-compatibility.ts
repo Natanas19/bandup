@@ -7,9 +7,10 @@ export function taskColumns(supportsEvents: boolean) {
 }
 
 export function isMissingTaskEventColumn(error: { code?: string; message?: string } | null) {
-  // Only the confirmed PostgreSQL missing-column diagnostic permits a fallback.
-  return error?.code === "42703" &&
-    /^column tasks\.event_id does not exist$/.test(error.message ?? "");
+  return (error?.code === "42703" &&
+    /^column (?:public\.)?tasks\.event_id does not exist$/.test(error.message ?? ""))
+    || (error?.code === "PGRST204" &&
+      error.message === "Could not find the 'event_id' column of 'tasks' in the schema cache");
 }
 
 export async function readTasksWithEventSupport(client: SupabaseClient, bandId: string) {

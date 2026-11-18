@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isMissingEventFlyerColumn } from "./event-flyer";
 
 export const PERSONAL_AGENDA_MEMBERSHIP_PAGE_SIZE = 200;
 export const PERSONAL_AGENDA_EVENT_PAGE_SIZE = 500;
@@ -15,6 +16,7 @@ export type PersonalEvent = {
   start_at: string;
   end_at: string | null;
   location: string | null;
+  flyer_path?: string | null;
 };
 
 type Membership = { band_id: string; role: string; band: { id: string; name: string } | null };
@@ -50,13 +52,19 @@ export async function loadPersonalAgenda(client: SupabaseClient): Promise<Person
   if (!bands.size) return [];
 
   const events: PersonalEvent[] = [];
+  let supportsFlyers = true;
   for (let start = 0; ; start += PERSONAL_AGENDA_EVENT_PAGE_SIZE) {
-    const { data, error } = await client.from("events")
-      .select("id, band_id, title, description, event_type, start_at, end_at, location")
+    const read = (withFlyers: boolean) => client.from("events")
+      .select("id, band_id, title, description, event_type, start_at, end_at, location" + (withFlyers ? ", flyer_path" : ""))
       .in("band_id", [...bands.keys()])
       .order("start_at", { ascending: true })
       .order("id", { ascending: true })
       .range(start, start + PERSONAL_AGENDA_EVENT_PAGE_SIZE - 1);
+    let { data, error } = await read(supportsFlyers);
+    if (supportsFlyers && isMissingEventFlyerColumn(error)) {
+      supportsFlyers = false;
+      ({ data, error } = await read(false));
+    }
     if (error) {
       throw new PersonalAgendaLoadError("Não foi possível carregar sua agenda. Seu acesso pode ter mudado. Tente novamente.");
     }

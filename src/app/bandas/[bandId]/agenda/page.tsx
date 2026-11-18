@@ -7,10 +7,12 @@ import { BandWorkspaceInfo } from "@/components/band-workspace";
 import { useParams } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import CardDetails, { toggleCardDetails } from "@/components/card-details";
+import { EventFlyerLayout, EventFlyerField, type FlyerDraft } from "@/components/event-flyer";
 import { differentLocalEventDays, eventSchedulePatch, toLocalDateTimeInput, validateEventSchedule, watchPageClock } from "@/lib/date-time";
 import { requiredTextError } from "@/lib/form-validation";
 import { canEditEvent, getBandAccess, recordWriteError } from "@/lib/record-permissions";
 import { isMissingTaskEventColumn } from "@/lib/task-event-compatibility";
+import { EventFlyerError, isMissingEventFlyerColumn, saveEventFlyer } from "@/lib/event-flyer";
 
 type EventType =
   | "show"
@@ -32,7 +34,13 @@ type BandEvent = {
   location: string | null;
   created_at: string;
   created_by: string;
+  flyer_path?: string | null;
 };
+
+const eventColumns = "id, title, description, event_type, start_at, end_at, location, created_at, created_by";
+const clientsWithoutRelatedTasks = new WeakSet<ReturnType<typeof getSupabaseBrowserClient>>();
+const relatedTasksUnsupported = "Tarefas associadas indisponíveis neste ambiente. Os eventos continuam disponíveis na agenda.";
+const relatedTasksLoadError = "Não foi possível carregar as tarefas dos eventos. Atualize a página para tentar novamente.";
 
 type TaskStatus = "todo" | "in_progress" | "done";
 type TaskPriority = "low" | "medium" | "high";
@@ -142,7 +150,9 @@ export default function BandAgendaPage() {
   const [endAt, setEndAt] = useState("");
   const [location, setLocation] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [supportsRelatedTasks, setSupportsRelatedTasks] = useState(true);
+  const [relatedTasksNotice, setRelatedTasksNotice] = useState("");
+  const [supportsFlyers, setSupportsFlyers] = useState(false);
+  const [flyerDraft, setFlyerDraft] = useState<FlyerDraft>(null);
   const access = getBandAccess(currentUserId, isAdmin ? "admin" : "member");
   const originalEvent = events.find((item) => item.id === editingEventId);
   const endAtMinimum = startAt || undefined;
@@ -215,11 +225,14 @@ export default function BandAgendaPage() {
           return;
         }
 
-        const { data, error } = await supabase
+        const readEvents = (withFlyers: boolean) => supabase
           .from("events")
-          .select("id, title, description, event_type, start_at, end_at, location, created_at, created_by")
+          .select(eventColumns + (withFlyers ? ", flyer_path" : ""))
           .eq("band_id", bandId)
           .order("start_at", { ascending: true });
+        let { data, error } = await readEvents(true);
+        const hasFlyerSupport = !isMissingEventFlyerColumn(error);
+        if (!hasFlyerSupport) ({ data, error } = await readEvents(false));
 
         if (!isMounted) return;
         if (error) {
@@ -231,26 +244,32 @@ export default function BandAgendaPage() {
         const loadedEvents = (data ?? []) as unknown as BandEvent[];
         const eventIds = loadedEvents.map((bandEvent) => bandEvent.id);
         let relatedTasks: RelatedTask[] = [];
-        let hasRelatedTaskSupport = true;
+        let taskNotice = "";
 
-        if (eventIds.length > 0) {
-          const { data: taskRows, error: tasksError } = await supabase
-            .from("tasks")
-            .select("id, event_id, title, status, priority")
-            .eq("band_id", bandId)
-            .in("event_id", eventIds);
+        if (eventIds.length > 0 && clientsWithoutRelatedTasks.has(supabase)) {
+          taskNotice = relatedTasksUnsupported;
+        } else if (eventIds.length > 0) {
+          try {
+            const { data: taskRows, error: tasksError } = await supabase
+              .from("tasks")
+              .select("id, event_id, title, status, priority")
+              .eq("band_id", bandId)
+              .in("event_id", eventIds);
 
-          if (!isMounted) return;
-          if (tasksError && !isMissingTaskEventColumn(tasksError)) {
-            setPageState("error");
-            setLoadError("Não foi possível carregar as tarefas dos eventos. Tente novamente.");
-            return;
+            if (isMissingTaskEventColumn(tasksError)) {
+              clientsWithoutRelatedTasks.add(supabase);
+              taskNotice = relatedTasksUnsupported;
+            } else if (tasksError) {
+              taskNotice = relatedTasksLoadError;
+            } else {
+              relatedTasks = (taskRows ?? []) as unknown as RelatedTask[];
+            }
+          } catch {
+            taskNotice = relatedTasksLoadError;
           }
-
-          hasRelatedTaskSupport = !isMissingTaskEventColumn(tasksError);
-          if (hasRelatedTaskSupport) relatedTasks = (taskRows ?? []) as unknown as RelatedTask[];
         }
 
+        if (!isMounted) return;
         const groupedTasks = relatedTasks.reduce<Record<string, RelatedTask[]>>((groups, task) => {
           if (!task.event_id) return groups;
           groups[task.event_id] = [...(groups[task.event_id] ?? []), task];
@@ -262,7 +281,8 @@ export default function BandAgendaPage() {
         setCurrentUserId(user.id);
         setEvents(sortEvents(loadedEvents));
         setTasksByEvent(groupedTasks);
-        setSupportsRelatedTasks(hasRelatedTaskSupport);
+        setRelatedTasksNotice(taskNotice);
+        setSupportsFlyers(hasFlyerSupport);
         setCurrentTime(Date.now());
         setPageState("ready");
       } catch {
@@ -288,6 +308,7 @@ export default function BandAgendaPage() {
     setStartAt("");
     setEndAt("");
     setLocation("");
+    setFlyerDraft(null);
     setFormError("");
   }
 
@@ -302,6 +323,7 @@ export default function BandAgendaPage() {
     setStartAt(toLocalDateTimeInput(bandEvent.start_at));
     setEndAt(bandEvent.end_at ? toLocalDateTimeInput(bandEvent.end_at) : "");
     setLocation(bandEvent.location ?? "");
+    setFlyerDraft(null);
     setMinimumStartAt(getLocalDateTimeMinimum(currentTime));
     setFormError("");
     setFormSuccess("");
@@ -329,6 +351,7 @@ export default function BandAgendaPage() {
     if (isSubmitting || deletingEventId) return;
 
     setFormError("");
+    setFormSuccess("");
 
     const normalizedTitle = title.trim();
     const titleError = requiredTextError(normalizedTitle, "o título do evento");
@@ -415,9 +438,10 @@ export default function BandAgendaPage() {
         location: location.trim() || null,
       };
 
+      const columns = eventColumns + (supportsFlyers ? ", flyer_path" : "");
       const result = editingEventId
-        ? await supabase.from("events").update({ ...eventValues, updated_at: new Date().toISOString() }).eq("id", editingEventId).eq("band_id", bandId).select("id, title, description, event_type, start_at, end_at, location, created_at, created_by").maybeSingle()
-        : await supabase.from("events").insert({ ...eventValues, band_id: bandId, created_by: user.id }).select("id, title, description, event_type, start_at, end_at, location, created_at, created_by").single();
+        ? await supabase.from("events").update({ ...eventValues, updated_at: new Date().toISOString() }).eq("id", editingEventId).eq("band_id", bandId).select(columns).maybeSingle()
+        : await supabase.from("events").insert({ ...eventValues, band_id: bandId, created_by: user.id }).select(columns).single();
       const savedEvent = result.data;
       const error = result.error;
 
@@ -427,9 +451,23 @@ export default function BandAgendaPage() {
       }
 
       const savedBandEvent = savedEvent as unknown as BandEvent;
-      setEvents((currentEvents) => sortEvents(editingEventId
-        ? currentEvents.map((currentEvent) => currentEvent.id === editingEventId ? savedBandEvent : currentEvent)
-        : [...currentEvents, savedBandEvent]));
+      const updateCard = (saved: BandEvent) => setEvents(currentEvents =>
+        sortEvents([...currentEvents.filter(current => current.id !== saved.id), saved]));
+      if (supportsFlyers && flyerDraft) {
+        try {
+          savedBandEvent.flyer_path = await saveEventFlyer(supabase, user.id, bandId, savedBandEvent.id,
+            originalEvent?.flyer_path ?? null, flyerDraft === "remove" ? null : flyerDraft.file);
+        } catch (cause) {
+          updateCard(savedBandEvent);
+          setEditingEventId(savedBandEvent.id);
+          // Require a deliberate selection before trying again after a partial save.
+          setFlyerDraft(null);
+          const detail = cause instanceof EventFlyerError ? cause.message : "Não foi possível confirmar o flyer. Atualize a agenda para conferir.";
+          setFormError(`Os dados do evento foram salvos. ${detail}`);
+          return;
+        }
+      }
+      updateCard(savedBandEvent);
       setCurrentTime(Date.now());
       setFormSuccess(editingEventId ? "Evento atualizado com sucesso." : "Evento criado com sucesso.");
       resetForm();
@@ -604,6 +642,8 @@ export default function BandAgendaPage() {
                 <textarea id="event-description" rows={3} maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Adicione informações úteis para os integrantes" className="w-full resize-y rounded-xl border border-outline bg-surface px-4 py-3 text-base md:text-sm text-content outline-none transition placeholder:text-content-faint focus:border-input-focus focus:ring-4 focus:ring-input-ring" />
               </div>
 
+              {supportsFlyers && <EventFlyerField key={editingEventId ?? "new"} path={originalEvent?.flyer_path ?? null}
+                title={title} draft={flyerDraft} onChange={setFlyerDraft} disabled={isSubmitting} />}
               {formError && <p role="alert" className="rounded-xl border border-danger-border bg-danger-surface px-4 py-3 text-sm text-danger">{formError}</p>}
 
               <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row sm:justify-end">
@@ -635,33 +675,36 @@ export default function BandAgendaPage() {
           </section>
         ) : (
           <section aria-label="Lista de eventos" className="mt-6 space-y-3">
-            {!supportsRelatedTasks && <p role="status" className="text-sm text-content-muted">Tarefas associadas indisponíveis neste ambiente. Os eventos continuam disponíveis na agenda.</p>}
+            {relatedTasksNotice && <p role={relatedTasksNotice === relatedTasksLoadError ? "alert" : "status"}
+              className="text-sm text-content-muted">{relatedTasksNotice}</p>}
             {sortEvents(events, currentTime).map((bandEvent) => {
               const isUpcoming = Date.parse(bandEvent.start_at) >= currentTime;
 
               return (
                 <article key={bandEvent.id} onClick={toggleCardDetails} className={`min-w-0 rounded-2xl border bg-surface p-5 shadow-app-card sm:p-6 ${isUpcoming ? "border-accent-border ring-1 ring-input-ring" : "border-outline"}`}>
-                  <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="break-words text-base font-semibold text-content sm:text-lg">{bandEvent.title}</h2>
-                        {isUpcoming && <span className="rounded-full bg-accent-soft px-2.5 py-1 text-[11px] font-semibold text-accent">Próximo</span>}
+                  <EventFlyerLayout path={bandEvent.flyer_path} title={bandEvent.title}>
+                    <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h2 className="break-words text-base font-semibold text-content sm:text-lg">{bandEvent.title}</h2>
+                          {isUpcoming && <span className="rounded-full bg-accent-soft px-2.5 py-1 text-[11px] font-semibold text-accent">Próximo</span>}
+                        </div>
+                        <p className="mt-2 text-xs font-semibold tracking-wide text-accent uppercase">{getEventTypeLabel(bandEvent.event_type)}</p>
                       </div>
-                      <p className="mt-2 text-xs font-semibold tracking-wide text-accent uppercase">{getEventTypeLabel(bandEvent.event_type)}</p>
+                      <div className={`w-full shrink-0 rounded-xl px-4 py-3 sm:w-auto sm:min-w-44 ${isUpcoming ? "bg-accent-soft" : "bg-surface-muted"}`}>
+                        <p className="text-sm font-semibold text-content">{formatEventDate(bandEvent.start_at)}</p>
+                        <p className="mt-1 text-sm tabular-nums text-content-muted">
+                          {formatEventTime(bandEvent.start_at)}
+                          {bandEvent.end_at && <> – {differentLocalEventDays(bandEvent.start_at, bandEvent.end_at) && <>{formatEventDate(bandEvent.end_at)} às </>}{formatEventTime(bandEvent.end_at)}</>}
+                        </p>
+                      </div>
                     </div>
-                    <div className={`w-full shrink-0 rounded-xl px-4 py-3 sm:w-auto sm:min-w-44 ${isUpcoming ? "bg-accent-soft" : "bg-surface-muted"}`}>
-                      <p className="text-sm font-semibold text-content">{formatEventDate(bandEvent.start_at)}</p>
-                      <p className="mt-1 text-sm tabular-nums text-content-muted">
-                        {formatEventTime(bandEvent.start_at)}
-                        {bandEvent.end_at && <> – {differentLocalEventDays(bandEvent.start_at, bandEvent.end_at) && <>{formatEventDate(bandEvent.end_at)} às </>}{formatEventTime(bandEvent.end_at)}</>}
+                    {bandEvent.location?.trim() && (
+                      <p className="mt-4 pt-3 text-sm text-content-muted">
+                        <span className="font-medium text-content-strong">Local:</span> {bandEvent.location}
                       </p>
-                    </div>
-                  </div>
-                  {bandEvent.location?.trim() && (
-                    <p className="mt-4 pt-3 text-sm text-content-muted">
-                      <span className="font-medium text-content-strong">Local:</span> {bandEvent.location}
-                    </p>
-                  )}
+                    )}
+                  </EventFlyerLayout>
                   <CardDetails title={bandEvent.title} description={bandEvent.description}>
                   {(tasksByEvent[bandEvent.id]?.length ?? 0) > 0 && (
                     <div className="mt-4 pt-4">

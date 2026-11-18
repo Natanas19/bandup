@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import CardDetails, { toggleCardDetails } from "@/components/card-details";
+import { EventFlyerLayout } from "@/components/event-flyer";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { loadPersonalAgenda, PersonalAgendaLoadError, type PersonalEvent } from "@/lib/personal-agenda";
 
@@ -78,27 +80,29 @@ export default function PersonalAgenda() {
           <h2 className="text-xl font-semibold text-content">Nenhum evento encontrado</h2>
           <p className="mt-3 text-sm leading-6 text-content-muted">Quando uma das suas bandas adicionar eventos à agenda, eles aparecerão aqui.</p>
         </section> : <section aria-label="Eventos das suas bandas" className="mt-7 space-y-3">
-          {sortEvents(events).map(event => <article key={`${event.band_id}:${event.id}`} className="min-w-0 rounded-2xl border border-nav-border bg-surface p-4 shadow-app-card sm:p-6">
-            <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
-                <h2 className="break-words text-lg font-semibold text-content [overflow-wrap:anywhere] sm:text-xl">{event.title}</h2>
-                <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-accent">{eventTypeLabels[event.event_type] ?? event.event_type}</p>
-                <p className="mt-3 text-sm text-content-muted">Banda responsável</p>
-                <Link href={`/bandas/${event.band_id}/agenda`} className="mt-1 inline-flex min-h-11 items-center break-words font-semibold text-brand underline decoration-accent-border underline-offset-4 hover:text-brand-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus [overflow-wrap:anywhere]">
-                  {event.bandName}
-                </Link>
+          {sortEvents(events).map(event => <article key={`${event.band_id}:${event.id}`} onClick={toggleCardDetails} className="min-w-0 rounded-2xl border border-nav-border bg-surface p-4 shadow-app-card sm:p-6">
+            <EventFlyerLayout path={event.flyer_path} title={event.title}>
+              <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <h2 className="break-words text-lg font-semibold text-content [overflow-wrap:anywhere] sm:text-xl">{event.title}</h2>
+                  <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-accent">{eventTypeLabels[event.event_type] ?? event.event_type}</p>
+                  <p className="mt-3 text-sm text-content-muted">Banda responsável</p>
+                  <Link href={`/bandas/${event.band_id}/agenda`} className="mt-1 inline-flex min-h-11 items-center break-words font-semibold text-brand underline decoration-accent-border underline-offset-4 hover:text-brand-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus [overflow-wrap:anywhere]">
+                    {event.bandName}
+                  </Link>
+                </div>
+                <div className="w-full shrink-0 rounded-xl bg-accent-soft px-4 py-3 sm:w-auto sm:min-w-48">
+                  <p className="text-sm font-semibold text-content">{formatEventDate(event.start_at)}</p>
+                  <p className="mt-1 text-sm tabular-nums text-content-muted">
+                    {formatEventTime(event.start_at)}
+                    {event.end_at && <> – {formatEventDate(event.end_at) !== formatEventDate(event.start_at)
+                      && <>{formatEventDate(event.end_at)} às </>}{formatEventTime(event.end_at)}</>}
+                  </p>
+                </div>
               </div>
-              <div className="w-full shrink-0 rounded-xl bg-accent-soft px-4 py-3 sm:w-auto sm:min-w-48">
-                <p className="text-sm font-semibold text-content">{formatEventDate(event.start_at)}</p>
-                <p className="mt-1 text-sm tabular-nums text-content-muted">
-                  {formatEventTime(event.start_at)}
-                  {event.end_at && <> – {formatEventDate(event.end_at) !== formatEventDate(event.start_at)
-                    && <>{formatEventDate(event.end_at)} às </>}{formatEventTime(event.end_at)}</>}
-                </p>
-              </div>
-            </div>
-            {event.location?.trim() && <p className="mt-4 break-words text-sm text-content-muted"><span className="font-medium text-content">Local:</span> {event.location}</p>}
-            {event.description?.trim() && <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-content-muted">{event.description}</p>}
+              {event.location?.trim() && <p className="mt-4 break-words text-sm text-content-muted"><span className="font-medium text-content">Local:</span> {event.location}</p>}
+            </EventFlyerLayout>
+            <CardDetails title={event.title} description={event.description} />
           </article>)}
         </section>}
     </div>

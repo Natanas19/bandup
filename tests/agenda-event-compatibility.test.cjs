@@ -11,25 +11,28 @@ const event = { id: 'event', title: 'Show', event_type: 'show', start_at: '2099-
   end_at: null, description: null, location: null, created_by: 'user' };
 const task = { id: 'task', event_id: 'event', title: 'Soundcheck', status: 'todo', priority: 'high' };
 
-async function loadAgenda({ taskError = null, taskThrows = false, events = [event], signedIn = true, member = true } = {}) {
+async function loadAgenda({ taskError = null, taskThrows = false, flyerError = null, events = [event], signedIn = true, member = true, updateError = null } = {}) {
   const states = [], effects = [], calls = [], cache = new Map();
   let cursor = 0;
   const client = {
     auth: { getSession: async () => ({ data: { session: signedIn ? { user: { id: 'user' } } : null }, error: null }) },
     from(table) {
       const call = { table, filters: [] }; calls.push(call);
-      const result = () => {
+      const result = (single = false) => {
         if (table === 'tasks' && taskThrows) throw new Error('Network failure');
         const data = table === 'band_members' ? member ? { role: 'admin' } : null
-          : table === 'bands' ? { name: 'Demo' } : table === 'events' ? events : taskError ? null : [task];
-        return { data, error: table === 'tasks' ? taskError : null };
+          : table === 'bands' ? { name: 'Demo' }
+          : table === 'events' ? (single ? { ...events[0], ...call.update } : events) : taskError ? null : [task];
+        return { data, error: table === 'tasks' ? taskError : call.update && updateError ? updateError
+          : table === 'events' && call.columns.includes('flyer_path') ? flyerError : null };
       };
       return {
         select(columns) { call.columns = columns; return this; },
+        update(values) { call.update = values; return this; },
         eq(...args) { call.filters.push(args); return this; },
         in(column, values) { call.in = [column, Array.from(values)]; return this; },
         order() { return this; },
-        maybeSingle() { return Promise.resolve().then(result); },
+        maybeSingle() { return Promise.resolve().then(() => result(true)); },
         then(resolve, reject) { return Promise.resolve().then(result).then(resolve, reject); },
       };
     },
@@ -48,22 +51,32 @@ async function loadAgenda({ taskError = null, taskThrows = false, events = [even
         };
         if (name === 'next/navigation') return { useParams: () => ({ bandId: 'band' }) };
         if (name === '@/lib/supabase/client') return { getSupabaseBrowserClient: () => client };
-        if (name === '@/lib/date-time') return { watchPageClock() {}, differentLocalEventDays: () => false };
+        if (name === '@/lib/date-time') return { ...load('src/lib/date-time.ts'), watchPageClock() {} };
+        if (name === '@/components/event-flyer') return {
+          EventFlyerLayout: ({ children }) => children,
+        };
         if (name === 'next/link' || name.startsWith('@/components/')) return { __esModule: true, default: () => null, BandWorkspaceInfo: () => null };
         if (name.startsWith('@/lib/')) return load('src/' + name.slice(2) + '.ts');
+        if (name.startsWith('./')) return load(path.join(path.dirname(file), name + '.ts'));
         return require(name);
       },
     });
     return mod.exports;
   }
   const Component = load('src/app/bandas/[bandId]/agenda/page.tsx').default;
-  Component();
-  const cleanups = effects.map(effect => effect());
-  await new Promise(resolve => setImmediate(resolve));
-  cursor = 0;
-  const tree = Component();
-  cleanups.forEach(cleanup => cleanup?.());
-  return { states, calls, tree };
+  const render = () => {
+    cursor = 0;
+    effects.length = 0;
+    return Component();
+  };
+  async function reload() {
+    render();
+    const cleanups = effects.map(effect => effect());
+    await new Promise(resolve => setImmediate(resolve));
+    cleanups.forEach(cleanup => cleanup?.());
+    return render();
+  }
+  return { states, calls, tree: await reload(), render, reload };
 }
 function text(tree) {
   if (typeof tree === 'string') return tree;
@@ -72,13 +85,14 @@ function text(tree) {
   return text(tree.props?.children);
 }
 
-test('agenda loads events with an explicit unavailable state for the missing task event column', async () => {
-  const f = await loadAgenda({ taskError: { code: '42703', message: 'column tasks.event_id does not exist' } });
+test('agenda recognizes and remembers a missing task event column on the same client', async () => {
+  const f = await loadAgenda({ taskError: { code: '42703', message: 'column public.tasks.event_id does not exist' } });
   assert.equal(f.states[0], 'ready');
   assert.equal(f.states[4][0].id, 'event');
   assert.equal(Object.keys(f.states[5]).length, 0);
   assert.match(text(f.tree), /Tarefas associadas indisponíveis/);
   assert.match(text(f.tree), /Show/);
+  assert.match(text(await f.reload()), /Tarefas associadas indisponíveis/);
   assert.equal(f.calls.filter(call => call.table === 'tasks').length, 1);
 });
 
@@ -92,6 +106,26 @@ test('agenda preserves exact event associations and band filters when supported'
   assert.deepEqual(query.in, ['event_id', ['event']]);
 });
 
+test('band agenda stays available before the flyer migration', async () => {
+  const f = await loadAgenda({ flyerError: { code: '42703', message: 'column events.flyer_path does not exist' } });
+  assert.equal(f.states[0], 'ready');
+  assert.deepEqual(f.calls.filter(call => call.table === 'events').map(call => call.columns.includes('flyer_path')), [true, false]);
+});
+
+function findNode(node, predicate) {
+  if (Array.isArray(node)) return node.map(child => findNode(child, predicate)).find(Boolean);
+  if (!node || typeof node !== 'object') return;
+  return predicate(node) ? node : findNode(node.props?.children, predicate);
+}
+
+test('band agenda places the flyer alongside the main event information', async () => {
+  const { tree } = await loadAgenda({ events: [{ ...event, flyer_path: 'flyer', location: 'Palco A' }] });
+  const [main, details] = findNode(tree, node => node.type === 'article').props.children;
+  assert.equal(main.props.path, 'flyer');
+  assert.match(text(main), /Show[\s\S]*Palco A/);
+  assert.match(text(details), /Tarefas relacionadas/);
+});
+
 for (const error of [
   { code: '42501', message: 'permission denied' },
   { code: 'PGRST301', message: 'JWT expired' },
@@ -100,15 +134,45 @@ for (const error of [
   { code: '42703', message: 'column events.event_id does not exist' },
 ]) test(`agenda does not hide ${error.code}: ${error.message}`, async () => {
   const f = await loadAgenda({ taskError: error });
-  assert.equal(f.states[0], 'error');
-  assert.match(text(f.tree), /Não foi possível carregar as tarefas dos eventos/);
+  assert.equal(f.states[0], 'ready');
+  assert.match(text(findNode(f.tree, node => node.props.role === 'alert')), /Não foi possível carregar as tarefas dos eventos/);
   assert.doesNotMatch(text(f.tree), /Tarefas associadas indisponíveis/);
+  await f.reload();
+  assert.equal(f.calls.filter(call => call.table === 'tasks').length, 2);
 });
 
 test('agenda does not hide thrown network errors', async () => {
   const f = await loadAgenda({ taskThrows: true });
-  assert.equal(f.states[0], 'error');
-  assert.match(text(f.tree), /Não foi possível carregar a agenda/);
+  assert.equal(f.states[0], 'ready');
+  assert.match(text(findNode(f.tree, node => node.props.role === 'alert')), /Não foi possível carregar as tarefas dos eventos/);
+});
+
+test('editing uses events only, preserves an unchanged flyer and surfaces a denied write', async () => {
+  for (const updateError of [null, { code: '42501' }]) {
+    const f = await loadAgenda({
+      taskError: { code: '42703', message: 'column tasks.event_id does not exist' },
+      events: [{ ...event, flyer_path: 'flyer' }],
+      updateError,
+    });
+    findNode(f.tree, node => node.type === 'button' && text(node) === 'Editar').props.onClick();
+    findNode(f.render(), node => node.props.id === 'event-title').props.onChange({ target: { value: 'Título atualizado' } });
+    const before = f.calls.length;
+    await findNode(f.render(), node => node.type === 'form').props.onSubmit({ preventDefault() {} });
+    assert.equal(f.calls.slice(before).some(call => call.table === 'tasks'), false);
+    const write = f.calls.find(call => call.update);
+    assert.equal(write.update.title, 'Título atualizado');
+    assert.equal('flyer_path' in write.update, false);
+    assert.match(write.columns, /flyer_path/);
+    assert.deepEqual(write.filters, [['id', 'event'], ['band_id', 'band']]);
+    const html = text(f.render());
+    if (updateError) {
+      assert.match(html, /permissão/);
+      assert.doesNotMatch(html, /Evento atualizado com sucesso/);
+    } else {
+      assert.match(html, /Evento atualizado com sucesso/);
+      assert.equal(f.states[4][0].flyer_path, 'flyer');
+    }
+  }
 });
 
 test('empty agenda does not query task associations', async () => {

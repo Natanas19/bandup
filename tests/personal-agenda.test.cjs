@@ -8,15 +8,17 @@ const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const ts = require('typescript');
 const root = path.join(__dirname, '..');
+const storageOrigin = 'https://local-fixture.example';
 
-function compile(file, overrides = {}) {
+function compile(file, overrides = {}, globals = {}) {
   const cache = new Map();
   function load(relative) {
     if (cache.has(relative)) return cache.get(relative).exports;
     const mod = { exports: {} }; cache.set(relative, mod);
     vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root, relative), 'utf8'), {
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
-    }).outputText, { module: mod, exports: mod.exports, Date, Intl,
+    }).outputText, { module: mod, exports: mod.exports, Date, Intl, URL, AbortSignal, crypto,
+      process: { env: { NEXT_PUBLIC_SUPABASE_URL: storageOrigin } }, ...globals,
       require(name) {
         if (name in overrides) return overrides[name];
         if (name === 'react/jsx-runtime') return require(name);
@@ -26,6 +28,7 @@ function compile(file, overrides = {}) {
           const target = [base + '.ts', base + '.tsx'].find(candidate => fs.existsSync(path.join(root, candidate)));
           return load(target);
         }
+        if (name.startsWith('./')) return load(path.join(path.dirname(relative), name + '.ts'));
         return require(name);
       },
     });
@@ -39,7 +42,7 @@ const bands = [
   { band_id: 'band-b', role: 'member', band: { id: 'band-b', name: 'Banda B' } },
 ];
 const events = [
-  { id: 'event-a', band_id: 'band-a', title: 'Show de sexta', description: 'Levar os instrumentos', event_type: 'show', start_at: '2099-04-03T18:30:00Z', end_at: '2099-04-03T20:00:00Z', location: 'Casa de shows' },
+  { id: 'event-a', band_id: 'band-a', title: 'Show de sexta', description: 'Levar os instrumentos. Mapa: https://example.com/mapa', event_type: 'show', start_at: '2099-04-03T18:30:00Z', end_at: '2099-04-03T20:00:00Z', location: 'Casa de shows' },
   { id: 'event-b', band_id: 'band-b', title: 'Ensaio', description: null, event_type: 'rehearsal', start_at: '2099-04-05T19:00:00Z', end_at: null, location: null },
 ];
 
@@ -58,7 +61,8 @@ function serviceFixture(options = {}) {
         order(...values) { (call.orders ??= []).push(values); return this; },
         range(first, last) { call.ranges.push([first, last]); this.offset = first; return this; },
         then(resolve, reject) {
-          const failure = table === 'band_members' ? options.membershipError : options.eventError;
+          const failure = table === 'band_members' ? options.membershipError
+            : (call.columns.includes('flyer_path') && options.flyerError) || options.eventError;
           if (failure) return Promise.resolve({ data: null, error: failure }).then(resolve, reject);
           let data = table === 'band_members' ? (options.bands ?? bands) : (options.events ?? events);
           if (table === 'events' && !options.ignoreBandFilter && call.in) data = data.filter(row => call.in[1].includes(row.band_id));
@@ -84,8 +88,153 @@ test('personal agenda reads only current memberships and labels events with thei
   const eventQuery = fixture.calls[1];
   assert.equal(eventQuery.table, 'events');
   assert.deepEqual(eventQuery.in, ['band_id', ['band-a', 'band-b']]);
-  assert.equal(eventQuery.columns, 'id, band_id, title, description, event_type, start_at, end_at, location');
+  assert.equal(eventQuery.columns, 'id, band_id, title, description, event_type, start_at, end_at, location, flyer_path');
   assert.deepEqual(eventQuery.orders.map(order => order[0]), ['start_at', 'id']);
+});
+
+const flyerBand = '20000000-0000-0000-0000-000000000001';
+const flyerEvent = '30000000-0000-0000-0000-000000000001';
+const flyerFile = { type: 'image/webp', size: 1024 };
+const flyerPath = `${flyerBand}/${flyerEvent}/40000000-0000-4000-8000-000000000001.webp`;
+const signedFlyer = `${storageOrigin}/storage/v1/object/sign/event-flyers/${flyerPath}?token=fixture`;
+
+function flyerFixture(options = {}) {
+  let linked = options.linked ?? null;
+  const calls = [];
+  const scoped = {
+    storage: { from(bucket) {
+      assert.equal(bucket, 'event-flyers');
+      return {
+        async upload(path, file, settings) {
+          calls.push(['upload', path, file, settings]);
+          return { error: options.uploadDenied ? { code: '403' } : null };
+        },
+        async createSignedUrl(path, ttl) {
+          assert.equal(path, flyerPath); assert.equal(ttl, 60);
+          return { data: { signedUrl: options.signedUrl ?? signedFlyer } };
+        },
+      };
+    } },
+    from(table) {
+      assert.equal(table, 'events');
+      let replacement, expected;
+      return {
+        select() { return this; },
+        update(value) { replacement = value; return this; },
+        eq(field, value) {
+          if (field === 'flyer_path') expected = value;
+          else assert.equal(value, field === 'id' ? flyerEvent : flyerBand);
+          return this;
+        },
+        is(field, value) { assert.equal(field, 'flyer_path'); expected = value; return this; },
+        async maybeSingle() {
+          if (!replacement) return { data: { flyer_path: linked } };
+          calls.push(['update', expected, replacement.flyer_path]);
+          if (options.denied) return { error: { code: '42501' } };
+          if (options.concurrent || expected !== linked) return { data: null };
+          linked = replacement.flyer_path;
+          if (options.lostReply) throw Error('Connection lost');
+          return { data: { flyer_path: linked } };
+        },
+      };
+    },
+  };
+  const api = compile('src/lib/event-flyer.ts', { './band-logo-upload': {
+    bandPhotoSession: async () => ({ scoped, verify: async () => {} }),
+  } });
+  return { api, scoped, calls, save: (previous, file) => api.saveEventFlyer(scoped, 'user', flyerBand, flyerEvent, previous, file) };
+}
+
+test('flyer validates file types and size before an upload', async () => {
+  const f = flyerFixture();
+  for (const file of [{ type: 'image/svg+xml', size: 1 }, { type: 'image/png', size: 0 }, { type: 'image/jpeg', size: 2097153 }]) {
+    await assert.rejects(f.save(null, file), /flyer válido/);
+  }
+  assert.deepEqual(f.calls, []);
+});
+
+test('flyer uploads immutably, confirms association and removes only the link', async () => {
+  const f = flyerFixture({ lostReply: true });
+  const path = await f.save(null, flyerFile);
+  assert.match(path, new RegExp(`^${flyerBand}/${flyerEvent}/[0-9a-f-]+\\.webp$`));
+  assert.equal(f.calls[0][0], 'upload');
+  assert.equal(f.calls[0][3].upsert, false);
+  assert.deepEqual(f.calls[1], ['update', null, path]);
+  assert.equal(await f.save(path, null), null);
+  assert.deepEqual(f.calls[2], ['update', path, null]);
+  assert.equal(f.calls.length, 3);
+});
+
+test('flyer failures do not report success or retry mutations', async () => {
+  const upload = flyerFixture({ uploadDenied: true });
+  await assert.rejects(upload.save(null, flyerFile), /envio do flyer/);
+  assert.equal(upload.calls.length, 1);
+  const denied = flyerFixture({ denied: true, linked: flyerPath });
+  await assert.rejects(denied.save(flyerPath, null), /permissão/);
+  assert.equal(denied.calls.length, 1);
+  const concurrent = flyerFixture({ concurrent: true, linked: flyerPath });
+  await assert.rejects(concurrent.save(flyerPath, null), /confirmar a alteração/);
+  assert.equal(concurrent.calls.length, 1);
+});
+
+test('flyer viewer signs the exact object briefly and rejects an unexpected origin', async () => {
+  const ok = flyerFixture();
+  assert.equal(await ok.api.signEventFlyer(ok.scoped, flyerPath), signedFlyer);
+  const invalid = flyerFixture({ signedUrl: signedFlyer.replace(storageOrigin, 'https://unexpected.example') });
+  await assert.rejects(invalid.api.signEventFlyer(invalid.scoped, flyerPath), /inválido/);
+});
+
+test('flyer viewer opens the full image, expires locally and handles a failed refresh', async () => {
+  let cursor = 0, effect, expiry, fail = false;
+  const states = [];
+  const { EventFlyer } = compile('src/components/event-flyer.tsx', {
+    react: {
+      useState(initial) {
+        const index = cursor++;
+        if (!(index in states)) states[index] = initial;
+        return [states[index], value => { states[index] = typeof value === 'function' ? value(states[index]) : value; }];
+      },
+      useEffect(run) { effect = run; },
+    },
+    '@/lib/supabase/client': { getSupabaseBrowserClient: () => ({}) },
+    '@/lib/event-flyer': { EVENT_FLYER_URL_SECONDS: 60, async signEventFlyer() {
+      if (fail) throw Error('Denied');
+      return signedFlyer;
+    } },
+  }, { setTimeout(callback) { expiry = callback; }, clearTimeout() {} });
+  const render = () => { cursor = 0; return EventFlyer({ path: flyerPath, title: 'Show', thumbnail: true }); };
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+
+  assert.equal(render().props.children, 'Carregando flyer...');
+  const unmount = effect();
+  await settle();
+  const imageLink = render();
+  assert.equal(imageLink.props.href, signedFlyer);
+  assert.equal(imageLink.props.target, '_blank');
+  assert.match(imageLink.props.className, /\blg:mx-auto\b/);
+  assert.doesNotMatch(imageLink.props.className, /(?:^|\s)mx-auto\b/);
+  assert.match(imageLink.props.children.props.className, /object-contain/);
+  assert.match(imageLink.props.children.props.className, /max-h-48.*lg:max-h-36/);
+  expiry();
+  const [expired, retry] = render().props.children;
+  assert.match(expired.props.children, /expirou/);
+  unmount();
+  fail = true;
+  retry.props.onClick();
+  assert.equal(render().props.children, 'Carregando flyer...');
+  const cleanup = effect();
+  await settle();
+  assert.match(render().props.children[0].props.children, /Não foi possível abrir/);
+  cleanup();
+});
+
+test('personal agenda falls back only when the flyer column is missing', async () => {
+  const fixture = serviceFixture({ flyerError: { code: '42703', message: 'column events.flyer_path does not exist' } });
+  assert.equal((await service.loadPersonalAgenda(fixture.client)).length, 2);
+  assert.deepEqual(fixture.calls.filter(call => call.table === 'events').map(call => call.columns.includes('flyer_path')), [true, false]);
+  const forbidden = serviceFixture({ flyerError: { code: '42501', message: 'permission denied' } });
+  await assert.rejects(service.loadPersonalAgenda(forbidden.client));
+  assert.equal(forbidden.calls.filter(call => call.table === 'events').length, 1);
 });
 
 test('no memberships skips the events query and event pages are read past the service page size', async () => {
@@ -141,5 +290,19 @@ test('personal agenda renders loading, error, empty and responsive event details
     assert.ok(html.includes(value), `${value}\n${html}`);
   }
   assert.match(html, /href="\/bandas\/band-a\/agenda"/);
+  assert.match(html, /href="\/bandas\/band-b\/agenda"/);
+  const disclosures = html.match(/<details\b[\s\S]*?<\/details>/g) ?? [];
+  assert.equal(disclosures.length, 1);
+  assert.doesNotMatch(disclosures[0], /<details\b[^>]*\bopen(?:\s|=|>)/);
+  assert.match(disclosures[0], /<summary aria-label="Detalhes de Show de sexta"[^>]*>/);
+  assert.match(disclosures[0], /Ver detalhes[\s\S]*Recolher detalhes[\s\S]*href="https:\/\/example\.com\/mapa"/);
   assert.match(html, /sm:flex-row/);
+  assert.doesNotMatch(html, /lg:w-36|Carregando flyer/);
+  const withFlyer = renderAgenda({ events: [{ ...events[0], bandName: 'Banda A', flyer_path: flyerPath }] });
+  assert.match(withFlyer, /flex-col gap-2 lg:flex-row lg:items-start lg:gap-4[\s\S]*w-full lg:w-36[\s\S]*Carregando flyer[\s\S]*<h2[^>]*>Show de sexta/);
+  assert.match(withFlyer, /href="\/bandas\/band-a\/agenda"[\s\S]*Local:[\s\S]*<details/);
+  assert.doesNotMatch(withFlyer.slice(withFlyer.indexOf('<details')), /Carregando flyer/);
+  const flyerOnly = renderAgenda({ events: [{ ...events[1], bandName: 'Banda B', flyer_path: flyerPath }] });
+  assert.match(flyerOnly, /Carregando flyer/);
+  assert.doesNotMatch(flyerOnly, /<details/);
 });
