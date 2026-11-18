@@ -16,7 +16,7 @@ function hasSupabaseConfiguration() {
   }
 }
 export const BAND_ENTRY_BACKEND_VALIDATED = hasSupabaseConfiguration();
-export type EntryStatus = "pending" | "approved" | "rejected" | "cancelled";
+export type EntryStatus = "pending" | "approved" | "rejected" | "cancelled" | "superseded";
 export type DiscoveredBand = { band_id: string; name: string; logo_url: string | null };
 export type EntryRequest = {
   id: string; band_id: string; requester_id: string; applicant_name: string;

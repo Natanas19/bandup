@@ -46,6 +46,14 @@ export function safeBandLogo(value: string | null, origin: string): string | nul
   }
 }
 
+export function safeDiscoveryAvatar(value: unknown, available: boolean, origin: string): string | null {
+  if (!available || typeof value !== "string") return null;
+  const url = safeBandLogo(value, origin);
+  if (!url || url !== value) return null;
+  const avatarPath = /^\/storage\/v1\/object\/public\/avatars\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(jpg|png|webp)$/;
+  return avatarPath.test(new URL(url).pathname) ? url : null;
+}
+
 export function toPublicBand(
   value: unknown,
   expectedSlug: string,

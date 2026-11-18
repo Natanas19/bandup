@@ -133,7 +133,7 @@ export default function SpaceSwitcher({ bandId, bandName }: { bandId?: string; b
         {loadFailed && <p role="status" className="mt-2 shrink-0 px-3 py-2 text-xs text-content-subtle">Não foi possível carregar todos os perfis.</p>}
         <div className="mt-2 grid shrink-0 gap-2 border-t border-outline-subtle px-1 pt-2">
           <Link href="/bandas/nova" onClick={() => { if (selector.current) selector.current.open = false; }} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-control bg-primary px-3 py-2.5 text-center text-sm font-semibold text-on-primary hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus"><NavigationIcon name="Plus" className="h-4 w-4" />Criar banda</Link>
-          <Link href="/descobrir" onClick={() => { if (selector.current) selector.current.open = false; }} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-control border border-accent-border px-3 py-2.5 text-center text-sm font-semibold text-brand hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus"><NavigationIcon name="Search" className="h-4 w-4" />Procurar banda</Link>
+          <Link href="/descobrir" onClick={() => { if (selector.current) selector.current.open = false; }} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-control border border-accent-border px-3 py-2.5 text-center text-sm font-semibold text-brand hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus"><NavigationIcon name="Search" className="h-4 w-4" />Procurar</Link>
         </div>
       </div>
     </details>

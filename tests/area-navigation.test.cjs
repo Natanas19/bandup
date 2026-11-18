@@ -145,7 +145,7 @@ test('space switcher is present in both responsive workspaces and offers creatio
   assert.match(switcher, /<NavigationIcon name="Plus"/);
   assert.match(switcher, /<NavigationIcon name="Search"/);
   assert.match(switcher, /w-full items-center justify-center gap-2[\s\S]*Criar banda/);
-  assert.match(switcher, /w-full items-center justify-center gap-2[\s\S]*Procurar banda/);
+  assert.match(switcher, /w-full items-center justify-center gap-2[\s\S]*Procurar<\/Link>/);
   assert.match(switcher, /href="\/bandas\/nova"/);
   assert.match(switcher, /href="\/descobrir"/);
   for (const file of ['src/components/personal-workspace.tsx', 'src/components/band-workspace.tsx']) {
@@ -167,11 +167,11 @@ test('profile selector keeps its identity header for personal and band contexts'
   assert.ok(band.some(node => node.props?.children === 'Kimera ao Kaos'));
   assert.ok(band.some(node => node.props?.href === '/bandas/nova'));
   assert.ok(band.some(node => node.props?.href === '/descobrir'));
-  assert.ok(band.some(node => node.props?.href === '/descobrir' && JSON.stringify(node.props.children).includes('Procurar banda')));
+  assert.ok(band.some(node => node.props?.href === '/descobrir' && node.props.children.includes('Procurar')));
 });
 
-test('space switcher closes after choosing create band or discover band', () => {
-  for (const [href, label] of [['/bandas/nova', 'Criar banda'], ['/descobrir', 'Procurar banda']]) {
+test('space switcher closes after creating a band or opening discovery', () => {
+  for (const [href, label] of [['/bandas/nova', 'Criar banda'], ['/descobrir', 'Procurar']]) {
     const f = fixture(), Switcher = f.load('src/components/space-switcher.tsx').default;
     const tree = nodes(Switcher({}));
     const link = tree.find(node => node.props?.href === href

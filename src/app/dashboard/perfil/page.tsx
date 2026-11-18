@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { User } from "@supabase/supabase-js";
 import Link from "next/link";
 import AvatarCompletion from "@/components/avatar-completion";
+import MusicianAvailability from "@/components/musician-availability";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { normalizeDisplayName } from "@/lib/display-name";
 import { bioLength, validBio, safeProfilePhoto, savePersonalMetadata, type ProfileEdits } from "@/lib/personal-profile-edit";
@@ -116,6 +117,7 @@ export default function PersonalProfilePage() {
             <button type="submit" disabled={busy || photoBusy || !normalizeDisplayName(name) || !validBio(bio)} className="min-h-11 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-on-primary disabled:opacity-60">{busy ? "Salvando..." : "Salvar nome e descrição"}</button>
             {message && <p role={failed ? "alert" : "status"} className={`break-words text-sm ${failed ? "text-danger" : "text-content-muted"}`}>{message}</p>}
           </form>
+          <MusicianAvailability key={`availability:${user.id}`} userId={user.id} />
         </>}
     </div>
   </main>;

@@ -12,7 +12,7 @@ import ProfileAvatar from "@/components/profile-avatar";
 import { safeBandLogo } from "@/lib/public-band-data";
 
 const button = "min-h-11 rounded-xl border border-accent-border px-4 py-2 text-sm font-semibold text-accent disabled:cursor-not-allowed disabled:opacity-50";
-const statusLabels = { pending: "Pendente", approved: "Aprovado", rejected: "Recusado", cancelled: "Cancelado" };
+const statusLabels = { pending: "Pendente", approved: "Aprovado", rejected: "Recusado", cancelled: "Cancelado", superseded: "Encerrado pela entrada na banda" };
 const supabaseOrigin = typeof process !== "undefined" ? process.env.NEXT_PUBLIC_SUPABASE_URL : undefined;
 
 function EntryFlow({ bandId, onMembersChanged }: { bandId?: string; onMembersChanged?: () => void }) {

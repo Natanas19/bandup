@@ -12,6 +12,8 @@ import { loadPersonalTasks, PersonalTasksLoadError, type PersonalTask } from "@/
 import { loadPersonalAgenda, PersonalAgendaLoadError, type PersonalEvent } from "@/lib/personal-agenda";
 import { formatTaskDate } from "@/lib/date-time";
 import { BandDeletionRecovery } from "@/components/band-deletion-panel";
+import { BandInvitations } from "@/components/band-invitations";
+import { BAND_INVITATIONS_ENABLED } from "@/lib/band-invitations";
 
 type BandMembership = { role: string; band: { id: string; name: string } | null };
 
@@ -157,6 +159,7 @@ export default function DashboardPage() {
               <p id="discovery-availability" className="text-xs leading-5 text-content-muted lg:col-start-2">{BAND_ENTRY_BACKEND_VALIDATED ? "Pesquise pelo nome de uma banda e acompanhe suas solicitações de entrada." : "A busca e o envio de solicitações ainda estão indisponíveis enquanto validamos a funcionalidade."}</p>
             </section>}
 
+            {BAND_INVITATIONS_ENABLED && <BandInvitations key={user.id} onAccepted={() => setRevision(value => value + 1)} />}
             <div className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(20rem,0.9fr)]">
               <section aria-labelledby="personal-tasks-title" className="min-w-0 rounded-panel border border-outline bg-surface p-5 shadow-app-card sm:p-6 lg:p-7">
                 <header className="flex items-start justify-between gap-4">

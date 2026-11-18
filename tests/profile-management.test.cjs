@@ -123,6 +123,7 @@ function pageFixture(options = {}, file = 'src/app/dashboard/perfil/page.tsx') {
     },
     'next/link': { __esModule: true, default: () => null },
     '@/components/avatar-completion': { __esModule: true, default: function AvatarEditor() {} },
+    '@/components/musician-availability': { __esModule: true, default: function Availability() {} },
     '@/components/profile-avatar': { __esModule: true, default: function Avatar() {} },
     '@/components/navigation-icon': { __esModule: true, default: () => null },
     '@/components/workspace-settings': { WorkspaceSettingsMenu: () => null },
