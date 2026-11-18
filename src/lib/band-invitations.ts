@@ -2,8 +2,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeMemberDisplayName } from "./display-name";
 import { safeDiscoveryAvatar } from "./public-band-data";
 
-// Build-time opt-in only after separate backend/hardening approval and validation.
-export const BAND_INVITATIONS_ENABLED = process.env.NEXT_PUBLIC_BANDUP_INVITATIONS_ENABLED === "true";
 export const INVITATION_PAGE_SIZE = 20;
 export type InvitationStatus = "pending" | "accepted" | "rejected" | "superseded";
 export type InvitationDecision = "accepted" | "rejected";
@@ -38,12 +36,10 @@ export function invitationError(error: unknown): InvitationError {
 const uuid = (value: unknown): value is string => typeof value === "string"
   && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 const timestamp = (value: unknown): value is string => typeof value === "string" && Number.isFinite(Date.parse(value));
-function gate() { if (!BAND_INVITATIONS_ENABLED) throw invitationError({ code: "blocked" }); }
 function id(value: unknown) { if (!uuid(value)) throw invitationError({ code: "22023" }); }
 
 export function createBandInvitationService(client: SupabaseClient) {
   async function rpc(name: string, args: Record<string, unknown>) {
-    gate();
     try {
       const { data, error } = await client.rpc(name, args);
       if (error) throw invitationError(error);
@@ -52,7 +48,6 @@ export function createBandInvitationService(client: SupabaseClient) {
   }
   return {
     async adminBands(): Promise<InvitationBand[]> {
-      gate();
       const { data: account, error } = await client.auth.getUser();
       if (error || !account.user) throw invitationError({ code: "42501" });
       const result = await client.from("band_members").select("band:bands!inner(id,name)")
@@ -63,7 +58,6 @@ export function createBandInvitationService(client: SupabaseClient) {
           ? [{ id: row.band.id, name: row.band.name }] : []);
     },
     async discover(query: string, offset = 0): Promise<{ musicians: InvitationMusician[]; hasNext: boolean }> {
-      gate();
       const name = query.trim();
       if (!name || [...query].length > 100 || !Number.isSafeInteger(offset) || offset < 0) throw invitationError({ code: "22023" });
       const data = await rpc("bandup_discover_musicians_for_invites", { p_query: name, p_offset: offset, p_limit: INVITATION_PAGE_SIZE + 1 });
@@ -81,20 +75,20 @@ export function createBandInvitationService(client: SupabaseClient) {
       return { musicians, hasNext: data.length > INVITATION_PAGE_SIZE };
     },
     async send(bandId: string, musicianRef: string): Promise<string> {
-      gate(); id(bandId); id(musicianRef);
+      id(bandId); id(musicianRef);
       const data = await rpc("bandup_invite_musician", { p_band_id: bandId, p_musician_ref: musicianRef });
       if (!uuid(data)) throw invitationError(null);
       return data;
     },
     async decide(invitationId: string, decision: InvitationDecision): Promise<InvitationDecision> {
-      gate(); id(invitationId);
+      id(invitationId);
       if (!["accepted", "rejected"].includes(decision)) throw invitationError({ code: "22023" });
       const data = await rpc("bandup_decide_invitation", { p_invitation_id: invitationId, p_decision: decision });
       if (data !== decision) throw invitationError(null);
       return data;
     },
     async list(bandId: string | null = null, offset = 0): Promise<BandInvitation[]> {
-      gate(); if (bandId !== null) id(bandId);
+      if (bandId !== null) id(bandId);
       if (!Number.isSafeInteger(offset) || offset < 0 || offset > 10000) throw invitationError({ code: "22023" });
       const data = await rpc("bandup_list_invitations", { p_band_id: bandId, p_offset: offset, p_limit: INVITATION_PAGE_SIZE });
       if (!Array.isArray(data) || data.length > INVITATION_PAGE_SIZE) throw invitationError(null);

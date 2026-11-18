@@ -24,8 +24,6 @@ function load(file, overrides = {}) {
     if (name === '@/components/display-name-settings') return { __esModule: true, default: () => null };
     if (name === '@/components/band-entry-flow') return load('src/components/band-entry-flow.tsx', overrides);
     if (name === '@/lib/band-entry') return load('src/lib/band-entry.ts');
-    // This route only reads the discovery flag; keep the test environment disabled.
-    if (name === '@/lib/musician-discovery') return { MUSICIAN_DISCOVERY_ENABLED: false };
     if (name === '@/lib/supabase/client') return { getSupabaseBrowserClient() { throw Error('Blocked UI must not initialize a client'); } };
     if (name === '@/components/theme-selector') return { __esModule: true, default: () => null };
     if (name === '@/lib/display-name') {
@@ -60,6 +58,7 @@ test('default route shows unavailability, never a fabricated list or success', (
   const html = renderToStaticMarkup(React.createElement(Page));
   assert.ok(html.includes('A descoberta está chegando'));
   assert.ok(html.includes('href="/dashboard/bandas"'));
+  assert.ok(html.includes('href="/descobrir/musicos"'));
   assert.ok(html.includes('href="/bandas/nova"'));
   assert.equal(html.includes('Nenhuma banda encontrada'), false);
   assert.equal(html.includes('Solicitação enviada'), false);

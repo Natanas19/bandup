@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import ProfileAvatar from "@/components/profile-avatar";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { BAND_INVITATIONS_ENABLED, createBandInvitationService, invitationError, invitationStatusLabel,
+import { createBandInvitationService, invitationError, invitationStatusLabel,
   INVITATION_PAGE_SIZE, type BandInvitation, type InvitationDecision, type InvitationBand, type InvitationMusician } from "@/lib/band-invitations";
 
 const button = "min-h-11 max-w-full whitespace-normal rounded-xl border border-accent-border px-4 py-2 text-sm font-semibold text-brand hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus disabled:opacity-50";
@@ -14,7 +14,6 @@ function Notice({ feedback }: { feedback: Feedback }) {
 }
 
 export function BandInvitations({ bandId, onAccepted }: { bandId?: string; onAccepted?: () => void }) {
-  if (!BAND_INVITATIONS_ENABLED) return null;
   return <InvitationList key={bandId ?? "received"} bandId={bandId} onAccepted={onAccepted} />;
 }
 
@@ -85,11 +84,6 @@ function InvitationList({ bandId, onAccepted }: { bandId?: string; onAccepted?: 
 }
 
 export function MusicianInvitationDiscovery() {
-  if (!BAND_INVITATIONS_ENABLED) return null;
-  return <InvitationDiscovery />;
-}
-
-function InvitationDiscovery() {
   const [api] = useState(() => createBandInvitationService(getSupabaseBrowserClient()));
   const [bands, setBands] = useState<InvitationBand[]>([]);
   const [bandId, setBandId] = useState("");

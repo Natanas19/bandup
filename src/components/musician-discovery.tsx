@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import ProfileAvatar from "@/components/profile-avatar";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { discoverMusicians, MUSICIAN_DISCOVERY_ENABLED, MUSICIAN_PAGE_SIZE, type DiscoveredMusician } from "@/lib/musician-discovery";
+import { discoverMusicians, MUSICIAN_PAGE_SIZE, type DiscoveredMusician } from "@/lib/musician-discovery";
 
 const button = "min-h-11 rounded-xl border border-accent-border px-4 py-3 text-sm font-semibold text-brand hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus disabled:opacity-50";
 
@@ -18,7 +18,7 @@ export default function MusicianDiscovery() {
   const request = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    if (!MUSICIAN_DISCOVERY_ENABLED || !search.query) return;
+    if (!search.query) return;
     const controller = new AbortController();
     request.current = controller;
     const ticket = ++generation.current;
@@ -43,7 +43,6 @@ export default function MusicianDiscovery() {
     setSearch(previous => ({ query: nextQuery, offset, revision: previous.revision + 1 }));
   }
 
-  if (!MUSICIAN_DISCOVERY_ENABLED) return null;
   return <section className="mt-7 space-y-5 rounded-2xl border border-nav-border bg-surface p-4 sm:p-6" aria-label="Busca de músicos">
     <form onSubmit={event => { event.preventDefault(); navigate(query.trim(), 0); }} className="space-y-3">
       <label htmlFor="musician-query" className="block text-sm font-semibold text-content">Buscar por nome</label>

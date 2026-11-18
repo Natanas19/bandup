@@ -7,33 +7,32 @@ const ts = require('typescript');
 const React = require('react');
 const origin = 'https://project.supabase.co';
 const avatar = origin + '/storage/v1/object/public/avatars/a0000000-0000-0000-0000-000000000001/b0000000-0000-4000-8000-000000000001.webp';
-function load(file, imports, enabled = true) {
+function load(file, imports) {
   const mod = { exports: {} };
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX,
   } }).outputText, { module: mod, exports: mod.exports, AbortController, URL,
-    process: { env: { NEXT_PUBLIC_BANDUP_MUSICIAN_DISCOVERY_ENABLED: String(enabled), NEXT_PUBLIC_SUPABASE_URL: origin } },
+    process: { env: { NEXT_PUBLIC_SUPABASE_URL: origin } },
     require: name => name in imports ? imports[name] : require(name) });
   return mod.exports;
 }
-const service = enabled => load('src/lib/musician-discovery.ts', {
+const service = () => load('src/lib/musician-discovery.ts', {
   './display-name': { normalizeMemberDisplayName: value => typeof value === 'string' && !value.includes('@') ? value : null },
   './public-band-data': load('src/lib/public-band-data.ts', {
     './social-links': load('src/lib/social-links.ts', {}),
     './development-lab': load('src/lib/development-lab.ts', {}),
   }),
-}, enabled);
+});
 test('musician route uses existing private session boundary', () => {
   const { getPrivateScope } = load('src/lib/private-session.ts', {});
   assert.equal(getPrivateScope('/descobrir/musicos'), '/descobrir');
 });
-test('disabled service never calls RPC; search and offset validation fail closed', async () => {
+test('invalid search and offset never call RPC', async () => {
   let calls = 0;
   const client = { rpc() { calls++; throw Error(); } };
   const signal = new AbortController().signal;
-  await assert.rejects(service(false).discoverMusicians(client, '', 0, signal));
   for (const [query, offset] of [['x'.repeat(101), 0], ['Ana', -1], ['Ana', 0.5], ['', 0], ['   ', 0]]) {
-    await assert.rejects(service(true).discoverMusicians(client, query, offset, signal));
+    await assert.rejects(service().discoverMusicians(client, query, offset, signal));
   }
   assert.equal(calls, 0);
 });
@@ -42,7 +41,7 @@ test('RPC searches on server, uses lookahead pagination and strips private field
   let rows = Array.from({ length: 21 }, (_, i) => ({ display_name: 'Ana', available: i % 2 === 0,
     photo_ref: 'https://private.example/photo', user_id: 'private-id', email: 'private@example.com' }));
   const client = { rpc(name, args) { calls.push([name, args]); return { abortSignal: async () => ({ data: rows, error: null }) }; } };
-  const api = service(true);
+  const api = service();
   const signal = new AbortController().signal;
   const first = await api.discoverMusicians(client, ' Ana%_ ', 20, signal);
   assert.deepEqual(JSON.parse(JSON.stringify(calls)), [['bandup_discover_musicians', { p_query: 'Ana%_', p_offset: 20, p_limit: 21 }]]);
@@ -62,7 +61,7 @@ test('RPC searches on server, uses lookahead pagination and strips private field
   assert.equal((await api.discoverMusicians(client, 'Ana', 0, signal)).musicians[0].name, 'Músico');
   rows = [{ available: 'false' }]; await assert.rejects(api.discoverMusicians(client, 'Ana', 0, signal));
 });
-function fixture(enabled = true) {
+function fixture() {
   const slots = [], effects = [], scheduled = [], calls = [];
   let cursor = 0;
   const Component = load('src/components/musician-discovery.tsx', {
@@ -73,7 +72,7 @@ function fixture(enabled = true) {
     },
     '@/components/profile-avatar': { default: () => null, __esModule: true },
     '@/lib/supabase/client': { getSupabaseBrowserClient: () => ({}) },
-    '@/lib/musician-discovery': { MUSICIAN_DISCOVERY_ENABLED: enabled, MUSICIAN_PAGE_SIZE: 20,
+    '@/lib/musician-discovery': { MUSICIAN_PAGE_SIZE: 20,
       discoverMusicians(client, query, offset, signal) { return new Promise((resolve, reject) => calls.push({ query, offset, signal, resolve, reject })); } },
   }).default;
   return { calls, render() { cursor = 0; const tree = Component(); while (scheduled.length) scheduled.shift()(); return tree; },
@@ -81,7 +80,6 @@ function fixture(enabled = true) {
 }
 function nodes(tree) { return !tree || typeof tree !== 'object' ? [] : Array.isArray(tree) ? tree.flatMap(nodes) : [tree, ...nodes(tree.props?.children)]; }
 const settle = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); };
-test('UI disabled makes no requests', () => { const h = fixture(false); assert.equal(h.render(), null); assert.equal(h.calls.length, 0); });
 test('UI searches on submit, paginates, resets search, ignores stale replies and handles retry/empty/unmount', async () => {
   const h = fixture(); h.render();
   const type = value => nodes(h.render()).find(n => n.type === 'input').props.onChange({ target: { value } });

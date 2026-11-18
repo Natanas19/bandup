@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import BandEntryFlow from "@/components/band-entry-flow";
 import { BandInvitations } from "@/components/band-invitations";
-import { BAND_INVITATIONS_ENABLED } from "@/lib/band-invitations";
 import { BAND_ENTRY_BACKEND_VALIDATED } from "@/lib/band-entry";
 import BandNavigation from "@/components/band-navigation";
 import { BandWorkspaceInfo } from "@/components/band-workspace";
@@ -253,7 +252,7 @@ export default function BandMembersPage() {
         {BAND_ENTRY_BACKEND_VALIDATED && isAdmin && <>
           <BandEntryFlow key={`requests:${bandId}`} bandId={bandId} onMembersChanged={() => setMembersRevision(value => value + 1)} />
         </>}
-        {BAND_INVITATIONS_ENABLED && isAdmin && <BandInvitations key={`invitations:${bandId}`} bandId={bandId} />}
+        {isAdmin && <BandInvitations key={`invitations:${bandId}`} bandId={bandId} />}
 
         {memberActionError && <p role="alert" className="mt-5 rounded-xl border border-danger-border bg-danger-surface px-4 py-3 text-sm text-danger">{memberActionError}</p>}
 

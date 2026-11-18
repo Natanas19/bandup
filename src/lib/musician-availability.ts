@@ -1,12 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { bandPhotoSession } from "./band-logo-upload";
 
-// Build-time opt-in after the remote migration is separately authorized/applied.
-export const MUSICIAN_AVAILABILITY_ENABLED = process.env.NEXT_PUBLIC_BANDUP_MUSICIAN_AVAILABILITY_ENABLED === "true";
 const unavailable = () => new Error("Não foi possível confirmar sua disponibilidade. Verifique novamente antes de alterar.");
 
 async function session(client: SupabaseClient, userId: string, signal: AbortSignal) {
-  if (!MUSICIAN_AVAILABILITY_ENABLED || !userId || signal.aborted) throw unavailable();
+  if (!userId || signal.aborted) throw unavailable();
   return bandPhotoSession(client, userId, signal);
 }
 

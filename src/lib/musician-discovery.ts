@@ -2,15 +2,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeMemberDisplayName } from "./display-name";
 import { safeDiscoveryAvatar } from "./public-band-data";
 
-// Opt in only after the destination migration has been separately approved/applied.
-export const MUSICIAN_DISCOVERY_ENABLED = process.env.NEXT_PUBLIC_BANDUP_MUSICIAN_DISCOVERY_ENABLED === "true";
 export const MUSICIAN_PAGE_SIZE = 20;
 export type DiscoveredMusician = { name: string; available: boolean; avatarUrl: string | null };
 
 export async function discoverMusicians(client: SupabaseClient, query: string, offset: number,
   signal: AbortSignal): Promise<{ musicians: DiscoveredMusician[]; hasNext: boolean }> {
   const name = query.trim();
-  if (!MUSICIAN_DISCOVERY_ENABLED || signal.aborted || !name || [...query].length > 100
+  if (signal.aborted || !name || [...query].length > 100
     || !Number.isSafeInteger(offset) || offset < 0) throw new Error("Discovery unavailable");
   // One extra row determines continuation without exposing identities or counts.
   const { data, error } = await client.rpc("bandup_discover_musicians", {

@@ -7,32 +7,25 @@ const ts = require('typescript');
 const React = require('react');
 const origin = 'https://project.supabase.co';
 const avatar = origin + '/storage/v1/object/public/avatars/a0000000-0000-0000-0000-000000000001/b0000000-0000-4000-8000-000000000001.webp';
-function load(file,imports={},flag) {
+function load(file,imports={}) {
   const mod={exports:{}};
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,
-    {module:mod,exports:mod.exports,URL,process:{env:{NEXT_PUBLIC_BANDUP_INVITATIONS_ENABLED:flag,NEXT_PUBLIC_SUPABASE_URL:origin}},require:name=>name in imports ? imports[name] : require(name)});
+    {module:mod,exports:mod.exports,URL,process:{env:{NEXT_PUBLIC_SUPABASE_URL:origin}},require:name=>name in imports ? imports[name] : require(name)});
   return mod.exports;
 }
-const service=flag=>load('src/lib/band-invitations.ts',{
+const service=()=>load('src/lib/band-invitations.ts',{
   './display-name':{normalizeMemberDisplayName:value=>typeof value==='string'&&!value.includes('@')?value:null},
   './public-band-data':load('src/lib/public-band-data.ts',{
     './social-links':load('src/lib/social-links.ts'),
     './development-lab':load('src/lib/development-lab.ts'),
   }),
-},flag);
+});
 const [band,ref,id]=['a','b','c'].map(letter=>`${letter}0000000-0000-0000-0000-000000000001`);
 const row=(status='pending')=>({invitation_id:id,band_id:band,band_name:'Banda',musician_ref:ref,status,
   created_at:'2026-11-16T12:00:00Z',decided_at:status==='pending'?null:'2026-11-16T13:00:00Z'});
-test('flag defaults off and all entry points refuse before RPC/Auth/table access',async()=>{
-  for(const flag of [undefined,'false','TRUE','1']) {
-    const api=service(flag).createBandInvitationService(new Proxy({}, {get(){throw Error('Client accessed while disabled');}}));
-    for(const call of [()=>api.adminBands(),()=>api.discover('Ana'),()=>api.send(band,ref),()=>api.list(),()=>api.decide(id,'accepted')])
-      await assert.rejects(call,error=>error.code==='blocked');
-  }
-});
 test('exact SQL names/arguments/returns; narrow projections and opaque discovery',async()=>{
   const calls=[]; let response;
-  const api=service('true').createBandInvitationService({async rpc(name,args){calls.push([name,args]);return {data:response,error:null};}});
+  const api=service().createBandInvitationService({async rpc(name,args){calls.push([name,args]);return {data:response,error:null};}});
   response=id; assert.equal(await api.send(band,ref),id);
   response='accepted'; assert.equal(await api.decide(id,'accepted'),'accepted');
   response=[{...row('superseded'),recipient_id:'PRIVATE',invited_by:'PRIVATE',email:'PRIVATE'}];
@@ -54,7 +47,7 @@ test('exact SQL names/arguments/returns; narrow projections and opaque discovery
 });
 test('invalid inputs/responses fail closed and mutation errors are never retried',async()=>{
   let calls=0,response, failure;
-  const api=service('true').createBandInvitationService({async rpc(){calls++;return {data:response,error:failure};}});
+  const api=service().createBandInvitationService({async rpc(){calls++;return {data:response,error:failure};}});
   await assert.rejects(()=>api.send('name',ref)); await assert.rejects(()=>api.decide(id,'approved'));
   await assert.rejects(()=>api.list(null,10020)); assert.equal(calls,0);
   for(response of [[row('unknown')],[{...row(),decided_at:'invalid'}],[{...row(),band_id:ref}]]) await assert.rejects(()=>api.list(band));
@@ -68,13 +61,13 @@ test('invalid inputs/responses fail closed and mutation errors are never retried
 test('band selector uses existing authenticated admin membership contract only',async()=>{
   const calls=[];const query={select(value){calls.push(['select',value]);return this;},eq(...args){calls.push(['eq',...args]);return this;},
     then(resolve){return Promise.resolve({data:[{band:{id:band,name:'Banda'}},{band:null}],error:null}).then(resolve);}};
-  const api=service('true').createBandInvitationService({auth:{getUser:async()=>({data:{user:{id:ref}},error:null})},
+  const api=service().createBandInvitationService({auth:{getUser:async()=>({data:{user:{id:ref}},error:null})},
     from(table){calls.push(['from',table]);return query;},rpc(){throw Error('Unexpected RPC');}});
   const bands=await api.adminBands();assert.equal(bands.length,1);assert.equal(bands[0].id,band);
   assert.deepEqual(calls,[['from','band_members'],['select','band:bands!inner(id,name)'],['eq','user_id',ref],['eq','role','admin']]);
 });
 
-function harness(name,enabled=true,props={}) {
+function harness(name,props={}) {
   const state=[],effects=[],queued=[];let cursor=0,clientCalls=0,listCalls=0,decisions=0,sendCalls=0;
   const controls={list:()=>Promise.resolve([row()]),decide:()=>Promise.resolve('accepted'),
     discover:()=>Promise.resolve({musicians:[{name:'Ana',available:true,musicianRef:ref,avatarUrl:avatar}],hasNext:false}),
@@ -84,11 +77,11 @@ function harness(name,enabled=true,props={}) {
     useRef(initial){const index=cursor++;return state[index]??=( {current:initial} );},
     useEffect(fn,deps){const index=cursor++;if(!effects[index]||deps.some((dep,i)=>dep!==effects[index].deps[i])){
       queued.push(()=>{effects[index]?.cleanup?.();effects[index]={deps,cleanup:fn()};});}}};
-  const real=service('true');
+  const real=service();
   const exports=load('src/components/band-invitations.tsx',{
     '@/components/profile-avatar':{default:({name,imageUrl})=>React.createElement('span',{'data-avatar-name':name,'data-avatar-url':imageUrl})},
     react:fakeReact,'@/lib/supabase/client':{getSupabaseBrowserClient(){clientCalls++;return {}; }},
-    '@/lib/band-invitations':{...real,BAND_INVITATIONS_ENABLED:enabled,createBandInvitationService:()=>({
+    '@/lib/band-invitations':{...real,createBandInvitationService:()=>({
       list(...args){listCalls++;return controls.list(...args);},decide(...args){decisions++;return controls.decide(...args);},
       discover:(...args)=>controls.discover(...args),adminBands:()=>controls.adminBands(),send(...args){sendCalls++;return controls.send(...args);},
     })},
@@ -101,9 +94,6 @@ function nodes(tree){if(!tree||typeof tree!=='object')return [];if(Array.isArray
   if(typeof tree.type==='function')return nodes(tree.type(tree.props));return [tree,...nodes(tree.props?.children)];}
 const settle=async()=>{for(let i=0;i<12;i++)await Promise.resolve();};
 const button=(tree,text)=>nodes(tree).find(node=>node.type==='button'&&node.props.children===text);
-test('disabled wrappers render nothing without creating client or calling any service',()=>{
-  for(const name of ['BandInvitations','MusicianInvitationDiscovery']){const h=harness(name,false);assert.equal(h.render(),null);assert.equal(h.clientCalls,0);assert.equal(h.listCalls,0);}
-});
 test('received loading/empty/error/retry, confirmation, success and completed states',async()=>{
   const h=harness('BandInvitations');assert.ok(nodes(h.render()).some(n=>n.props?.children==='Carregando convites...'));await settle();
   let tree=h.render();button(tree,'Aceitar convite').props.onClick();tree=h.render();
@@ -122,7 +112,7 @@ test('already completed decision refreshes without retry; sent list has no decis
   h.controls.decide=()=>Promise.reject({code:'55000'});h.controls.list=()=>Promise.resolve([row('superseded')]);
   button(h.render(),'Confirmar').props.onClick();await settle();h.render();await settle();const tree=h.render();
   assert.equal(h.decisions,1);assert.ok(nodes(tree).some(n=>n.props?.role==='alert'));assert.ok(!button(tree,'Aceitar convite'));
-  const sent=harness('BandInvitations',true,{bandId:band});sent.render();await settle();const sentTree=sent.render();
+  const sent=harness('BandInvitations',{bandId:band});sent.render();await settle();const sentTree=sent.render();
   assert.ok(!button(sentTree,'Aceitar convite'));assert.ok(!JSON.stringify(sentTree).includes(ref));
 });
 function submitSearch(h, name = 'Ana') {
@@ -131,7 +121,7 @@ function submitSearch(h, name = 'Ana') {
   return h.render();
 }
 test('discovery waits for a nonblank submission and renders the avatar fallback', async () => {
-  const api=service('true').createBandInvitationService({rpc(){assert.fail('Blank search reached RPC');}});
+  const api=service().createBandInvitationService({rpc(){assert.fail('Blank search reached RPC');}});
   for(const query of ['', '   ']) await assert.rejects(api.discover(query), {code:'22023'});
   const h=harness('MusicianInvitationDiscovery');const calls=[];
   let failSearch=true;
@@ -194,7 +184,7 @@ test('UI identifies per-card actions, exposes processing and provides narrow-lay
   assert.equal(button(tree,'Convidar músico').props.disabled,true);
   resolveSend(id);await settle();assert.ok(button(discovery.render(),'Convite enviado'));discovery.unmount();
 });
-test('dashboard invitation placement is flag-gated but independent of band count',()=>{
+test('dashboard invitations are independent of band count and sent list stays admin-only',()=>{
   const source=ts.createSourceFile('dashboard.tsx',fs.readFileSync('src/app/dashboard/page.tsx','utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
   let invitation;
   function visit(node){if(ts.isJsxSelfClosingElement(node)&&node.tagName.getText(source)==='BandInvitations')invitation=node;ts.forEachChild(node,visit);}
@@ -203,5 +193,7 @@ test('dashboard invitation placement is flag-gated but independent of band count
     if(ts.isBinaryExpression(node)&&node.operatorToken.kind===ts.SyntaxKind.AmpersandAmpersandToken)conditions.push(node.left.getText(source));
     if(ts.isConditionalExpression(node))conditions.push(node.condition.getText(source));
   }
-  assert.ok(conditions.includes('BAND_INVITATIONS_ENABLED'));assert.ok(conditions.every(condition=>!condition.includes('bands')));
+  assert.ok(conditions.every(condition=>!condition.includes('bands')));
+  const members=fs.readFileSync('src/app/bandas/[bandId]/membros/page.tsx','utf8');
+  assert.match(members,/\{isAdmin && <BandInvitations[^>]*bandId=\{bandId\}/);
 });

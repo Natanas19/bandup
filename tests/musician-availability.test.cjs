@@ -6,12 +6,11 @@ const vm = require('node:vm');
 const ts = require('typescript');
 const React = require('react');
 
-function load(file, overrides, enabled = true, globals = {}) {
+function load(file, overrides, globals = {}) {
   const mod = { exports: {} };
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
   }).outputText, { module: mod, exports: mod.exports, AbortController,
-    process: { env: enabled ? { NEXT_PUBLIC_BANDUP_MUSICIAN_AVAILABILITY_ENABLED: 'true' } : {} },
     ...globals, require(name) { return name in overrides ? overrides[name] : require(name); },
   });
   return mod.exports;
@@ -44,19 +43,13 @@ function fixture(options = {}) {
       const verify = async () => { if (state.identity !== userId || signal.aborted) throw Error('Session changed'); };
       await verify(); return { scoped, verify };
     },
-  } }, options.enabled !== false);
+  } });
   return { state, api,
     read: () => api.loadMusicianAvailability({}, 'a', new AbortController().signal),
     save: value => api.saveMusicianAvailability({}, 'a', value, new AbortController().signal),
   };
 }
 
-test('feature defaults off and rejects service calls before any session or database access', async () => {
-  const f = fixture({ enabled: false });
-  assert.equal(f.api.MUSICIAN_AVAILABILITY_ENABLED, false);
-  await assert.rejects(f.read()); await assert.rejects(f.save(true));
-  assert.equal(f.state.bindings, 0); assert.equal(f.state.queries.length, 0);
-});
 test('own read interprets no record as false and validates stored booleans', async () => {
   const f = fixture();
   assert.equal(await f.read(), false);
@@ -116,13 +109,12 @@ function ui(options = {}) {
       onAuthStateChange(fn) { listener = fn; return { data: { subscription: { unsubscribe() {} } } }; },
     } }; } },
     '@/lib/musician-availability': {
-      MUSICIAN_AVAILABILITY_ENABLED: options.enabled !== false,
       async loadMusicianAvailability() { reads++; return options.read ? options.read() : false; },
       async saveMusicianAvailability(_client, id, value, signal) {
         assert.equal(id, 'a'); writes++; return options.save ? options.save(value, signal) : value;
       },
     },
-  }, true, { window: { setTimeout, clearTimeout } }).default;
+  }, { window: { setTimeout, clearTimeout } }).default;
   return {
     render() { cursor = 0; const tree = nodes(Component({ userId: 'a' })); while (scheduled.length) scheduled.shift()(); return tree; },
     changeIdentity() { listener('SIGNED_IN', { user: { id: 'b' } }); },
@@ -130,13 +122,6 @@ function ui(options = {}) {
     counts: () => ({ reads, writes, clientCalls }),
   };
 }
-test('disabled card shows an off accessible switch and never initializes the SDK', async () => {
-  const h = ui({ enabled: false }); const tree = h.render(); await settle();
-  const control = tree.find(n => n.props?.role === 'switch');
-  assert.equal(control.props.checked, false); assert.equal(control.props.disabled, true);
-  assert.ok(tree.some(n => n.type === 'label'));
-  assert.deepEqual(h.counts(), { reads: 0, writes: 0, clientCalls: 0 }); h.dispose();
-});
 test('card loads independently, saves once on duplicate input, and confirms only after persistence', async () => {
   let finish;
   const h = ui({ save: value => new Promise(resolve => { finish = () => resolve(value); }) });
