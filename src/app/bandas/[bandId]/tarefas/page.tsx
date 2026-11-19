@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useId, useRef, useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
 import { NotificationTargetStatus, notificationTargetProps, useNotificationTarget } from "@/components/notification-target";
 import Link from "next/link";
 import BandNavigation from "@/components/band-navigation";
@@ -116,6 +116,83 @@ function getStatusLabel(status: TaskStatus) {
 
 function getPriorityLabel(priority: TaskPriority) {
   return priorityOptions.find((option) => option.value === priority)?.label ?? priority;
+}
+
+function TaskAssigneeDropdown({ members, selected, setSelected, disabled }: {
+  members: BandMember[];
+  selected: string[];
+  setSelected: Dispatch<SetStateAction<string[]>>;
+  disabled: boolean;
+}) {
+  const id = useId();
+  const field = useRef<HTMLFieldSetElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const expanded = open && !disabled;
+  const summary = members.filter(member => selected.includes(member.userId))
+    .map(member => member.label).join(", ") || "Sem responsável";
+
+  useEffect(() => {
+    if (!expanded) return;
+    function closeOnOutsidePress(event: PointerEvent) {
+      if (event.target instanceof Node && !field.current?.contains(event.target)) setOpen(false);
+    }
+    document.addEventListener("pointerdown", closeOnOutsidePress, true);
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePress, true);
+  }, [expanded]);
+
+  return (
+    <fieldset
+      ref={field}
+      disabled={disabled}
+      className="min-w-0"
+      onBlur={event => {
+        if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+      }}
+      onKeyDown={event => {
+        if (event.key !== "Escape" || !expanded) return;
+        event.preventDefault();
+        event.stopPropagation();
+        setOpen(false);
+        trigger.current?.focus();
+      }}
+    >
+      <legend id={`${id}-label`} className="mb-2 text-sm font-medium text-content-label">Responsáveis (opcional)</legend>
+      <div className="relative">
+        <button
+          ref={trigger}
+          type="button"
+          aria-expanded={expanded}
+          aria-controls={`${id}-options`}
+          aria-labelledby={`${id}-label ${id}-summary`}
+          onClick={() => setOpen(value => !value)}
+          className="flex min-h-11 w-full min-w-0 items-center justify-between gap-2 rounded-xl border border-outline bg-surface px-3 py-2.5 text-left text-base text-content outline-none focus:border-input-focus focus:ring-4 focus:ring-input-ring disabled:opacity-60 md:text-sm"
+        >
+          <span id={`${id}-summary`} title={summary} className="min-w-0 truncate">{summary}</span>
+          <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className={`h-4 w-4 shrink-0 ${expanded ? "rotate-180" : ""}`}>
+            <path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+        <div id={`${id}-options`} hidden={!expanded}
+          className="absolute inset-x-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-xl border border-outline bg-surface p-2 shadow-lg">
+          <button type="button" disabled={!members.length}
+            onClick={() => setSelected(members.map(member => member.userId))}
+            className="min-h-11 rounded-control px-2 text-sm font-semibold text-brand hover:bg-accent-soft focus-visible:ring-4 focus-visible:ring-focus disabled:opacity-60">
+            Selecionar todos
+          </button>
+          {members.map(member => <label key={member.userId} className="flex min-h-11 cursor-pointer items-center gap-2 px-2 text-sm text-content">
+            <input type="checkbox" checked={selected.includes(member.userId)}
+              className="h-4 w-4 shrink-0 focus-visible:ring-2 focus-visible:ring-focus"
+              onChange={event => {
+                const checked = event.target.checked;
+                setSelected(ids => checked ? [...ids, member.userId] : ids.filter(id => id !== member.userId));
+              }} />
+            <span className="min-w-0 [overflow-wrap:anywhere]">{member.label}</span>
+          </label>)}
+        </div>
+      </div>
+    </fieldset>
+  );
 }
 
 export default function BandTasksPage() {
@@ -754,25 +831,13 @@ function BandTasks() {
                   <label htmlFor="task-due-date" className="mb-2 block text-sm font-medium text-content-label">Prazo <span className="font-normal text-content-faint">(opcional)</span></label>
                   <input id="task-due-date" type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-outline bg-surface px-3 py-2.5 text-base md:text-sm text-content outline-none focus:border-input-focus focus:ring-4 focus:ring-input-ring" />
                 </div>
-                {multipleAssignees ? <fieldset disabled={!canChangeAssignee || isSubmitting} className="min-w-0 space-y-2">
-                  <legend className="mb-2 text-sm font-medium text-content-label">Responsáveis (opcional)</legend>
-                  <button type="button" disabled={!members.length}
-                    onClick={() => setSelectedAssignees(members.map(member => member.userId))}
-                    className="min-h-11 rounded-control px-2 text-sm font-semibold text-brand hover:bg-accent-soft focus-visible:ring-4 focus-visible:ring-focus disabled:opacity-60">
-                    Selecionar todos
-                  </button>
-                  <div className="max-h-48 overflow-y-auto rounded-control border border-outline bg-surface p-2">
-                    {members.map(member => <label key={member.userId} className="flex min-h-11 items-center gap-2 break-words px-2 text-sm text-content">
-                      <input type="checkbox" checked={selectedAssignees.includes(member.userId)}
-                        className="h-4 w-4 shrink-0 focus-visible:ring-2 focus-visible:ring-focus"
-                        onChange={event => {
-                          const checked = event.target.checked;
-                          setSelectedAssignees(ids => checked ? [...ids, member.userId] : ids.filter(id => id !== member.userId));
-                        }} />
-                      <span className="min-w-0 [overflow-wrap:anywhere]">{member.label}</span>
-                    </label>)}
-                  </div>
-                </fieldset> : keepMultiple ? <p className="text-sm text-content-muted">Os responsáveis atuais serão mantidos.</p> : <div>
+                {multipleAssignees ? <TaskAssigneeDropdown
+                  key={editingTaskId ?? "new-task"}
+                  members={members}
+                  selected={selectedAssignees}
+                  setSelected={setSelectedAssignees}
+                  disabled={!canChangeAssignee || isSubmitting}
+                /> : keepMultiple ? <p className="text-sm text-content-muted">Os responsáveis atuais serão mantidos.</p> : <div>
                   <label htmlFor="task-assignee" className="mb-2 block text-sm font-medium text-content-label">Responsável <span className="font-normal text-content-faint">(opcional)</span></label>
                   <select id="task-assignee" disabled={!canChangeAssignee || isSubmitting} aria-describedby={!canChangeAssignee ? "task-assignee-help" : undefined} value={assignedTo} onChange={(event) => setAssignedTo(event.target.value)} className="min-h-11 w-full min-w-0 max-w-full rounded-xl border border-outline bg-surface px-3 py-2.5 text-base md:text-sm text-content outline-none focus:border-input-focus focus:ring-4 focus:ring-input-ring">
                     <option value="">Sem responsável</option>
