@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { UnavailableNotificationTarget } from "@/components/notification-target";
 import Link from "next/link";
 import BandEntryFlow from "@/components/band-entry-flow";
 import { BandInvitations } from "@/components/band-invitations";
@@ -252,6 +253,7 @@ export default function BandMembersPage() {
         {BAND_ENTRY_BACKEND_VALIDATED && isAdmin && <>
           <BandEntryFlow key={`requests:${bandId}`} bandId={bandId} onMembersChanged={() => setMembersRevision(value => value + 1)} />
         </>}
+        {(!BAND_ENTRY_BACKEND_VALIDATED || !isAdmin) && <Suspense fallback={null}><UnavailableNotificationTarget /></Suspense>}
         {isAdmin && <BandInvitations key={`invitations:${bandId}`} bandId={bandId} />}
 
         {memberActionError && <p role="alert" className="mt-5 rounded-xl border border-danger-border bg-danger-surface px-4 py-3 text-sm text-danger">{memberActionError}</p>}

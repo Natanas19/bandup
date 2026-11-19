@@ -11,7 +11,7 @@ const postcss = require("postcss");
 const tailwind = require("tailwindcss");
 
 const root = path.resolve(__dirname, "..");
-function modules(globals = {}, react = React) {
+function modules(globals = {}, react = React, reactModule) {
   const cache = new Map();
   function load(name) {
     if (cache.has(name)) return cache.get(name).exports;
@@ -19,11 +19,16 @@ function modules(globals = {}, react = React) {
     const loadedModule = { exports: {} };
     cache.set(name, loadedModule);
     const localRequire = (id) => {
-      if (id === "react") return react;
+      if (id === "react") return reactModule === undefined || name === reactModule ? react : React;
       if (id === "next/font/google") return { Inter: () => ({ variable: "font-inter" }) };
       // Dashboard theme fixtures start after the separately tested welcome flow.
       if (id === "@/components/welcome-onboarding" && globals.onboardingCompleted) return { __esModule: true, default: ({ children }) => children };
-      if (id === "next/navigation") return { useRouter: () => ({ replace() {} }), useParams: () => ({ bandId: "theme-band" }), usePathname: () => globals.testPathname ?? "/bandas/theme-band" };
+      if (id === "next/navigation") return {
+        useRouter: () => ({ replace() {} }),
+        useParams: () => ({ bandId: "theme-band" }),
+        usePathname: () => globals.testPathname ?? "/bandas/theme-band",
+        useSearchParams: () => new URLSearchParams(),
+      };
       if (id === "@/lib/supabase/client") return globals.supabaseMock ?? { getSupabaseBrowserClient() { throw new Error("Tests must not contact Auth"); } };
       if (id === "./globals.css") return {};
       if (id.startsWith("@/")) {
@@ -377,7 +382,16 @@ function renderWorkspace(file, states) {
     useEffect() {},
     useRef(initial) { return { current: initial }; },
   };
-  const loader = modules({ onboardingCompleted: file === "src/app/dashboard/page.tsx" }, hooks);
+  const isDashboard = file === "src/app/dashboard/page.tsx";
+  const loader = modules({
+    onboardingCompleted: isDashboard,
+    // The invitations panel initializes its client during render. Remote calls still fail.
+    supabaseMock: isDashboard ? {
+      getSupabaseBrowserClient: () => ({
+        rpc() { throw new Error("Theme tests must not call Supabase RPCs"); },
+      }),
+    } : undefined,
+  }, hooks, file);
   const Page = loader.load(file).default;
   const page = Page();
   const { ThemeProvider } = loader.load("src/components/theme-provider.tsx");
@@ -747,10 +761,10 @@ test("shared band layout reserves desktop space and retains a fixed sidebar acro
       assert.doesNotMatch(navigation, /aria-current="page"/);
       assert.match(html, /<a\b[^>]*aria-current="page"[^>]*href="\/bandas\/theme-band"/);
       assert.equal(html.includes(`href="/bandas/theme-band/${section}"`), false);
-      assert.equal((html.match(/aria-disabled="true"/g) ?? []).length, 8);
+      assert.equal((html.match(/aria-disabled="true"/g) ?? []).length, 6);
     } else if (section === "perfil-publico") {
       assert.match(html, /aria-current="page"[^>]*href="\/bandas\/theme-band\/perfil-publico"/);
-      assert.equal((html.match(/aria-disabled="true"/g) ?? []).length, 8);
+      assert.equal((html.match(/aria-disabled="true"/g) ?? []).length, 6);
     } else {
       assert.match(html, new RegExp(`aria-current="page"[^>]*href="/bandas/theme-band${section ? "/" + section : ""}"`));
     }
@@ -857,10 +871,13 @@ test("mobile settings retain functional controls without duplicating upcoming ba
   const personalHtml = renderToStaticMarkup(React.createElement(WorkspaceSettingsMenu, {
     href: "/dashboard/configuracoes",
   }));
-  assert.equal((bandHtml.match(/aria-disabled="true"/g) ?? []).length, 2);
-  assert.equal((personalHtml.match(/aria-disabled="true"/g) ?? []).length, 2);
-  assert.ok(bandHtml.includes("Notifica"));
-  assert.ok(bandHtml.includes("Privacidade"));
+  for (const html of [bandHtml, personalHtml]) {
+    assert.equal((html.match(/aria-disabled="true"/g) ?? []).length, 1);
+    assert.equal((html.match(/Em breve/g) ?? []).length, 1);
+    assert.doesNotMatch(html, /Notificações/);
+    assert.match(html, /Privacidade/);
+    assert.match(html, />Sair<\/button>/);
+  }
   for (const label of ["Perfil público", "Links", "Loja", "Ingressos"]) {
     assert.equal(bandHtml.includes(label), false);
     assert.equal(bandHtml.includes(`>${label}</a>`), false);
@@ -871,7 +888,6 @@ test("mobile settings retain functional controls without duplicating upcoming ba
   assert.equal(/tabindex=/i.test(bandHtml), false);
   assert.equal(/onclick=/i.test(bandHtml), false);
   assert.match(bandHtml, /href="\/bandas\/band\/settings"/);
-  assert.match(bandHtml, />Sair<\/button>/);
 });
 
 function linksInteractionFixture(options = {}) {

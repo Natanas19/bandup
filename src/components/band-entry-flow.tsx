@@ -1,8 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import BandEntryPanel from "@/components/band-entry-panel";
+import { NotificationTargetStatus, notificationTargetProps } from "@/components/notification-target";
+import { notificationId } from "@/lib/notification-destination";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { BAND_ENTRY_BACKEND_VALIDATED, createBandEntryService, entryError,
   type BandEntryService, type EntryRequest } from "@/lib/band-entry";
@@ -17,9 +20,13 @@ const supabaseOrigin = typeof process !== "undefined" ? process.env.NEXT_PUBLIC_
 
 function EntryFlow({ bandId, onMembersChanged }: { bandId?: string; onMembersChanged?: () => void }) {
   const admin = !!bandId;
+  const params = useSearchParams();
+  const notificationRequest = notificationId(params?.get("notificacao"));
+  const notificationBand = bandId ?? notificationId(params?.get("banda"));
   const [phase, setPhase] = useState<"loading" | "ready" | "error" | "unavailable" | "forbidden">(
     BAND_ENTRY_BACKEND_VALIDATED ? "loading" : "unavailable");
   const [requests, setRequests] = useState<EntryRequest[]>([]);
+  const [targetRequest, setTargetRequest] = useState<EntryRequest | null>(null);
   const [offset, setOffset] = useState(0);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<{ error: boolean; text: string } | null>(null);
@@ -38,7 +45,11 @@ function EntryFlow({ bandId, onMembersChanged }: { bandId?: string; onMembersCha
     try {
       const api = service.current ??= createBandEntryService(getSupabaseBrowserClient());
       const rows = bandId ? await api.adminRequests(bandId, offset, true) : await api.ownRequests(offset);
+      const target = notificationRequest && notificationBand
+        ? await api.getRequest(notificationRequest, bandId).catch(() => null)
+        : null;
       if (!live.current || ticket !== generation.current) return;
+      setTargetRequest(target?.band_id === notificationBand ? target : null);
       setRequests(rows.filter(row => row.status === "pending"));
       setDecision(null);
       setPhase("ready");
@@ -60,7 +71,7 @@ function EntryFlow({ bandId, onMembersChanged }: { bandId?: string; onMembersCha
       setPhase(failure.code === "blocked" ? "unavailable" : failure.code === "42501" ? "forbidden" : "error");
       throw failure;
     }
-  }, [bandId, offset]);
+  }, [bandId, notificationBand, notificationRequest, offset]);
 
   useEffect(() => {
     const tracker = generation;
@@ -90,6 +101,7 @@ function EntryFlow({ bandId, onMembersChanged }: { bandId?: string; onMembersCha
   }
 
   if (phase !== "ready") return <div>
+    {phase !== "loading" && <NotificationTargetStatus target={notificationRequest} found={false} />}
     <BandEntryPanel admin={admin} state={phase === "forbidden" ? "error" : phase} />
     {phase === "unavailable" && <p className="mt-4 text-sm text-content-muted">O acompanhamento e o cancelamento de pedidos também aguardam a validação do backend.</p>}
     {feedback && <p role="alert" className="mt-4 text-sm text-danger">{feedback.text}</p>}
@@ -108,13 +120,20 @@ function EntryFlow({ bandId, onMembersChanged }: { bandId?: string; onMembersCha
     });
   }
 
+  const focusedRequest = targetRequest?.id === notificationRequest && targetRequest.band_id === notificationBand
+    ? targetRequest : null;
+  const visibleRequests = focusedRequest
+    ? [focusedRequest, ...requests.filter(row => row.id !== focusedRequest.id)] : requests;
+
   return <section className="mt-7 space-y-6" aria-label={admin ? "Gerenciar solicitações" : "Descoberta e meus pedidos"} aria-busy={busy}>
     {feedback && <p role={feedback.error ? "alert" : "status"} className={`rounded-xl border p-4 text-sm ${feedback.error ? "text-danger" : "text-content"}`}>{feedback.text}</p>}
     <div className="space-y-4 rounded-2xl border border-nav-border bg-surface p-5">
       <h2 className="text-lg font-semibold text-content">{admin ? "Pedidos recebidos" : "Meus pedidos"}</h2>
-      {admin && <p className="text-sm text-content-muted">Somente solicitações pendentes são exibidas.</p>}
-      {!requests.length && <p role="status" className="text-sm text-content-muted">{admin ? "Nenhum pedido nesta página." : offset === 0 ? "Você não tem pedidos pendentes." : "Nenhum pedido pendente nesta página."}</p>}
-      {requests.map(row => <article key={row.id} className="space-y-3 rounded-xl border border-nav-border p-4">
+      {admin && !focusedRequest && <p className="text-sm text-content-muted">Somente solicitações pendentes são exibidas.</p>}
+      <NotificationTargetStatus target={notificationRequest} found={!!focusedRequest} />
+      {!visibleRequests.length && <p role="status" className="text-sm text-content-muted">{admin ? "Nenhum pedido nesta página." : offset === 0 ? "Você não tem pedidos pendentes." : "Nenhum pedido pendente nesta página."}</p>}
+      {visibleRequests.map(row => <article key={row.id} {...(row.id === focusedRequest?.id ? notificationTargetProps : {})}
+        className={`space-y-3 rounded-xl border border-nav-border p-4 ${row.id === focusedRequest?.id ? "scroll-mt-24 ring-2 ring-focus" : ""}`}>
         {admin ? <div className="flex min-w-0 items-center gap-3">
           <ProfileAvatar name={normalizeDisplayName(row.applicant_name) ?? "Solicitante sem nome"}
             imageUrl={safeBandLogo(avatars.get(row.id) ?? null, supabaseOrigin ?? "https://invalid.local")} />
@@ -148,5 +167,7 @@ function EntryFlow({ bandId, onMembersChanged }: { bandId?: string; onMembersCha
 }
 
 export default function BandEntryFlow({ bandId, onMembersChanged }: { bandId?: string; onMembersChanged?: () => void }) {
-  return <EntryFlow key={bandId ?? "applicant"} bandId={bandId} onMembersChanged={onMembersChanged} />;
+  return <Suspense fallback={<BandEntryPanel admin={!!bandId} state="loading" />}>
+    <EntryFlow key={bandId ?? "applicant"} bandId={bandId} onMembersChanged={onMembersChanged} />
+  </Suspense>;
 }

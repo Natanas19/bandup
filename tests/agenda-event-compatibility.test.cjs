@@ -11,7 +11,7 @@ const event = { id: 'event', title: 'Show', event_type: 'show', start_at: '2099-
   end_at: null, description: null, location: null, created_by: 'user' };
 const task = { id: 'task', event_id: 'event', title: 'Soundcheck', status: 'todo', priority: 'high' };
 
-async function loadAgenda({ taskError = null, taskThrows = false, flyerError = null, events = [event], signedIn = true, member = true, updateError = null } = {}) {
+async function loadAgenda({ taskError = null, taskThrows = false, flyerError = null, events = [event], signedIn = true, member = true, updateError = null, notificationTarget = null, targetEvent = null } = {}) {
   const states = [], effects = [], calls = [], cache = new Map();
   let cursor = 0;
   const client = {
@@ -20,9 +20,11 @@ async function loadAgenda({ taskError = null, taskThrows = false, flyerError = n
       const call = { table, filters: [] }; calls.push(call);
       const result = (single = false) => {
         if (table === 'tasks' && taskThrows) throw new Error('Network failure');
+        const isTargetRead = notificationTarget && call.filters.some(([column, value]) => column === 'id' && value === notificationTarget);
         const data = table === 'band_members' ? member ? { role: 'admin' } : null
           : table === 'bands' ? { name: 'Demo' }
-          : table === 'events' ? (single ? { ...events[0], ...call.update } : events) : taskError ? null : [task];
+          : table === 'events' ? (single ? isTargetRead ? targetEvent : { ...events[0], ...call.update } : events)
+          : taskError ? null : [task];
         return { data, error: table === 'tasks' ? taskError : call.update && updateError ? updateError
           : table === 'events' && call.columns.includes('flyer_path') ? flyerError : null };
       };
@@ -55,6 +57,11 @@ async function loadAgenda({ taskError = null, taskThrows = false, flyerError = n
         if (name === '@/components/event-flyer') return {
           EventFlyerLayout: ({ children }) => children,
         };
+        if (name === '@/components/notification-target') return {
+          useNotificationTarget: () => notificationTarget,
+          notificationTargetProps: { id: 'conteudo-da-notificacao', tabIndex: -1 },
+          NotificationTargetStatus: () => null,
+        };
         if (name === 'next/link' || name.startsWith('@/components/')) return { __esModule: true, default: () => null, BandWorkspaceInfo: () => null };
         if (name.startsWith('@/lib/')) return load('src/' + name.slice(2) + '.ts');
         if (name.startsWith('./')) return load(path.join(path.dirname(file), name + '.ts'));
@@ -67,7 +74,8 @@ async function loadAgenda({ taskError = null, taskThrows = false, flyerError = n
   const render = () => {
     cursor = 0;
     effects.length = 0;
-    return Component();
+    const content = Component().props.children;
+    return content.type(content.props);
   };
   async function reload() {
     render();
@@ -117,6 +125,18 @@ function findNode(node, predicate) {
   if (!node || typeof node !== 'object') return;
   return predicate(node) ? node : findNode(node.props?.children, predicate);
 }
+
+test('notification lookup is scoped to the band and highlights only a returned event', async () => {
+  const id = '10000000-0000-0000-0000-000000000002';
+  for (const targetEvent of [{ ...event, id }, null]) {
+    const f = await loadAgenda({ notificationTarget: id, targetEvent });
+    assert.ok(f.calls.some(call => call.table === 'events' &&
+      JSON.stringify(call.filters) === JSON.stringify([['band_id', 'band'], ['id', id]])));
+    const highlighted = findNode(f.tree, node => node.type === 'article' && node.props.id === 'conteudo-da-notificacao');
+    assert.equal(!!highlighted, !!targetEvent);
+    assert.equal(findNode(f.tree, node => node.props?.target === id).props.found, !!targetEvent);
+  }
+});
 
 test('band agenda places the flyer alongside the main event information', async () => {
   const { tree } = await loadAgenda({ events: [{ ...event, flyer_path: 'flyer', location: 'Palco A' }] });

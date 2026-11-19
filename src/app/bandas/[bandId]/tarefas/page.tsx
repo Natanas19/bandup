@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useState, type FormEvent } from "react";
+import { NotificationTargetStatus, notificationTargetProps, useNotificationTarget } from "@/components/notification-target";
 import Link from "next/link";
 import BandNavigation from "@/components/band-navigation";
 import { BandWorkspaceInfo } from "@/components/band-workspace";
@@ -109,7 +110,12 @@ function getPriorityLabel(priority: TaskPriority) {
 }
 
 export default function BandTasksPage() {
+  return <Suspense fallback={<p role="status">Carregando tarefas…</p>}><BandTasks /></Suspense>;
+}
+
+function BandTasks() {
   const { bandId } = useParams<{ bandId: string }>();
+  const notificationTask = useNotificationTarget();
   const [pageState, setPageState] = useState<PageState>("loading");
   const [bandName, setBandName] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
@@ -240,7 +246,14 @@ export default function BandTasksPage() {
         setCurrentUserId(user.id);
         setMembers(bandMembers);
         setEvents((eventRows ?? []) as BandEvent[]);
-        setTasks(sortTasks((taskRows ?? []) as unknown as Task[]));
+        const loadedTasks = (taskRows ?? []) as unknown as Task[];
+        if (notificationTask && !loadedTasks.some(task => task.id === notificationTask)) {
+          const { data: target } = await supabase.from("tasks").select(taskColumns(hasEventSupport))
+            .eq("band_id", bandId).eq("id", notificationTask).maybeSingle();
+          if (!isMounted) return;
+          if (target) loadedTasks.push(target as unknown as Task);
+        }
+        setTasks(sortTasks(loadedTasks));
         setPageState("ready");
       } catch {
         if (isMounted) {
@@ -254,7 +267,7 @@ export default function BandTasksPage() {
     return () => {
       isMounted = false;
     };
-  }, [bandId]);
+  }, [bandId, notificationTask]);
 
   useEffect(() => {
     if (pageState !== "ready" || !currentUserId) return;
@@ -686,6 +699,7 @@ export default function BandTasksPage() {
         {formSuccess && <p role="status" className="mt-5 rounded-xl border border-success-border bg-success-surface px-4 py-3 text-sm text-success">{formSuccess}</p>}
         {deleteError && <p role="alert" className="mt-5 rounded-xl border border-danger-border bg-danger-surface px-4 py-3 text-sm text-danger">{deleteError}</p>}
 
+        <NotificationTargetStatus target={notificationTask} found={tasks.some(task => task.id === notificationTask)} />
         {tasks.length === 0 ? (
           <section className="mt-6 rounded-2xl border border-dashed border-accent-border bg-surface px-5 py-10 text-center sm:py-14">
             <div aria-hidden="true" className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-accent-soft text-accent">
@@ -707,7 +721,8 @@ export default function BandTasksPage() {
                 : null;
 
               return (
-                <article key={task.id} onClick={toggleCardDetails} className="min-w-0 rounded-2xl border border-nav-border bg-surface p-5 shadow-app-card sm:p-6">
+                <article key={task.id} {...(task.id === notificationTask ? notificationTargetProps : {})}
+                  onClick={toggleCardDetails} className={`min-w-0 rounded-2xl border border-nav-border bg-surface p-5 shadow-app-card sm:p-6 ${task.id === notificationTask ? "scroll-mt-24 ring-2 ring-focus" : ""}`}>
                   <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                       <h2 className="break-words text-base font-semibold text-content sm:text-lg">{task.title}</h2>

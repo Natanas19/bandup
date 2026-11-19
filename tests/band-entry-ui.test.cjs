@@ -17,6 +17,12 @@ function load(file, overrides = {}) {
     if (name === '@/components/profile-avatar') return { __esModule: true, default: () => null };
     if (name === '@/lib/public-band-data') return { safeBandLogo: () => null };
     if (name === 'next/link') return { __esModule: true, default: ({ children, ...props }) => React.createElement('a', props, children) };
+    if (name === 'next/navigation') return { useSearchParams: () => new URLSearchParams() };
+    if (name === '@/lib/notification-destination') return load('src/lib/notification-destination.ts');
+    if (name === '@/components/notification-target') return {
+      NotificationTargetStatus: () => null,
+      notificationTargetProps: { id: 'conteudo-da-notificacao', tabIndex: -1 },
+    };
     if (name === '@/components/band-discovery') return load('src/components/band-discovery.tsx', overrides);
     if (name === '@/components/band-entry-panel') return load('src/components/band-entry-panel.tsx');
     if (name === '@/components/band-search') return load('src/components/band-search.tsx', overrides);
@@ -80,7 +86,7 @@ test('discovery route uses existing private session boundary', () => {
 });
 
 const settle = async () => { for (let index = 0; index < 8; index++) await new Promise(resolve => setImmediate(resolve)); };
-function flowHarness(api, bandId, extra = {}) {
+function flowHarness(api, bandId, extra = {}, search = '') {
   const slots = [], effects = []; let cursor = 0;
   const hooks = { ...React,
     useState(initial) { const slot = cursor++; if (!(slot in slots)) slots[slot] = initial;
@@ -90,14 +96,35 @@ function flowHarness(api, bandId, extra = {}) {
   };
   const contract = load('src/lib/band-entry.ts');
   const Flow = load('src/components/band-entry-flow.tsx', {
+    'next/navigation': { useSearchParams: () => new URLSearchParams(search) },
     react: hooks, '@/lib/band-entry': { ...contract, BAND_ENTRY_BACKEND_VALIDATED: true, createBandEntryService: () => api },
     '@/lib/supabase/client': { getSupabaseBrowserClient: () => ({ auth: { getUser: async () => ({ data: { user: { user_metadata: { display_name: "Musician" } } } }) } }) },
   }).default;
-  const wrapper = Flow({ bandId, ...extra });
+  const wrapper = Flow({ bandId, ...extra }).props.children;
   const render = () => { cursor = 0; return wrapper.type(wrapper.props); };
   render(); const cleanup = effects[0]();
   return { render, cleanup, html: () => renderToStaticMarkup(render()), key: wrapper.key };
 }
+
+test('a personal notification shows a terminal request only if its band matches', async () => {
+  const id = '10000000-0000-0000-0000-000000000002';
+  const band = '10000000-0000-0000-0000-000000000001';
+  for (const band_id of [band, id]) {
+    const calls = [];
+    const h = flowHarness({
+      ownRequests: async () => [],
+      async getRequest(...args) {
+        calls.push(args);
+        return { id, band_id, status: 'rejected', requested_at: '2026-01-01' };
+      },
+    }, undefined, {}, `notificacao=${id}&banda=${band}`);
+    await settle();
+    assert.deepEqual(calls, [[id, undefined]]);
+    assert.equal(findElements(h.render(), node => node.type === 'article' && node.props.id === 'conteudo-da-notificacao').length, Number(band_id === band));
+    assert.doesNotMatch(h.html(), /Cancelar pedido/);
+    h.cleanup();
+  }
+});
 function findElements(node, predicate) {
   if (!node || typeof node !== 'object') return [];
   if (Array.isArray(node)) return node.flatMap(child => findElements(child, predicate));

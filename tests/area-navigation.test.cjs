@@ -288,7 +288,7 @@ test('band layout keeps one sidebar brand, desktop navigation and the primary pr
 test('settings and account actions are grouped in both desktop sidebars', () => {
   const settings = source('src/components/workspace-settings.tsx');
   assert.match(settings, /Configurações/);
-  assert.match(settings, /Notificações/);
+  assert.doesNotMatch(settings, /Notificações|name="Bell"/);
   assert.match(settings, /Privacidade/);
   assert.match(settings, /Em breve/);
   assert.match(settings, /"Sair"/);

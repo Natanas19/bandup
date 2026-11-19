@@ -224,7 +224,9 @@ function boundaryHarness(f) {
       if (!previous || deps.some((d, j) => !Object.is(d, previous.deps[j]))) effects[i] = { deps, fn, pending: true, cleanup: previous?.cleanup };
     },
   };
-  const Boundary = load('src/components/private-session-boundary.tsx', { window: f.env.browser, document: f.env.doc }, {
+  f.env.browser.location ??= { search: '' };
+  const Boundary = load('src/components/private-session-boundary.tsx', { window: f.env.browser, document: f.env.doc, URLSearchParams }, {
+    '@/lib/notification-destination': load('src/lib/notification-destination.ts'),
     react: hooks, 'next/navigation': { usePathname: () => '/bandas/band-a', useRouter: () => router },
     '@/lib/supabase/client': { getSupabaseBrowserClient: () => f.client, getSupabaseAuthStorageKey: () => 'sb-fixture-auth-token' },
     '@/lib/private-session': f.api,
@@ -249,6 +251,19 @@ test('boundary treats band access loss separately from invalid authentication', 
   const f = fixture(), h = boundaryHarness(f); h.render(); await flush(); h.render();
   f.setMemberships([]); f.env.poll(); await flush(); assert.equal(h.render().type, 'main');
   assert.deepEqual(h.redirects, ['/dashboard']); assert.equal(f.calls.signOut, 0); h.dispose();
+});
+
+test('a notification link to a band without access shows only the generic unavailable state', async () => {
+  const f = fixture();
+  f.env.browser.location = { search: '?notificacao=10000000-0000-0000-0000-000000000001' };
+  f.setMemberships([]);
+  const h = boundaryHarness(f);
+  h.render(); await flush();
+  const html = renderToStaticMarkup(h.render());
+  assert.match(html, /conteúdo desta notificação não está disponível/);
+  assert.doesNotMatch(html, /PRIVATE DATA/);
+  assert.deepEqual(h.redirects, []);
+  h.dispose();
 });
 
 test('same-account storage refresh and focus preserve form state while access remains valid', async () => {

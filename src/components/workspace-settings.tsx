@@ -47,10 +47,6 @@ function SettingsLinks({ href, onNavigate }: {
       <NavigationIcon name="Settings" />Configurações
     </Link>
     <span aria-disabled="true" className="flex min-h-11 items-center justify-between gap-2 rounded-control px-3 py-2.5 text-sm text-content-faint">
-      <span className="inline-flex items-center gap-3"><NavigationIcon name="Bell" />Notificações</span>
-      <span className="rounded-full bg-disabled-surface px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-content-subtle">Em breve</span>
-    </span>
-    <span aria-disabled="true" className="flex min-h-11 items-center justify-between gap-2 rounded-control px-3 py-2.5 text-sm text-content-faint">
       <span className="inline-flex items-center gap-3"><NavigationIcon name="ShieldCheck" />Privacidade</span>
       <span className="rounded-full bg-disabled-surface px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-content-subtle">Em breve</span>
     </span>

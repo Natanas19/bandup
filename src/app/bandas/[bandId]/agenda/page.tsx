@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useState, type FormEvent } from "react";
+import { NotificationTargetStatus, notificationTargetProps, useNotificationTarget } from "@/components/notification-target";
 import Link from "next/link";
 import BandNavigation from "@/components/band-navigation";
 import { BandWorkspaceInfo } from "@/components/band-workspace";
@@ -126,7 +127,12 @@ function getLocalDateTimeMinimum(now: number) {
 }
 
 export default function BandAgendaPage() {
+  return <Suspense fallback={<p role="status">Carregando agenda…</p>}><BandAgenda /></Suspense>;
+}
+
+function BandAgenda() {
   const { bandId } = useParams<{ bandId: string }>();
+  const notificationEvent = useNotificationTarget();
   const [pageState, setPageState] = useState<PageState>("loading");
   const [currentTime, setCurrentTime] = useState(0);
   const [bandName, setBandName] = useState("");
@@ -242,6 +248,12 @@ export default function BandAgendaPage() {
         }
 
         const loadedEvents = (data ?? []) as unknown as BandEvent[];
+        if (notificationEvent && !loadedEvents.some(event => event.id === notificationEvent)) {
+          const { data: target } = await supabase.from("events").select(eventColumns + (hasFlyerSupport ? ", flyer_path" : ""))
+            .eq("band_id", bandId).eq("id", notificationEvent).maybeSingle();
+          if (!isMounted) return;
+          if (target) loadedEvents.push(target as unknown as BandEvent);
+        }
         const eventIds = loadedEvents.map((bandEvent) => bandEvent.id);
         let relatedTasks: RelatedTask[] = [];
         let taskNotice = "";
@@ -297,7 +309,7 @@ export default function BandAgendaPage() {
     return () => {
       isMounted = false;
     };
-  }, [bandId]);
+  }, [bandId, notificationEvent]);
 
   function resetForm() {
     setEditingEventId(null);
@@ -660,6 +672,7 @@ export default function BandAgendaPage() {
 
         {deleteError && <p role="alert" className="mt-5 rounded-xl border border-danger-border bg-danger-surface px-4 py-3 text-sm text-danger">{deleteError}</p>}
 
+        <NotificationTargetStatus target={notificationEvent} found={events.some(event => event.id === notificationEvent)} />
         {events.length === 0 ? (
           <section className="mt-6 rounded-2xl border border-dashed border-accent-border bg-surface px-5 py-10 text-center sm:py-14">
             <div aria-hidden="true" className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-accent-soft text-accent">
@@ -681,7 +694,8 @@ export default function BandAgendaPage() {
               const isUpcoming = Date.parse(bandEvent.start_at) >= currentTime;
 
               return (
-                <article key={bandEvent.id} onClick={toggleCardDetails} className={`min-w-0 rounded-2xl border bg-surface p-5 shadow-app-card sm:p-6 ${isUpcoming ? "border-accent-border ring-1 ring-input-ring" : "border-outline"}`}>
+                <article key={bandEvent.id} {...(bandEvent.id === notificationEvent ? notificationTargetProps : {})} onClick={toggleCardDetails}
+                  className={`min-w-0 rounded-2xl border bg-surface p-5 shadow-app-card sm:p-6 ${bandEvent.id === notificationEvent ? "scroll-mt-24 border-accent-border ring-2 ring-focus" : isUpcoming ? "border-accent-border ring-1 ring-input-ring" : "border-outline"}`}>
                   <EventFlyerLayout path={bandEvent.flyer_path} title={bandEvent.title}>
                     <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0">

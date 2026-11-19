@@ -4,6 +4,7 @@ import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { getSupabaseAuthStorageKey, getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { createPrivateSessionController, getPrivateScope, type PrivateSessionSnapshot } from "@/lib/private-session";
+import { notificationId, notificationUnavailable } from "@/lib/notification-destination";
 
 function PrivateSessionScope({ scope, children }: { scope: string; children: ReactNode }) {
   const router = useRouter();
@@ -11,6 +12,8 @@ function PrivateSessionScope({ scope, children }: { scope: string; children: Rea
   const lastPath = useRef(pathname);
   const controller = useRef<ReturnType<typeof createPrivateSessionController> | null>(null);
   const [snapshot, setSnapshot] = useState<PrivateSessionSnapshot>({ phase: "checking", epoch: 0 });
+  const forbiddenTarget = snapshot.phase === "forbidden" && typeof window !== "undefined"
+    && !!notificationId(new URLSearchParams(window.location.search).get("notificacao"));
   useEffect(() => {
     try {
       const active = createPrivateSessionController(getSupabaseBrowserClient(), window, document,
@@ -27,10 +30,15 @@ function PrivateSessionScope({ scope, children }: { scope: string; children: Rea
   }, [pathname]);
   useEffect(() => {
     if (snapshot.phase === "signed-out") router.replace("/login");
-    else if (snapshot.phase === "forbidden") router.replace("/dashboard");
-  }, [snapshot.phase, router]);
+    else if (snapshot.phase === "forbidden" && !forbiddenTarget) router.replace("/dashboard");
+  }, [snapshot.phase, router, forbiddenTarget]);
 
   if (snapshot.phase === "ready") return <Fragment key={snapshot.epoch}>{children}</Fragment>;
+  if (forbiddenTarget) return <main className="flex flex-1 flex-col items-center justify-center gap-4 px-4 py-10 text-center text-content">
+    <p role="status">{notificationUnavailable}</p>
+    <button type="button" className="rounded-control border border-outline px-4 py-2 focus-visible:ring-2 focus-visible:ring-focus"
+      onClick={() => router.replace("/dashboard")}>Ir para meu painel</button>
+  </main>;
   return <main className="flex flex-1 items-center justify-center px-4 py-10">
     <div className="text-center text-content-muted" role={snapshot.phase === "error" ? "alert" : "status"}>
       <p>{snapshot.phase === "error" ? "N?o foi poss?vel verificar seu acesso. Tente novamente." : "Verificando seu acesso..."}</p>

@@ -30,6 +30,8 @@ function fixture(api, initialBand = 'band-a') {
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
     }).outputText, { module: mod, exports: mod.exports, URL, process: { env: { NEXT_PUBLIC_SUPABASE_URL: origin, NODE_ENV: 'test' } }, require(name) {
       if (name === 'react') return hooks;
+      if (name === 'next/navigation') return { useSearchParams: () => new URLSearchParams() };
+      if (name === '@/components/notification-target') return { NotificationTargetStatus: () => null };
       if (name === 'next/link' || name === '@/components/band-entry-panel') return { __esModule: true, default: () => null };
       if (name === '@/components/profile-avatar') return { __esModule: true, default: Avatar };
       if (name === '@/lib/band-entry') return { BAND_ENTRY_BACKEND_VALIDATED: true, createBandEntryService: () => api,
@@ -44,7 +46,7 @@ function fixture(api, initialBand = 'band-a') {
   const Flow = load('src/components/band-entry-flow.tsx').default;
   const cleanup = () => effects.forEach(e => e?.cleanup?.());
   return { Avatar, cleanup, render(bandId = initialBand) {
-    const wrapper = Flow({ bandId });
+    const wrapper = Flow({ bandId }).props.children;
     if (mountedKey !== wrapper.key) { cleanup(); slots.length = effects.length = scheduled.length = 0; mountedKey = wrapper.key; }
     cursor = 0; const tree = nodes(wrapper.type(wrapper.props)); while (scheduled.length) scheduled.shift()(); return tree;
   } };
