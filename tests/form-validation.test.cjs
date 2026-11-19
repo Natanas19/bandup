@@ -46,11 +46,13 @@ function fixture(initialStates = {}, cryptoSource = { randomUUID: () => "1234567
         useRef: (initial) => { const i = cursor++; return states[i] ??= { current: initial }; },
       };
       if (name === "next/navigation") return { useParams: () => ({ bandId: "band" }), useRouter: () => ({ replace: (url) => calls.push(["navigate", url]), refresh() {} }) };
+      if (name === "@/components/notification-target") return { useNotificationTarget: () => null, NotificationTargetStatus: () => null };
       if (name === "next/link") return { __esModule: true, default: () => null };
       if (name === "@/lib/supabase/client") return { getSupabaseBrowserClient: () => client };
       if (name === "@/lib/band-logo-upload") return { BandLogoError: class extends Error {}, bandPhotoSession: async () => ({ scoped: client, verify: async () => {} }) };
       if (name.startsWith("@/components/")) return { __esModule: true, default: () => null, LinkifiedText: () => null };
       if (name.startsWith("@/lib/")) return load("src/" + name.slice(2) + ".ts");
+      if (name.startsWith("./")) return load(path.join(path.dirname(relative), name + ".ts"));
       return require(name);
     };
     const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
@@ -62,7 +64,12 @@ function fixture(initialStates = {}, cryptoSource = { randomUUID: () => "1234567
     }, { filename });
     return loadedModule.exports;
   }
-  return { load, calls, states, render(Component) { cursor = 0; return Component(); } };
+  return { load, calls, states, render(Component) {
+    cursor = 0;
+    const tree = Component();
+    const child = tree?.props?.children;
+    return tree?.type === React.Suspense && typeof child?.type === "function" ? child.type(child.props) : tree;
+  } };
 }
 
 function findForm(tree) {

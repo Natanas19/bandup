@@ -22,6 +22,7 @@ function loader(overrides = {}) {
         const base = 'src/' + name.slice(2);
         return load([base + '.ts', base + '.tsx'].find(file => fs.existsSync(path.join(__dirname, '..', file))));
       }
+      if (name.startsWith('./')) return load(path.join(path.dirname(file), name + '.ts'));
       return require(name);
     } });
     return mod.exports;
@@ -45,13 +46,24 @@ function fixture(options = {}) {
         eq(...args) { call.filters.push(args); return this; },
         in(...args) { call.in = args; return this; },
         order(...args) { call.orders.push(args); return this; },
+        async limit(size) {
+          call.limit = size;
+          return { error: options.probeError ?? (options.v2 ? null : {
+            code: '42703', message: 'column tasks.task_revision does not exist',
+          }) };
+        },
         async range(start, end) {
           call.range = [start, end];
           if (options.throwQuery) throw Error('private transport detail');
           const error = table === 'band_members' ? options.membershipError : options.taskError;
           let rows = table === 'band_members' ? options.memberships ?? [membership('a')] : options.tasks ?? [];
           if (table === 'tasks' && !options.ignoreFilters) {
-            rows = rows.filter(row => row.assigned_to === 'self' && call.in[1].includes(row.band_id));
+            rows = rows.filter(row => (options.v2
+              ? row.task_assignees?.some(link => link.user_id === 'self')
+              : row.assigned_to === 'self') && call.in[1].includes(row.band_id));
+            if (options.v2) rows = rows.map(row => ({
+              ...row, task_assignees: row.task_assignees.filter(link => link.user_id === 'self'),
+            }));
             rows = [...rows].sort((a, b) => {
               if (a.due_date !== b.due_date) return a.due_date === null ? 1 : b.due_date === null ? -1 : a.due_date.localeCompare(b.due_date);
               return b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id);
@@ -68,7 +80,7 @@ test('empty tasks and no memberships produce honest empty results; no bands skip
   for (const options of [{}, { memberships: [] }]) {
     const f = fixture(options), result = await service.loadPersonalTasks(f.client);
     assert.equal(result.tasks.length, 0); assert.equal(result.hasMore, false); assert.equal(result.totalCount, 0);
-    assert.equal(f.calls.filter(c => c.table === 'tasks').length, options.memberships ? 0 : 1);
+    assert.equal(f.calls.filter(c => c.table === 'tasks').length, options.memberships ? 0 : 2);
   }
 });
 test('multiple bands return only tasks assigned to current user, preserving band names and scoped queries', async () => {
@@ -76,7 +88,7 @@ test('multiple bands return only tasks assigned to current user, preserving band
     tasks: [task('own-a'), task('own-b', 'b'), task('other', 'a', 'other'), task('unassigned', 'a', null), task('outside', 'c')] });
   const result = await service.loadPersonalTasks(f.client);
   assert.deepEqual(Array.from(result.tasks, r => [r.id, r.bandName]), [['own-a', 'Banda a'], ['own-b', 'Banda b']]);
-  const members = f.calls.find(c => c.table === 'band_members'), query = f.calls.find(c => c.table === 'tasks');
+  const members = f.calls.find(c => c.table === 'band_members'), query = f.calls.find(c => c.table === 'tasks' && c.range);
   assert.deepEqual(members.filters, [['user_id', 'self']]);
   assert.deepEqual(query.filters, [['assigned_to', 'self']]);
   assert.deepEqual(Array.from(query.in[1]), ['a', 'b']);
@@ -88,6 +100,23 @@ test('invalid memberships and out-of-scope returned tasks never become visible',
   for (const row of [task('other', 'a', 'other'), task('outside', 'z')]) {
     await assert.rejects(service.loadPersonalTasks(fixture({ tasks: [row], ignoreFilters: true }).client), /confirmar o acesso/);
   }
+});
+
+test('V2 filters and paginates by the verified assignment relation, ignoring the legacy scalar', async () => {
+  const linked = id => ({ ...task(id, 'a', null), task_assignees: [{ user_id: 'self' }, { user_id: 'other' }] });
+  const f = fixture({ v2: true, tasks: [
+    ...Array.from({ length: 51 }, (_, index) => linked(String(index).padStart(3, '0'))),
+    { ...task('legacy-only'), task_assignees: [{ user_id: 'other' }] },
+  ] });
+  const first = await service.loadPersonalTasks(f.client);
+  const last = await service.loadPersonalTasks(f.client, 50);
+  assert.deepEqual([first.tasks.length, first.hasMore, first.totalCount], [50, true, 51]);
+  assert.deepEqual([last.tasks.length, last.hasMore, last.totalCount], [1, false, 51]);
+  const query = f.calls.find(call => call.table === 'tasks' && call.range);
+  assert.match(query.columns, /task_assignees!inner\(user_id\)/);
+  assert.deepEqual(query.filters, [['task_assignees.user_id', 'self']]);
+  await assert.rejects(service.loadPersonalTasks(fixture({ v2: true, ignoreFilters: true,
+    tasks: [{ ...task('wrong'), task_assignees: [{ user_id: 'other' }] }] }).client), /confirmar o acesso/);
 });
 
 test('authentication, membership, RLS and transport failures reject rather than returning empty lists', async () => {
@@ -102,7 +131,7 @@ test('deadline order puts undated tasks last with stable creation/id ties and bo
   const rows = [task('z'), task('b', 'a', 'self', '2026-12-02'), task('a', 'a', 'self', '2026-12-01'), task('y')];
   const f = fixture({ tasks: rows });
   assert.deepEqual(Array.from((await service.loadPersonalTasks(f.client)).tasks, r => r.id), ['a', 'b', 'y', 'z']);
-  const query = f.calls.find(c => c.table === 'tasks');
+  const query = f.calls.find(c => c.table === 'tasks' && c.range);
   assert.equal(query.orders[0][0], 'due_date'); assert.equal(query.orders[0][1].nullsFirst, false);
   assert.equal(query.orders[1][0], 'created_at'); assert.equal(query.orders[1][1].ascending, false);
   assert.equal(query.orders[2][0], 'id'); assert.deepEqual(query.range, [0, 50]);
@@ -112,7 +141,7 @@ test('deadline order puts undated tasks last with stable creation/id ties and bo
   assert.equal(first.totalCount, 51);
   assert.equal(second.tasks.length, 1); assert.equal(second.hasMore, false);
   assert.equal(second.totalCount, 51);
-  assert.equal(many.calls.find(c => c.table === 'tasks').selectOptions.count, 'exact');
+  assert.equal(many.calls.find(c => c.table === 'tasks' && c.range).selectOptions.count, 'exact');
 });
 test('membership pagination includes bands beyond the first page; bad offsets never call Auth', async () => {
   const f = fixture({ memberships: Array.from({ length: 201 }, (_, i) => membership(String(i))), tasks: [task('last', '200')] });

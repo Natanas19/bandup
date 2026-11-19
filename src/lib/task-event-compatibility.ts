@@ -2,7 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 const baseColumns = "id, title, description, status, priority, due_date, assigned_to, created_at, created_by";
 
-export function taskColumns(supportsEvents: boolean) {
+export function taskColumns(supportsEvents: boolean, v2 = false) {
+  if (v2) return `${baseColumns.replace(", assigned_to", "")}, event_id, task_revision, task_assignees(user_id)`;
   return supportsEvents ? `${baseColumns}, event_id` : baseColumns;
 }
 
@@ -13,13 +14,13 @@ export function isMissingTaskEventColumn(error: { code?: string; message?: strin
       error.message === "Could not find the 'event_id' column of 'tasks' in the schema cache");
 }
 
-export async function readTasksWithEventSupport(client: SupabaseClient, bandId: string) {
+export async function readTasksWithEventSupport(client: SupabaseClient, bandId: string, v2 = false) {
   const read = (supportsEvents: boolean) => client.from("tasks")
-    .select(taskColumns(supportsEvents)).eq("band_id", bandId)
+    .select(taskColumns(supportsEvents, v2)).eq("band_id", bandId)
     .order("due_date", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: false });
   const result = await read(true);
-  if (!isMissingTaskEventColumn(result.error)) return { ...result, supportsEvents: true };
+  if (v2 || !isMissingTaskEventColumn(result.error)) return { ...result, supportsEvents: true };
   return { ...await read(false), supportsEvents: false };
 }
 

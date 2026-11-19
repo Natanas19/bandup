@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useRef, useState, type FormEvent } from "react";
 import { NotificationTargetStatus, notificationTargetProps, useNotificationTarget } from "@/components/notification-target";
 import Link from "next/link";
 import BandNavigation from "@/components/band-navigation";
@@ -10,7 +10,8 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import CardDetails, { toggleCardDetails } from "@/components/card-details";
 import { calendarDay, formatTaskDate, taskDeadlinePatch } from "@/lib/date-time";
 import { requiredTextError } from "@/lib/form-validation";
-import { canEditTask, canReassignTask, canSaveTask, getBandAccess, recordWriteError } from "@/lib/record-permissions";
+import { canEditTask, canReassignTask, canSaveTask, getBandAccess, recordWriteError, taskAssigneeIds } from "@/lib/record-permissions";
+import { multipleTaskAssigneesEnabled, newTaskId, readTaskMembers, readTaskWriteMode, saveTaskV2 } from "@/lib/task-assignees";
 import { readTasksWithEventSupport, taskColumns, taskEventValues } from "@/lib/task-event-compatibility";
 
 import { loadMemberNames } from "@/lib/display-name";
@@ -31,7 +32,9 @@ type Task = {
   status: TaskStatus;
   priority: TaskPriority;
   due_date: string | null;
-  assigned_to: string | null;
+  assigned_to?: string | null;
+  task_revision?: number;
+  task_assignees?: { user_id: string }[];
   event_id?: string | null;
   created_at: string;
   created_by: string;
@@ -41,6 +44,12 @@ type BandMember = {
   userId: string;
   label: string;
 };
+
+function hasV2Assignments(task: Task): task is Task & { task_revision: number; task_assignees: { user_id: string }[] } {
+  return typeof task.task_revision === "number" && Number.isSafeInteger(task.task_revision)
+    && task.task_revision >= 0 && Array.isArray(task.task_assignees)
+    && task.task_assignees.every(row => typeof row?.user_id === "string");
+}
 
 type PageState = "loading" | "unauthenticated" | "unavailable" | "error" | "ready";
 
@@ -139,9 +148,15 @@ function BandTasks() {
   const [relatedEventId, setRelatedEventId] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [supportsEvents, setSupportsEvents] = useState(true);
+  const [v2, setV2] = useState(false);
+  const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
+  const editBase = useRef<Task | null>(null);
+  const createAttempt = useRef<{ bandId: string; userId: string; id: string } | null>(null);
+  const multipleAssignees = v2 && multipleTaskAssigneesEnabled();
   const access = getBandAccess(currentUserId, isAdmin ? "admin" : "member");
   const editingTask = tasks.find((task) => task.id === editingTaskId);
   const canChangeAssignee = !editingTaskId || (!!editingTask && canReassignTask(access, editingTask));
+  const keepMultiple = v2 && !multipleAssignees && !!editingTask && taskAssigneeIds(editingTask).length > 1;
 
   useEffect(() => {
     let isMounted = true;
@@ -199,7 +214,8 @@ function BandTasks() {
           return;
         }
 
-        const { data: memberRows, error: membersError } = await supabase
+        const taskV2 = await readTaskWriteMode(supabase, bandId) === "v2";
+        const { data: memberRows, error: membersError } = taskV2 ? await readTaskMembers(supabase, bandId) : await supabase
           .from("band_members")
           .select("user_id")
           .eq("band_id", bandId)
@@ -218,7 +234,7 @@ function BandTasks() {
         }));
 
         const { data: taskRows, error: tasksError, supportsEvents: hasEventSupport } =
-          await readTasksWithEventSupport(supabase, bandId);
+          await readTasksWithEventSupport(supabase, bandId, taskV2);
 
         if (!isMounted) return;
         if (tasksError) {
@@ -241,17 +257,19 @@ function BandTasks() {
         }
 
         setSupportsEvents(hasEventSupport);
+        setV2(taskV2);
         setBandName(band.name);
         setIsAdmin(membership.role === "admin");
         setCurrentUserId(user.id);
         setMembers(bandMembers);
         setEvents((eventRows ?? []) as BandEvent[]);
         const loadedTasks = (taskRows ?? []) as unknown as Task[];
+        if (taskV2 && loadedTasks.some(task => !hasV2Assignments(task))) throw new Error("Invalid task assignment data");
         if (notificationTask && !loadedTasks.some(task => task.id === notificationTask)) {
-          const { data: target } = await supabase.from("tasks").select(taskColumns(hasEventSupport))
+          const { data: target } = await supabase.from("tasks").select(taskColumns(hasEventSupport, taskV2))
             .eq("band_id", bandId).eq("id", notificationTask).maybeSingle();
           if (!isMounted) return;
-          if (target) loadedTasks.push(target as unknown as Task);
+          if (target && (!taskV2 || hasV2Assignments(target as unknown as Task))) loadedTasks.push(target as unknown as Task);
         }
         setTasks(sortTasks(loadedTasks));
         setPageState("ready");
@@ -313,12 +331,15 @@ function BandTasks() {
   }, [bandId, currentUserId, pageState]);
 
   function resetForm() {
+    editBase.current = null;
+    createAttempt.current = null;
     setTitle("");
     setDescription("");
     setStatus("todo");
     setPriority("medium");
     setDueDate("");
     setAssignedTo("");
+    setSelectedAssignees([]);
     setRelatedEventId("");
     setFormError("");
     setFormSuccess("");
@@ -332,13 +353,17 @@ function BandTasks() {
 
   function startEditing(task: Task) {
     if (!canEditTask(access, task) || isSubmitting || deletingTaskId) return;
+    editBase.current = task;
+    createAttempt.current = null;
     setEditingTaskId(task.id);
     setTitle(task.title);
     setDescription(task.description ?? "");
     setStatus(task.status);
     setPriority(task.priority);
     setDueDate(task.due_date ? calendarDay(task.due_date) : "");
-    setAssignedTo(task.assigned_to ?? "");
+    const assignees = taskAssigneeIds(task);
+    setAssignedTo(assignees.length === 1 ? assignees[0] : "");
+    setSelectedAssignees(assignees);
     setRelatedEventId(task.event_id ?? "");
     setFormError("");
     setFormSuccess("");
@@ -387,7 +412,7 @@ function BandTasks() {
         setFormError("Você não tem permissão para salvar tarefas nesta banda.");
         return;
       }
-      if (editingTaskId) {
+      if (editingTaskId && !v2) {
         const { data: currentTask, error: currentError } = await supabase
           .from("tasks").select("created_by, assigned_to")
           .eq("id", editingTaskId).eq("band_id", bandId).maybeSingle();
@@ -399,11 +424,6 @@ function BandTasks() {
           setFormError("Você não tem permissão para salvar esta tarefa com o responsável selecionado. Recarregue a página para atualizar seu acesso.");
           return;
         }
-      }
-
-      if (assignedTo && !members.some((member) => member.userId === assignedTo)) {
-        setFormError("Selecione um responsável que faça parte desta banda.");
-        return;
       }
 
       let eventValues: { event_id?: string | null };
@@ -425,21 +445,83 @@ function BandTasks() {
       }
       let deadlineValues: { due_date?: string | null };
       try {
-        deadlineValues = taskDeadlinePatch(dueDate, editingTaskId ? editingTask?.due_date : undefined);
+        const original = v2 ? editBase.current : editingTask;
+        deadlineValues = taskDeadlinePatch(dueDate, editingTaskId ? original?.due_date : undefined);
       } catch {
         setFormError("Informe um prazo válido.");
         return;
       }
 
-      const taskValues = {
+      const contentValues = {
         title: normalizedTitle,
         description: description.trim() || null,
         status,
         priority,
         ...deadlineValues,
-        assigned_to: assignedTo || null,
         ...eventValues,
       };
+      if (v2) {
+        const original = editBase.current;
+        const revision = original?.task_revision;
+        const token = sessionData.session?.access_token;
+        if (!token || user.id !== currentUserId || (editingTaskId && (
+          original?.id !== editingTaskId || !Number.isSafeInteger(revision) || revision === undefined
+        ))) {
+          setFormError("Recarregue a página antes de salvar esta tarefa.");
+          return;
+        }
+        const selection = multipleAssignees ? selectedAssignees : assignedTo ? [assignedTo] : [];
+        const previous = original ? taskAssigneeIds(original) : [];
+        const changed = selection.length !== previous.length || selection.some(id => !previous.includes(id));
+        const preserve = original && ((!multipleAssignees && previous.length > 1) || !changed);
+        const assignees = preserve ? null : selection;
+        if (assignees && original && !canReassignTask(freshAccess, original)) {
+          setFormError("Somente o autor ou um administrador pode alterar os responsáveis.");
+          return;
+        }
+        if (assignees?.some(id => !members.some(member => member.userId === id))) {
+          setFormError("Selecione responsáveis que façam parte desta banda.");
+          return;
+        }
+        if (!editingTaskId && !createAttempt.current) {
+          createAttempt.current = { bandId, userId: user.id, id: newTaskId() };
+        }
+        const attempt = createAttempt.current;
+        const taskId = editingTaskId ?? (attempt?.bandId === bandId && attempt.userId === user.id ? attempt.id : null);
+        if (!taskId) {
+          setFormError("Recarregue a página antes de salvar esta tarefa.");
+          return;
+        }
+        let result;
+        const authorization = `Bearer ${token}`;
+        try {
+          result = await saveTaskV2(supabase, bandId, taskId, editingTaskId ? revision! : null, {
+            ...contentValues, event_id: eventValues.event_id ?? null,
+            due_date: deadlineValues.due_date === undefined ? original?.due_date ?? null : deadlineValues.due_date,
+          }, assignees, authorization);
+        } catch (error) {
+          setFormError(recordWriteError(error as { code?: string }, "salvar esta tarefa"));
+          return;
+        }
+        const { data: saved, error: readError } = await supabase.from("tasks").select(taskColumns(true, true))
+          .eq("id", taskId).eq("band_id", bandId).setHeader("Authorization", authorization).maybeSingle();
+        const savedTask = saved as unknown as Task | null;
+        if (readError || !savedTask || savedTask.id !== taskId || !hasV2Assignments(savedTask)
+          || savedTask.task_revision < result.revision) {
+          setFormError("A tarefa foi salva, mas não foi possível recarregá-la. Atualize a página para conferir.");
+          return;
+        }
+        setTasks(current => sortTasks([...current.filter(task => task.id !== taskId), savedTask]));
+        cancelEditing();
+        setFormSuccess(result.alreadyExists ? "A tarefa já existia. Confira os dados salvos."
+          : editingTaskId ? "Tarefa atualizada com sucesso." : "Tarefa criada com sucesso.");
+        return;
+      }
+      if (assignedTo && !members.some((member) => member.userId === assignedTo)) {
+        setFormError("Selecione um responsável que faça parte desta banda.");
+        return;
+      }
+      const taskValues = { ...contentValues, assigned_to: assignedTo || null };
 
       if (editingTaskId) {
         const { data: updatedTask, error } = await supabase
@@ -672,14 +754,32 @@ function BandTasks() {
                   <label htmlFor="task-due-date" className="mb-2 block text-sm font-medium text-content-label">Prazo <span className="font-normal text-content-faint">(opcional)</span></label>
                   <input id="task-due-date" type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-outline bg-surface px-3 py-2.5 text-base md:text-sm text-content outline-none focus:border-input-focus focus:ring-4 focus:ring-input-ring" />
                 </div>
-                <div>
+                {multipleAssignees ? <fieldset disabled={!canChangeAssignee || isSubmitting} className="min-w-0 space-y-2">
+                  <legend className="mb-2 text-sm font-medium text-content-label">Responsáveis (opcional)</legend>
+                  <button type="button" disabled={!members.length}
+                    onClick={() => setSelectedAssignees(members.map(member => member.userId))}
+                    className="min-h-11 rounded-control px-2 text-sm font-semibold text-brand hover:bg-accent-soft focus-visible:ring-4 focus-visible:ring-focus disabled:opacity-60">
+                    Selecionar todos
+                  </button>
+                  <div className="max-h-48 overflow-y-auto rounded-control border border-outline bg-surface p-2">
+                    {members.map(member => <label key={member.userId} className="flex min-h-11 items-center gap-2 break-words px-2 text-sm text-content">
+                      <input type="checkbox" checked={selectedAssignees.includes(member.userId)}
+                        className="h-4 w-4 shrink-0 focus-visible:ring-2 focus-visible:ring-focus"
+                        onChange={event => {
+                          const checked = event.target.checked;
+                          setSelectedAssignees(ids => checked ? [...ids, member.userId] : ids.filter(id => id !== member.userId));
+                        }} />
+                      <span className="min-w-0 [overflow-wrap:anywhere]">{member.label}</span>
+                    </label>)}
+                  </div>
+                </fieldset> : keepMultiple ? <p className="text-sm text-content-muted">Os responsáveis atuais serão mantidos.</p> : <div>
                   <label htmlFor="task-assignee" className="mb-2 block text-sm font-medium text-content-label">Responsável <span className="font-normal text-content-faint">(opcional)</span></label>
                   <select id="task-assignee" disabled={!canChangeAssignee || isSubmitting} aria-describedby={!canChangeAssignee ? "task-assignee-help" : undefined} value={assignedTo} onChange={(event) => setAssignedTo(event.target.value)} className="min-h-11 w-full min-w-0 max-w-full rounded-xl border border-outline bg-surface px-3 py-2.5 text-base md:text-sm text-content outline-none focus:border-input-focus focus:ring-4 focus:ring-input-ring">
                     <option value="">Sem responsável</option>
                     {members.map((member) => <option key={member.userId} value={member.userId}>{member.label}</option>)}
                   </select>
                   {!canChangeAssignee && <p id="task-assignee-help" className="mt-2 text-sm text-content-subtle">Somente o autor ou um administrador pode alterar o responsável.</p>}
-                </div>
+                </div>}
               </div>
 
               {formError && <p role="alert" className="rounded-xl border border-danger-border bg-danger-surface px-4 py-3 text-sm text-danger">{formError}</p>}
@@ -716,9 +816,7 @@ function BandTasks() {
         ) : (
           <section aria-label="Lista de tarefas" className="mt-6 space-y-3">
             {tasks.map((task) => {
-              const assignee = task.assigned_to
-                ? members.find((member) => member.userId === task.assigned_to)?.label ?? "Integrante"
-                : null;
+              const assignees = taskAssigneeIds(task).map(id => members.find(member => member.userId === id)?.label ?? "Integrante");
 
               return (
                 <article key={task.id} {...(task.id === notificationTask ? notificationTargetProps : {})}
@@ -732,10 +830,10 @@ function BandTasks() {
                       <span className={`rounded-full px-3 py-1 text-xs font-semibold ${priorityStyles[task.priority]}`}>{getPriorityLabel(task.priority)}</span>
                     </div>
                   </div>
-                  {(task.due_date || assignee) && (
+                  {(task.due_date || assignees.length > 0) && (
                     <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 pt-3 text-xs text-content-subtle">
                       {task.due_date && <p>Prazo: <span className="font-medium text-content-label">{formatDate(task.due_date)}</span></p>}
-                      {assignee && <p className="min-w-0 break-words [overflow-wrap:anywhere]">Responsável: <span className="font-medium text-content-label">{assignee}</span></p>}
+                      {assignees.length > 0 && <p className="min-w-0 break-words [overflow-wrap:anywhere]">{assignees.length === 1 ? "Responsável" : "Responsáveis"}: <span className="font-medium text-content-label">{assignees.join(", ")}</span></p>}
                     </div>
                   )}
                   {task.event_id && <p className="mt-2 text-xs text-content-subtle">Evento: <span className="font-medium text-content-label">{events.find((bandEvent) => bandEvent.id === task.event_id)?.title ?? "Evento da banda"}</span></p>}

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { readTaskWriteMode } from "@/lib/task-assignees";
 
 export const PERSONAL_TASK_PAGE_SIZE = 50;
 export class PersonalTasksLoadError extends Error {}
@@ -9,7 +10,7 @@ export type PersonalTask = {
 };
 export type PersonalTasksPage = { tasks: PersonalTask[]; hasMore: boolean; totalCount: number | null };
 type Membership = { band_id: string; role: string; band: { id: string; name: string } | null };
-type TaskRow = Omit<PersonalTask, "bandName">;
+type TaskRow = Omit<PersonalTask, "bandName"> & { task_assignees?: { user_id: string }[] };
 
 // Session client only. These filters supplement database RLS; they never replace it.
 export async function loadPersonalTasks(client: SupabaseClient, offset = 0): Promise<PersonalTasksPage> {
@@ -32,22 +33,31 @@ export async function loadPersonalTasks(client: SupabaseClient, offset = 0): Pro
     }
     if (rows.length < 200) break;
   }
-  if (!bands.size) return { tasks: [], hasMore: false, totalCount: 0 };
-  // No event_id, task/event joins or write methods in this personal read path.
+  const bandIds = [...bands.keys()];
+  if (!bandIds.length) return { tasks: [], hasMore: false, totalCount: 0 };
+  let v2: boolean;
+  try {
+    v2 = await readTaskWriteMode(client, bandIds[0]) === "v2";
+  } catch {
+    throw new PersonalTasksLoadError("Não foi possível carregar suas tarefas. Tente novamente.");
+  }
   const query = client.from("tasks")
-    .select("id, band_id, assigned_to, title, status, priority, due_date, created_at", { count: "exact" })
-    .eq("assigned_to", userId).in("band_id", [...bands.keys()]);
+    .select(`id, band_id, title, status, priority, due_date, created_at, ${v2 ? "task_assignees!inner(user_id)" : "assigned_to"}`, { count: "exact" })
+    .eq(v2 ? "task_assignees.user_id" : "assigned_to", userId).in("band_id", bandIds);
   const { data, error, count } = await query
     .order("due_date", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: false }).order("id", { ascending: true })
     .range(offset, offset + PERSONAL_TASK_PAGE_SIZE);
   if (error) throw new PersonalTasksLoadError("Não foi possível carregar suas tarefas. Seu acesso pode ter mudado. Tente novamente.");
   const rows = (data ?? []) as unknown as TaskRow[];
-  if (rows.some(row => !bands.has(row.band_id) || row.assigned_to !== userId)) {
+  if (rows.some(row => !bands.has(row.band_id) || (v2
+    ? row.task_assignees?.length !== 1 || row.task_assignees[0].user_id !== userId
+    : row.assigned_to !== userId))) {
     throw new PersonalTasksLoadError("Não foi possível confirmar o acesso às tarefas retornadas. Atualize a página.");
   }
   return {
-    tasks: rows.slice(0, PERSONAL_TASK_PAGE_SIZE).map(row => ({ ...row, bandName: bands.get(row.band_id)! })),
+    tasks: rows.slice(0, PERSONAL_TASK_PAGE_SIZE).map(({ task_assignees: _assignees, ...row }) =>
+      ({ ...row, assigned_to: userId, bandName: bands.get(row.band_id)! })),
     hasMore: rows.length > PERSONAL_TASK_PAGE_SIZE,
     totalCount: count,
   };

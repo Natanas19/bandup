@@ -1,7 +1,11 @@
 // Mirrors the installed local tasks/events RLS. These UI checks never replace RLS.
 export type BandAccess = { userId: string; role: "admin" | "member" } | null;
 type OwnedRecord = { created_by: string };
-type AssignedRecord = OwnedRecord & { assigned_to: string | null };
+type AssignedRecord = OwnedRecord & { assigned_to?: string | null; task_assignees?: { user_id: string }[] };
+
+export function taskAssigneeIds(task: AssignedRecord): string[] {
+  return task.task_assignees?.map(row => row.user_id) ?? (task.assigned_to ? [task.assigned_to] : []);
+}
 
 export function getBandAccess(userId: string | null, role: unknown): BandAccess {
   return userId && (role === "admin" || role === "member") ? { userId, role } : null;
@@ -12,7 +16,7 @@ export function canEditEvent(access: BandAccess, record: OwnedRecord): boolean {
 }
 
 export function canEditTask(access: BandAccess, task: AssignedRecord): boolean {
-  return canEditEvent(access, task) || (!!access && task.assigned_to === access.userId);
+  return canEditEvent(access, task) || (!!access && taskAssigneeIds(task).includes(access.userId));
 }
 
 export function canReassignTask(access: BandAccess, task: AssignedRecord): boolean {
