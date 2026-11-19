@@ -17,28 +17,32 @@ const actionClass = "inline-flex min-h-11 items-center rounded-control px-2 text
 export default function NotificationsMenu({ source = notificationSource }: { source?: NotificationSource }) {
   const router = useRouter();
   const menu = useRef<HTMLDetailsElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
   const request = useRef<{ writing: boolean } | null>(null);
   const headingId = useId();
   const [snapshot, setSnapshot] = useState<NotificationSnapshot | null>(null);
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState<"load" | "write" | null>(null);
+  const [failed, setFailed] = useState<"load" | "write" | "clear" | null>(null);
+  const [cleared, setCleared] = useState(false);
 
-  const run = useCallback(async (write?: () => Promise<NotificationSnapshot>, onSuccess?: () => void) => {
+  const run = useCallback(async (write?: () => Promise<NotificationSnapshot>, onSuccess?: () => void, clearing = false) => {
     if (request.current?.writing || (!write && request.current)) return;
     const current = { writing: Boolean(write) };
     request.current = current;
     setBusy(true);
     setFailed(null);
+    setCleared(false);
     try {
       const result = await (write ? write() : source.load());
       if (request.current === current) {
         setSnapshot(result);
+        if (clearing) setCleared(true);
         onSuccess?.();
       }
     } catch {
       if (request.current === current) {
         if (!write) setSnapshot(null);
-        setFailed(write ? "write" : "load");
+        setFailed(clearing ? "clear" : write ? "write" : "load");
       }
     } finally {
       if (request.current === current) {
@@ -59,6 +63,8 @@ export default function NotificationsMenu({ source = notificationSource }: { sou
   }, [run]);
 
   const unread = snapshot?.unreadCount ?? 0;
+  const { clearRead } = source;
+  const cutoff = snapshot?.clearCutoff;
   const countLabel = unread === 1 ? "1 não lida" : `${unread} não lidas`;
 
   return <details ref={menu} className="shrink-0 md:relative"
@@ -72,15 +78,29 @@ export default function NotificationsMenu({ source = notificationSource }: { sou
     <section aria-labelledby={headingId}
       className="absolute inset-x-0 top-full z-40 mt-2 flex max-h-[min(32rem,calc(100dvh-10rem-env(safe-area-inset-bottom)))] flex-col overflow-hidden rounded-panel border border-outline bg-surface shadow-app-panel md:left-auto md:right-0 md:w-96">
       <div className="flex flex-wrap items-center justify-between gap-x-2 border-b border-outline-subtle px-3 py-2">
-        <h2 id={headingId} className="font-semibold text-content">Notificações</h2>
-        {snapshot && <button type="button" className={actionClass} aria-disabled={busy || unread === 0}
+        <h2 id={headingId} ref={heading} tabIndex={-1} className="font-semibold text-content">Notificações</h2>
+        {clearRead && cutoff && snapshot && snapshot.items.length > 0 && unread === 0 && !snapshot.items.some(item => !item.read)
+          ? <button type="button" className={actionClass} aria-disabled={busy || failed === "clear"}
+            onClick={event => {
+              if (busy || failed === "clear") return;
+              const button = event.currentTarget;
+              void run(() => clearRead(cutoff, snapshot.recipientId), () => {
+                if (button.ownerDocument.activeElement === button) heading.current?.focus({ preventScroll: true });
+              }, true);
+            }}>
+            Limpar notificações
+          </button>
+          : snapshot && <button type="button" className={actionClass} aria-disabled={busy || unread === 0}
           onClick={() => { if (!busy && unread > 0) void run(() => source.markAllRead(snapshot.recipientId)); }}>
           Marcar todas como lidas
         </button>}
       </div>
+      {cleared && <p role="status" className="px-3 py-2 text-sm text-content-muted">Limpeza concluída.</p>}
       {failed && <div className="px-3 py-2">
         <p role="alert" className="text-sm text-content">
-          {failed === "load" ? "Não foi possível carregar as notificações." : "Não foi possível confirmar a atualização das notificações."}
+          {failed === "load" ? "Não foi possível carregar as notificações."
+            : failed === "clear" ? "Não foi possível confirmar a limpeza. Recarregue as notificações para conferir."
+            : "Não foi possível confirmar a atualização das notificações."}
         </p>
         <button type="button" className={actionClass} onClick={() => void run()}>
           {failed === "load" ? "Tentar novamente" : "Recarregar notificações"}
@@ -89,7 +109,7 @@ export default function NotificationsMenu({ source = notificationSource }: { sou
       <div className="min-h-0 overflow-y-auto overscroll-contain">
         {!snapshot && !failed && <p role="status" className="p-4 text-sm text-content-muted">Carregando notificações…</p>}
         {snapshot && snapshot.items.length === 0 && <p className="p-4 text-sm text-content-muted">Nenhuma notificação.</p>}
-        {!!snapshot?.items.length && <ul className="divide-y divide-outline-subtle">
+        {!!snapshot?.items.length && <ul className="space-y-2 p-3">
           {snapshot.items.map(item => {
             const descriptionId = `${headingId}-${item.id}`;
             const destination = notificationHref(item.reference);
@@ -106,8 +126,9 @@ export default function NotificationsMenu({ source = notificationSource }: { sou
               <button type="button" aria-disabled={disabled}
                 aria-label={destination ? `Abrir conteúdo: ${item.title}, ${item.read ? "lida" : "não lida"}` : item.read ? `Lida: ${item.title}` : `Marcar como lida: ${item.title}`}
                 aria-describedby={descriptionId}
-                className={`block w-full px-3 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus ${item.read ? "" : "bg-accent-soft"} ${disabled ? "cursor-default" : "cursor-pointer hover:bg-accent-soft hover:underline"}`}
+                className={`block min-h-11 w-full rounded-control border border-outline-subtle px-3 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus ${item.read ? "" : "bg-accent-soft"} ${disabled ? "cursor-default" : "cursor-pointer hover:bg-accent-soft hover:underline"}`}
                 onClick={disabled ? undefined : () => {
+                  if (request.current?.writing) return;
                   if (item.read) openDestination();
                   else void run(() => source.markRead(item.id, snapshot.recipientId), openDestination);
                 }}>

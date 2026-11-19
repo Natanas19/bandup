@@ -15,12 +15,14 @@ export type NotificationSnapshot = {
   recipientId: string;
   items: readonly NotificationItem[];
   unreadCount: number;
+  clearCutoff?: string;
 };
 
 export type NotificationSource = {
   load(): Promise<NotificationSnapshot>;
   markRead(id: string, recipientId: string): Promise<NotificationSnapshot>;
   markAllRead(recipientId: string): Promise<NotificationSnapshot>;
+  clearRead?(cutoff: string, recipientId: string): Promise<NotificationSnapshot>;
 };
 
 type NotificationRow = NotificationReference & {
@@ -59,13 +61,21 @@ async function notificationAccess(expectedRecipient?: string) {
 }
 
 async function loadSnapshot({ rows, authorization, recipientId }: Awaited<ReturnType<typeof notificationAccess>>): Promise<NotificationSnapshot> {
+  // Use the latest active read timestamp set by the database, across the whole
+  // inbox. Capture it before the feed/count and keep the original precision.
+  const cutoff = await rows().select("read_at").eq("recipient_id", recipientId)
+    .is("cleared_at", null).not("read_at", "is", null)
+    .order("read_at", { ascending: false }).limit(1).setHeader("Authorization", authorization);
+  if (cutoff.error) throw new Error("Notification cutoff unavailable");
+
   const [recent, unread] = await Promise.all([
     rows().select("id, band_id, kind, content_id, message, created_at, read_at")
-      .eq("recipient_id", recipientId)
+      .eq("recipient_id", recipientId).is("cleared_at", null)
       .order("created_at", { ascending: false }).order("id", { ascending: false })
       .limit(30).setHeader("Authorization", authorization).returns<NotificationRow[]>(),
     rows().select("id", { count: "exact", head: true })
-      .eq("recipient_id", recipientId).is("read_at", null).setHeader("Authorization", authorization),
+      .eq("recipient_id", recipientId).is("cleared_at", null).is("read_at", null)
+      .setHeader("Authorization", authorization),
   ]);
   if (recent.error || unread.error || unread.count === null) {
     throw new Error("Notification feed unavailable");
@@ -73,6 +83,7 @@ async function loadSnapshot({ rows, authorization, recipientId }: Awaited<Return
   return {
     recipientId,
     unreadCount: unread.count,
+    clearCutoff: cutoff.data?.[0]?.read_at ?? undefined,
     items: (recent.data ?? []).map(({ id, band_id, kind, content_id, message, created_at, read_at }) => ({
       id,
       title: titles.get(kind) ?? "Notificação",
@@ -96,7 +107,8 @@ export const notificationSource: NotificationSource = {
     if (data !== true) {
       // False can mean another tab already marked this notification.
       const { data: row, error: lookupError } = await access.rows().select("read_at")
-        .eq("recipient_id", recipientId).eq("id", id).setHeader("Authorization", access.authorization).maybeSingle();
+        .eq("recipient_id", recipientId).eq("id", id).is("cleared_at", null)
+        .setHeader("Authorization", access.authorization).maybeSingle();
       if (lookupError || !row?.read_at) throw new Error("Notification read not confirmed");
     }
     return loadSnapshot(access);
@@ -105,6 +117,13 @@ export const notificationSource: NotificationSource = {
     const access = await notificationAccess(recipientId);
     const { error } = await access.client.rpc("bandup_mark_all_notifications_read")
       .setHeader("Authorization", access.authorization);
+    if (error) throw error;
+    return loadSnapshot(access);
+  },
+  async clearRead(cutoff, recipientId) {
+    const access = await notificationAccess(recipientId);
+    const { error } = await access.client.rpc("bandup_clear_read_notifications", { p_cutoff: cutoff })
+      .setHeader("Authorization", access.authorization).retry(false);
     if (error) throw error;
     return loadSnapshot(access);
   },

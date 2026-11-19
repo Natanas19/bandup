@@ -17,6 +17,19 @@ function eventFlyerPath(bandId: string, eventId: string, mime: string, attempt: 
   return eventPath && avatarObjectPath(bandId, mime, attempt) ? `${bandId}/${eventPath}` : null;
 }
 
+function flyerAttemptId() {
+  const source = globalThis.crypto;
+  if (typeof source?.randomUUID === "function") return source.randomUUID();
+  if (typeof source?.getRandomValues !== "function") {
+    throw new EventFlyerError("Não foi possível preparar o envio do flyer neste navegador.");
+  }
+  const bytes = source.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 export async function signEventFlyer(client: SupabaseClient, path: string) {
   const { data, error } = await client.storage.from(bucket).createSignedUrl(path, EVENT_FLYER_URL_SECONDS);
   if (error || !data?.signedUrl) throw new Error("Não foi possível abrir o flyer.");
@@ -31,36 +44,51 @@ export async function signEventFlyer(client: SupabaseClient, path: string) {
 
 export async function saveEventFlyer(client: SupabaseClient, userId: string, bandId: string,
   eventId: string, previousPath: string | null, file: File | null): Promise<string | null> {
-  const nextPath = file ? eventFlyerPath(bandId, eventId, file.type, crypto.randomUUID()) : null;
-  if (file && (validateAvatarFile(file) || !nextPath)) throw new EventFlyerError("Escolha um flyer válido.");
+  if (file && validateAvatarFile(file)) throw new EventFlyerError("Escolha um flyer válido.");
+  const nextPath = file ? eventFlyerPath(bandId, eventId, file.type, flyerAttemptId()) : null;
+  if (file && !nextPath) throw new EventFlyerError("Escolha um flyer válido.");
 
-  const signal = AbortSignal.timeout(30_000);
-  const { scoped, verify } = await bandPhotoSession(client, userId, signal).catch(() => {
-    throw new EventFlyerError("Não foi possível verificar a sessão para alterar o flyer.");
-  });
-  const event = () => scoped.from("events").select("flyer_path").eq("id", eventId).eq("band_id", bandId).maybeSingle();
-  const before = await event();
-  if (before.error || !before.data) throw new EventFlyerError("Não foi possível verificar o flyer atual.");
-  if (before.data.flyer_path === nextPath) return nextPath;
-  if (before.data.flyer_path !== previousPath) throw new EventFlyerError("O flyer mudou. Atualize a agenda antes de tentar novamente.");
+  const controller = new AbortController();
+  const { signal } = controller;
+  const timer = setTimeout(() => controller.abort(), 30_000);
+  try {
+    const { scoped, verify } = await bandPhotoSession(client, userId, signal).catch(() => {
+      throw new EventFlyerError("Não foi possível verificar a sessão para alterar o flyer.");
+    });
+    const event = () => scoped.from("events").select("flyer_path").eq("id", eventId).eq("band_id", bandId).maybeSingle();
+    const before = await Promise.resolve(event()).catch(() => null);
+    if (before?.error || !before?.data) throw new EventFlyerError("Não foi possível verificar o flyer atual.");
+    if (before.data.flyer_path === nextPath) return nextPath;
+    if (before.data.flyer_path !== previousPath) throw new EventFlyerError("O flyer mudou. Atualize a agenda antes de tentar novamente.");
 
-  if (file && nextPath) {
-    const uploaded = await scoped.storage.from(bucket).upload(nextPath, file, {
-      contentType: file.type, upsert: false, cacheControl: "60",
-    }).catch(() => null);
-    if (!uploaded || uploaded.error) throw new EventFlyerError("Não foi possível confirmar o envio do flyer. Verifique sua conexão e permissão.");
+    if (file && nextPath) {
+      const uploaded = await scoped.storage.from(bucket).upload(nextPath, file, {
+        contentType: file.type, upsert: false, cacheControl: "60",
+      }).catch(() => null);
+      if (!uploaded || uploaded.error) throw new EventFlyerError("Não foi possível confirmar o envio do flyer. Verifique sua conexão e permissão.");
+    }
+    await verify().catch(() => {
+      throw new EventFlyerError("Não foi possível verificar a sessão para vincular o flyer.");
+    });
+    const update = scoped.from("events").update({ flyer_path: nextPath }).eq("id", eventId).eq("band_id", bandId);
+    const conditional = previousPath === null ? update.is("flyer_path", null) : update.eq("flyer_path", previousPath);
+    const result = await Promise.resolve(conditional.select("flyer_path").maybeSingle()).catch(() => null);
+    if (result?.error?.code === "42501") throw new EventFlyerError("Você não tem permissão para alterar este flyer.");
+
+    // A dropped response can follow a committed update. Confirm by reading once.
+    const outcome = result?.data && !result.error ? result : await Promise.resolve(event()).catch(() => null);
+    const confirmationError = "Não foi possível confirmar a alteração do flyer. Atualize a agenda para conferir.";
+    await verify().catch(() => { throw new EventFlyerError(confirmationError); });
+    if (outcome?.error || !outcome?.data || outcome.data.flyer_path !== nextPath) {
+      throw new EventFlyerError(confirmationError);
+    }
+    return nextPath;
+  } catch (cause) {
+    if (signal.aborted) {
+      throw new EventFlyerError("O tempo para alterar o flyer se esgotou. Atualize a agenda para conferir.");
+    }
+    throw cause;
+  } finally {
+    clearTimeout(timer);
   }
-  await verify();
-  const update = scoped.from("events").update({ flyer_path: nextPath }).eq("id", eventId).eq("band_id", bandId);
-  const conditional = previousPath === null ? update.is("flyer_path", null) : update.eq("flyer_path", previousPath);
-  const result = await Promise.resolve(conditional.select("flyer_path").maybeSingle()).catch(() => null);
-  if (result?.error?.code === "42501") throw new EventFlyerError("Você não tem permissão para alterar este flyer.");
-
-  // A dropped response can follow a committed update. Confirm by reading once.
-  const outcome = result?.data && !result.error ? result : await Promise.resolve(event()).catch(() => null);
-  await verify();
-  if (outcome?.error || !outcome?.data || outcome.data.flyer_path !== nextPath) {
-    throw new EventFlyerError("Não foi possível confirmar a alteração do flyer. Atualize a agenda para conferir.");
-  }
-  return nextPath;
 }

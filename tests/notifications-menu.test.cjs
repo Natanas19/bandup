@@ -52,7 +52,9 @@ function fixture(source, navigation = {}, defaultSource) {
     effects.length = 0;
     const tree = NotificationsMenu({ source });
     if (navigation.menu) tree.props.ref.current = navigation.menu;
-    return nodes(tree);
+    const rendered = nodes(tree);
+    if (navigation.heading) rendered.find(node => node.type === 'h2').props.ref.current = navigation.heading;
+    return rendered;
   }
   render();
   effects.forEach(effect => effect());
@@ -82,11 +84,16 @@ test('demo feed marks one or all and keeps the count between reads in the same s
   assert.equal(text(menu, 'Demonstração com dados fictícios.'), undefined);
   assert.ok(text(menu, 'Sem destino disponível.'));
   assert.equal(menu.filter(node => node.type === 'time').length, 3);
+  const list = menu.find(node => node.type === 'ul');
+  assert.match(list.props.className, /\bspace-y-2 p-3\b/);
+  assert.doesNotMatch(list.props.className, /\bdivide-y\b/);
   const card = menu.find(node => node.props['aria-label'] === 'Marcar como lida: Pedido de entrada');
   assert.equal(card.type, 'button');
   assert.equal(card.props.type, 'button');
   assert.equal(card.props.onKeyDown, undefined, 'uses native Enter and Space activation');
   assert.match(card.props.className, /w-full.*focus-visible:ring-2/);
+  assert.match(card.props.className, /min-h-11.*rounded-control border border-outline-subtle/);
+  assert.ok(card.props.className.split(' ').includes('bg-accent-soft'));
   assert.ok(nodes(card).some(node => node.type === 'time'));
   assert.ok(text(nodes(card), 'Pedido de entrada'));
   assert.ok(text(nodes(card), 'Não lida'));
@@ -100,6 +107,7 @@ test('demo feed marks one or all and keeps the count between reads in the same s
   assert.equal(readCard.props['aria-disabled'], true);
   assert.equal(readCard.props.onClick, undefined);
   assert.ok(text(nodes(readCard), 'Lida'));
+  assert.equal(readCard.props.className.split(' ').includes('bg-accent-soft'), false);
   assert.equal((await source.load()).unreadCount, 1);
   text(menu, 'Marcar todas como lidas').props.onClick();
   await settle();
@@ -240,20 +248,25 @@ const taskRow = {
   message: 'Uma tarefa foi atribuída a você.', created_at: '2026-11-18T14:30:00Z', read_at: null,
 };
 
-test('the default feed scopes both queries to the verified user and counts beyond the recent list', async () => {
+test('the default feed scopes queries to active notifications and hides clear for unread items outside the recent list', async () => {
   const { notificationSource, requests } = supabaseFeed(({ method }) => method === 'HEAD'
     ? new Response(null, { headers: { 'Content-Range': '*/42' } })
-    : Response.json([taskRow]));
+    : Response.json([{ ...taskRow, read_at: taskRow.created_at }]));
   const render = fixture(undefined, {}, notificationSource);
   assert.ok(text(render(), 'Carregando notificações…'));
   await settle();
-  assert.equal(requests.length, 2);
+  assert.equal(requests.length, 3);
   for (const request of requests) {
     assert.equal(request.url.pathname, '/rest/v1/notifications');
     assert.equal(request.authorization, 'Bearer alice');
     assert.equal(request.url.searchParams.get('recipient_id'), 'eq.alice');
+    assert.equal(request.url.searchParams.get('cleared_at'), 'is.null');
   }
-  const recent = requests.find(request => request.method === 'GET').url.searchParams;
+  const cutoff = requests[0].url.searchParams;
+  assert.equal(cutoff.get('order'), 'read_at.desc');
+  assert.equal(cutoff.get('read_at'), 'not.is.null');
+  assert.equal(cutoff.get('limit'), '1');
+  const recent = requests.find(request => request.method === 'GET' && request !== requests[0]).url.searchParams;
   assert.equal(recent.get('order'), 'created_at.desc,id.desc');
   assert.equal(recent.get('limit'), '30');
   const unread = requests.find(request => request.method === 'HEAD').url.searchParams;
@@ -261,6 +274,7 @@ test('the default feed scopes both queries to the verified user and counts beyon
   assert.equal(unread.has('limit'), false);
   assert.ok(text(render(), 42));
   assert.ok(text(render(), taskRow.message));
+  assert.equal(text(render(), 'Limpar notificações'), undefined);
 });
 
 test('writes use the SQL RPC signatures and reject stale or signed-out accounts before any write', async () => {
@@ -272,6 +286,7 @@ test('writes use the SQL RPC signatures and reject stale or signed-out accounts 
   setAccount('bob');
   await assert.rejects(notificationSource.markRead(taskRow.id, 'alice'), /recipient unavailable/);
   await assert.rejects(notificationSource.markAllRead('alice'), /recipient unavailable/);
+  await assert.rejects(notificationSource.clearRead(taskRow.created_at, 'alice'), /recipient unavailable/);
   setAccount(null);
   await assert.rejects(notificationSource.load(), /session unavailable/);
   assert.equal(requests.length, 0);
@@ -309,6 +324,91 @@ test('rejected RPCs surface an error without fetching a success snapshot', async
   await assert.rejects(notificationSource.markRead(taskRow.id, 'alice'), denied);
   await assert.rejects(notificationSource.markAllRead('alice'), denied);
   assert.deepEqual(requests.map(request => request.method), ['POST', 'POST']);
+});
+
+test('keyboard-native clear keeps its loaded cutoff, archives beyond 30 and preserves arrivals', async () => {
+  const cutoff = '2026-11-18T14:30:00.123456+00:00';
+  const later = '2026-11-18T14:30:00.123457+00:00';
+  const existing = Array.from({ length: 35 }, (_, index) => ({
+    ...taskRow, id: String(index), read_at: cutoff,
+  }));
+  const next = { ...taskRow, id: 'next', message: 'Chegou durante a limpeza', created_at: later, read_at: later };
+  const unread = { ...next, id: 'unread', message: 'Nova não lida', read_at: null };
+  let active = existing;
+  let complete;
+  const { notificationSource, requests } = supabaseFeed(({ method, url, body }) => {
+    if (method === 'POST') {
+      return new Promise(resolve => {
+        complete = () => {
+          active = [...active, next, unread].filter(row => !row.read_at || row.read_at > body.p_cutoff);
+          resolve(Response.json(35));
+        };
+      });
+    }
+    if (method === 'HEAD') {
+      return new Response(null, { headers: { 'Content-Range': '*/' + active.filter(row => !row.read_at).length } });
+    }
+    if (url.searchParams.get('select') === 'read_at') {
+      return Response.json(active.filter(row => row.read_at).slice(0, 1));
+    }
+    return Response.json(active.slice(0, 30));
+  });
+  let focused = 0;
+  const render = fixture(undefined, { heading: { focus() { focused++; } },
+    push() { assert.fail('navigation during clear'); } }, notificationSource);
+  await settle();
+  const initial = render();
+  assert.equal(initial.filter(node => node.type === 'li').length, 30);
+  const clear = text(initial, 'Limpar notificações');
+  assert.equal(clear.type, 'button');
+  assert.equal(clear.props.type, 'button');
+  assert.equal(clear.props.onKeyDown, undefined, 'Enter and Space use native button activation');
+  const button = { ownerDocument: {} };
+  button.ownerDocument.activeElement = button;
+  clear.props.onClick({ currentTarget: button });
+  clear.props.onClick({ currentTarget: button });
+  initial.find(node => node.props['aria-label']?.startsWith('Abrir conteúdo:')).props.onClick();
+  await settle();
+  assert.equal(text(render(), 'Limpar notificações').props['aria-disabled'], true);
+  assert.equal(render().filter(node => node.type === 'li').length, 30);
+  const writes = requests.filter(request => request.method === 'POST');
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].url.pathname, '/rest/v1/rpc/bandup_clear_read_notifications');
+  assert.equal(writes[0].authorization, 'Bearer alice');
+  assert.deepEqual(writes[0].body, { p_cutoff: cutoff });
+  complete();
+  await settle();
+  assert.equal(focused, 1);
+  assert.ok(text(render(), 'Limpeza concluída.'));
+  assert.ok(text(render(), next.message));
+  assert.ok(text(render(), unread.message));
+  assert.ok(text(render(), 1));
+  assert.equal(text(render(), 'Limpar notificações'), undefined);
+});
+
+test('a lost clear response leaves items visible until reload and never resends the mutation', async () => {
+  let archived = false;
+  const { notificationSource, requests } = supabaseFeed(({ method }) => {
+    if (method === 'POST') {
+      archived = true;
+      throw new Error('Connection lost after archive');
+    }
+    if (method === 'HEAD') return new Response(null, { headers: { 'Content-Range': '*/0' } });
+    return Response.json(archived ? [] : [{ ...taskRow, read_at: taskRow.created_at }]);
+  });
+  const render = fixture(undefined, {}, notificationSource);
+  await settle();
+  text(render(), 'Limpar notificações').props.onClick({ currentTarget: {} });
+  await settle();
+  assert.match(render().find(node => node.props.role === 'alert').props.children, /confirmar a limpeza/);
+  assert.ok(text(render(), taskRow.message));
+  assert.equal(text(render(), 'Limpar notificações').props['aria-disabled'], true);
+  assert.equal(text(render(), 'Limpeza concluída.'), undefined);
+  text(render(), 'Recarregar notificações').props.onClick();
+  await settle();
+  assert.ok(text(render(), 'Nenhuma notificação.'));
+  assert.equal(text(render(), 'Limpar notificações'), undefined);
+  assert.equal(requests.filter(request => request.method === 'POST').length, 1);
 });
 
 test('missing or inaccessible targets expose no content while a matching card receives focus', () => {

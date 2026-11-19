@@ -101,12 +101,20 @@ const signedFlyer = `${storageOrigin}/storage/v1/object/sign/event-flyers/${flye
 function flyerFixture(options = {}) {
   let linked = options.linked ?? null;
   const calls = [];
+  const timers = new Map();
+  let signal, verificationCount = 0;
   const scoped = {
     storage: { from(bucket) {
       assert.equal(bucket, 'event-flyers');
       return {
         async upload(path, file, settings) {
           calls.push(['upload', path, file, settings]);
+          if (options.uploadTimeout) {
+            return new Promise((_, reject) => {
+              signal.addEventListener('abort', () => reject(new Error('Upload aborted')), { once: true });
+              for (const expire of timers.values()) expire();
+            });
+          }
           return { error: options.uploadDenied ? { code: '403' } : null };
         },
         async createSignedUrl(path, ttl) {
@@ -140,9 +148,25 @@ function flyerFixture(options = {}) {
     },
   };
   const api = compile('src/lib/event-flyer.ts', { './band-logo-upload': {
-    bandPhotoSession: async () => ({ scoped, verify: async () => {} }),
-  } });
-  return { api, scoped, calls, save: (previous, file) => api.saveEventFlyer(scoped, 'user', flyerBand, flyerEvent, previous, file) };
+    async bandPhotoSession(_client, _user, deadline) {
+      signal = deadline;
+      return { scoped, async verify() {
+        if (++verificationCount === options.failVerification) throw Error('Session unavailable');
+      } };
+    },
+  } }, {
+    AbortController,
+    AbortSignal: {},
+    crypto: options.crypto ?? crypto,
+    setTimeout(expire, delay) {
+      assert.equal(delay, 30_000);
+      const id = Symbol('flyer timeout');
+      timers.set(id, expire);
+      return id;
+    },
+    clearTimeout: id => timers.delete(id),
+  });
+  return { api, scoped, calls, timers, save: (previous, file) => api.saveEventFlyer(scoped, 'user', flyerBand, flyerEvent, previous, file) };
 }
 
 test('flyer validates file types and size before an upload', async () => {
@@ -163,6 +187,40 @@ test('flyer uploads immutably, confirms association and removes only the link', 
   assert.equal(await f.save(path, null), null);
   assert.deepEqual(f.calls[2], ['update', path, null]);
   assert.equal(f.calls.length, 3);
+  assert.equal(f.timers.size, 0);
+});
+
+test('flyer works without AbortSignal.timeout or crypto.randomUUID', async () => {
+  const f = flyerFixture({ crypto: {
+    getRandomValues(bytes) {
+      assert.equal(bytes.length, 16);
+      return bytes.fill(255);
+    },
+  } });
+  const expected = `${flyerBand}/${flyerEvent}/ffffffff-ffff-4fff-bfff-ffffffffffff.webp`;
+  assert.equal(await f.save(null, flyerFile), expected);
+  assert.equal(f.calls[0][1], expected);
+  assert.deepEqual(f.calls[1], ['update', null, expected]);
+  assert.equal(f.timers.size, 0);
+});
+
+test('flyer timeout cancels the upload, clears the timer and skips association', async () => {
+  const f = flyerFixture({ uploadTimeout: true });
+  await assert.rejects(f.save(null, flyerFile), /tempo para alterar o flyer se esgotou/);
+  assert.deepEqual(f.calls.map(call => call[0]), ['upload']);
+  assert.equal(f.timers.size, 0);
+});
+
+test('flyer distinguishes session failure before linking from failure to confirm a write', async () => {
+  const before = flyerFixture({ failVerification: 1 });
+  await assert.rejects(before.save(null, flyerFile), /sessão para vincular o flyer/);
+  assert.deepEqual(before.calls.map(call => call[0]), ['upload']);
+  assert.equal(before.timers.size, 0);
+
+  const after = flyerFixture({ failVerification: 2 });
+  await assert.rejects(after.save(null, flyerFile), /confirmar a alteração do flyer/);
+  assert.deepEqual(after.calls.map(call => call[0]), ['upload', 'update']);
+  assert.equal(after.timers.size, 0);
 });
 
 test('flyer failures do not report success or retry mutations', async () => {

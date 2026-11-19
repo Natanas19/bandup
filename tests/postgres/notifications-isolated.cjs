@@ -76,6 +76,7 @@ function writePassword(directory) {
 
 if (require.main === module) {
   const scenarios = {
+    '--clear': 'notifications-clear.sql',
     '--band-delete': 'notifications-band-delete.sql',
     '--entry-requests': 'notifications-entry-requests.sql',
     '--task-assignments': 'notifications-task-assignments.sql',
