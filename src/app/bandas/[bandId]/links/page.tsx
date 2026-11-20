@@ -345,12 +345,12 @@ function EnabledBandLinksPage() {
   }
 
   return (
-    <main className="flex flex-1 justify-center px-4 py-6 sm:px-6 sm:py-10">
+    <main className="flex flex-1 justify-center px-4 pb-6 pt-5 sm:px-6 sm:pb-10 sm:pt-8 md:pt-10">
       <div className="w-full max-w-5xl min-w-0">
         <BandWorkspaceInfo name={bandName} role={isAdmin ? "admin" : "member"} />
         <div className="md:hidden"><BandNavigation bandId={bandId} activeSection="links" /></div>
 
-        <header className="mt-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between md:mt-7">
           <div className="min-w-0">
             <p className="text-xs font-semibold tracking-[0.16em] text-accent uppercase">{bandName}</p>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight text-content sm:text-4xl">Links</h1>

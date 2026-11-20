@@ -91,11 +91,11 @@ function EnabledBandProfilePage() {
   }
 
   return (
-    <main className="flex min-w-0 flex-1 justify-center px-4 py-6 sm:px-6 sm:py-10">
+    <main className="flex min-w-0 flex-1 justify-center px-4 pb-6 pt-5 sm:px-6 sm:pb-10 sm:pt-8 md:pt-10">
       <div className="w-full min-w-0 max-w-5xl">
         <BandWorkspaceInfo name={band.name} role={band.role} />
         <div className="md:hidden"><BandNavigation bandId={bandId} activeSection="perfil-publico" /></div>
-        <header className="mt-7">
+        <header className="md:mt-7">
           <p className="break-words text-xs font-semibold tracking-[0.16em] text-accent uppercase">{band.name}</p>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight text-content sm:text-4xl">Perfil Público</h1>
           <p className="mt-2 text-sm leading-6 text-content-muted">Gerencie a visibilidade e o endereço público da banda.</p>

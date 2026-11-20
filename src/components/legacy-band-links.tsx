@@ -37,11 +37,11 @@ export default function LegacyBandLinks() {
   }, [bandId]);
 
   return (
-    <main className="flex flex-1 justify-center px-4 py-6 sm:px-6 sm:py-10">
+    <main className="flex flex-1 justify-center px-4 pb-6 pt-5 sm:px-6 sm:pb-10 sm:pt-8 md:pt-10">
       <div className="w-full min-w-0 max-w-5xl">
         {result && <BandWorkspaceInfo name={result.bandName} role={result.role} />}
         <div className="md:hidden"><BandNavigation bandId={bandId} activeSection="links" /></div>
-        <header className="mt-7">
+        <header className="md:mt-7">
           <h1 className="text-3xl font-semibold tracking-tight text-content sm:text-4xl">Links da banda</h1>
           <p role="status" className="mt-4 rounded-2xl border border-nav-border bg-surface p-5 text-sm leading-6 text-content-muted">{LINK_WRITES_UNAVAILABLE_MESSAGE}</p>
         </header>
