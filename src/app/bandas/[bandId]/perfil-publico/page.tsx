@@ -1,6 +1,6 @@
 "use client";
 
-import { PUBLICATION_ENABLED } from "@/lib/publication-control";
+import { PUBLIC_IDENTITY_ENABLED } from "@/lib/publication-control";
 import PublicationUnavailable from "@/components/publication-unavailable";
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -17,7 +17,7 @@ type Band = { name: string; slug: string | null; is_public: boolean; role: strin
 
 export default function BandProfilePage() {
   const { bandId } = useParams<{ bandId: string }>();
-  if (PUBLICATION_ENABLED) return <EnabledBandProfilePage />;
+  if (PUBLIC_IDENTITY_ENABLED) return <EnabledBandProfilePage />;
   return <><main className="flex flex-1 justify-center px-4 py-6 sm:px-6 sm:py-10"><div className="w-full min-w-0 max-w-5xl">
     <div className="md:hidden"><BandNavigation bandId={bandId} activeSection="perfil-publico" /></div>
     <section aria-labelledby="band-appearance-title" className="mt-6 rounded-2xl border border-nav-border bg-surface p-5 sm:p-6">

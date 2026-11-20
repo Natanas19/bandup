@@ -52,7 +52,7 @@ test('small secondary text and placeholders meet AA across actual neutral surfac
   const hierarchy = ['content-strong','content-label','content-muted','content-subtle','content-faint'].map(t => luminance(light[t]));
   hierarchy.slice(1).forEach((value, i) => assert.ok(value > hierarchy[i], 'Light secondary hierarchy remains ordered'));
 });
-test('public-profile helper text survives gradient, glow and translucent empty-state composition', () => {
+test('public-profile text survives the gradient and glow', () => {
   for (const [name, p] of [['light', light], ['dark', dark]]) {
     const bases = ['background','decorative-start','decorative-end','decorative-glow'].map(k => color(p[k]));
     // A channel-wise envelope also bounds unsampled sRGB gradient/glow mixtures.
@@ -61,7 +61,6 @@ test('public-profile helper text survives gradient, glow and translucent empty-s
     for (const base of bases) for (const alpha of [0,.15,.3,.45,.6]) {
       const backdrop = composite(p['decorative-glow'], base, alpha);
       aa(p['content-subtle'], backdrop, `${name} public helper/glow ${alpha}`);
-      aa(p['content-muted'], composite(p.surface, backdrop, .7), `${name} public empty/surface70`);
     }
   }
 });
@@ -96,7 +95,7 @@ test('real UI classes compile to accessible token colors, opaque placeholders an
   assert.ok(read('src/components/band-workspace.tsx').includes('text-content-faint'));
   assert.ok(read('src/components/band-navigation.tsx').includes('bg-primary'));
   assert.ok(read('src/components/band-navigation.tsx').includes('focus:ring-focus'));
-  assert.ok(read('src/components/public-band-profile.tsx').includes('bg-surface/70'));
+  assert.ok(read('src/components/public-band-profile.tsx').includes('text-content-muted'));
   assert.doesNotMatch(read('src/components/public-band-profile.tsx'), /text-content-faint/,
     'Faint is tested for neutral surfaces; public gradient helper uses content-subtle');
   assert.doesNotMatch(sources, /(?:text-content-faint|placeholder:text-content-faint|text-content-subtle)\/\d+/);

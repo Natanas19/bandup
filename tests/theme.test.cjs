@@ -48,7 +48,7 @@ function modules(globals = {}, react = React, reactModule) {
     const code = ts.transpileModule(source, {
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2017, jsx: ts.JsxEmit.ReactJSX },
     }).outputText;
-    vm.runInNewContext(code, { process: { env: { NEXT_PUBLIC_BANDUP_PUBLICATION_ENABLED: "true" } }, module: loadedModule, exports: loadedModule.exports, require: localRequire, URL, ...globals }, { filename });
+    vm.runInNewContext(code, { process: { env: { NEXT_PUBLIC_BANDUP_PUBLICATION_ENABLED: "true", NEXT_PUBLIC_BANDUP_PUBLIC_IDENTITY_ENABLED: "true" } }, module: loadedModule, exports: loadedModule.exports, require: localRequire, URL, ...globals }, { filename });
     // Resolve the enabled wrapper as React would; clients stay mocked.
     if (typeof loadedModule.exports.default === "function") {
       const Component = loadedModule.exports.default;
@@ -639,21 +639,15 @@ test("public profile and every public route state leave appearance controls to s
   const { ThemeProvider } = loader.load("src/components/theme-provider.tsx");
   const Layout = loader.load("src/app/b/[slug]/layout.tsx").default;
   const Profile = loader.load("src/components/public-band-profile.tsx").default;
-  const band = { slug: "band", name: "Band", description: "Details https://example.com/about", image: null, links: [
-    { id: "one", platform: "website", label: "Website", url: "https://example.com/band" },
-    { id: "bad", platform: "other", label: "Unsafe", url: "javascript:alert(1)" },
-  ] };
+  const band = { slug: "band", name: "Band", description: "Details https://example.com/about", image: null };
   const wrap = (child) => renderToStaticMarkup(React.createElement(ThemeProvider, null, React.createElement(Layout, null, child)));
-  for (const links of [band.links, []]) {
-    const html = wrap(React.createElement(Profile, { band: { ...band, links } }));
-    assertThemedPlanningPage(html);
-    assert.equal((html.match(/<select /g) ?? []).length, 0);
-    assert.match(html, /from-decorative-start via-decorative-end/);
-    assert.match(html, /bg-decorative-glow\/60/);
-    assert.match(html, /border-surface bg-decorative-start/);
-    assert.equal(html.includes('href="javascript:'), false);
-    assert.match(html, /href="https:\/\/example.com\/about"/);
-  }
+  const profile = wrap(React.createElement(Profile, { band }));
+  assert.doesNotMatch(profile, /<select |bg-white|text-zinc-|text-violet-/);
+  assert.match(profile, /from-decorative-start via-decorative-end/);
+  assert.match(profile, /bg-decorative-glow\/60/);
+  assert.match(profile, /border-surface bg-decorative-start/);
+  assert.match(profile, /Details https:\/\/example.com\/about/);
+  assert.doesNotMatch(profile, /href="https:\/\/example.com\/about"/);
   for (const name of ["loading", "not-found", "error"]) {
     const Component = loader.load(`src/app/b/[slug]/${name}.tsx`).default;
     const html = wrap(React.createElement(Component, { reset() {} }));
@@ -692,7 +686,7 @@ test("public gradients, avatar and interaction utilities preserve light colors a
   const files = ["src/components/public-band-profile.tsx", "src/app/bandas/[bandId]/membros/page.tsx", "src/app/bandas/[bandId]/links/page.tsx"];
   const result = await postcss([tailwind({ ...config, content: files.map((file) => ({ raw: fs.readFileSync(path.join(root, file), "utf8") })) })]).process(css, { from: undefined });
   for (const token of ["decorative-start", "decorative-end", "decorative-glow", "shadow-tint", "surface", "primary", "content-strong", "accent-outline-hover"]) assert.ok(result.css.includes(`var(--${token})`), token);
-  assert.match(result.css, /rgb\(var\(--surface\) \/ 0\.7\)/);
+  assert.match(result.css, /rgb\(var\(--decorative-glow\) \/ 0\.6\)/);
   assert.equal(/color-mix\(|light-dark\(|oklch\(/.test(result.css), false);
 });
 
@@ -785,7 +779,7 @@ test("profile management exists only in the dedicated route with the original ad
     assert.equal((html.match(/id="public-profile-heading"/g) ?? []).length, 1);
     assert.equal(html.includes('role="switch"'), admin);
     assert.match(html, /id="public-profile-url"/);
-    if (admin) assert.match(html, /href="\/bandas\/theme-band\/links">Gerenciar links<\/a>/);
+    assert.doesNotMatch(html, /Gerenciar links/);
     const links = renderWorkspace("src/app/bandas/[bandId]/links/page.tsx", ["ready", "Band", "band", true, false, null, "", "", admin, [], false, false, null, "", "", "", "instagram", "", ""]);
     assert.equal(links.includes('id="public-profile-heading"'), false);
   }

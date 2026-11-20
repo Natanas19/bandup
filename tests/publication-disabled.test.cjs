@@ -51,9 +51,26 @@ test('publication defaults off; only exact explicit true opts in',()=>{
   assert.equal(modules({NEXT_PUBLIC_BANDUP_PUBLICATION_ENABLED:'true'}).load('src/lib/publication-control.ts').PUBLICATION_ENABLED,true);
 });
 
+test('identity has its own strict opt-in and keeps legacy link publication disabled', async () => {
+  for (const value of [undefined, '', 'false', 'TRUE', '1']) {
+    const api = modules({
+      NEXT_PUBLIC_BANDUP_PUBLICATION_ENABLED: 'true',
+      NEXT_PUBLIC_BANDUP_PUBLIC_IDENTITY_ENABLED: value,
+    }).load('src/lib/publication-control.ts');
+    assert.equal(api.PUBLIC_IDENTITY_ENABLED, false);
+  }
+  const load = modules({NEXT_PUBLIC_BANDUP_PUBLIC_IDENTITY_ENABLED:'true'}).load;
+  const control = load('src/lib/publication-control.ts');
+  assert.equal(control.PUBLIC_IDENTITY_ENABLED, true);
+  assert.equal(control.PUBLICATION_ENABLED, false);
+  await assert.rejects(load('src/lib/band-publication.ts').updateLinkPublication('demo','link',false,true),
+    {name:'PublicationDisabledError'});
+});
+
 test('server reader refuses before credentials, SDK creation or network',async()=>{
   const env=new Proxy({}, {get:(_,key)=>{
     if(key==='NEXT_PUBLIC_BANDUP_PUBLICATION_ENABLED')return undefined;
+    if(key==='NEXT_PUBLIC_BANDUP_PUBLIC_IDENTITY_ENABLED')return undefined;
     throw new Error('Credentials must not be read while disabled');
   }});
   const api=modules(env).load('src/lib/supabase/public-server.ts');
@@ -71,6 +88,32 @@ test('public loader and both route entry points make zero data calls',async()=>{
   const html=renderToStaticMarkup(await page.default(props));
   assert.match(html,/role="status"/);
   assert.doesNotMatch(html,/<form|public_band_profiles/);
+});
+
+test('enabled public route queries only identity and returns not found for an absent row', async () => {
+  const calls = [];
+  const query = {
+    select(columns) { calls.push(['select', columns]); return this; },
+    eq(column, value) { calls.push(['eq', column, value]); return this; },
+    abortSignal() { return this; },
+    async maybeSingle() { return {data:null, error:null}; },
+  };
+  const load = modules({
+    NEXT_PUBLIC_BANDUP_PUBLIC_IDENTITY_ENABLED: 'true',
+    NEXT_PUBLIC_SUPABASE_URL: 'https://example.invalid',
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_fixture',
+  }, {
+    '@supabase/supabase-js': {createClient: () => ({
+      from(name) { calls.push(['from', name]); return query; },
+    })},
+  }).load;
+  const page = load('src/app/b/[slug]/page.tsx');
+  await assert.rejects(page.default({params:Promise.resolve({slug:'demo'})}), /notFound/);
+  assert.deepEqual(calls, [
+    ['from', 'public_band_profiles'],
+    ['select', 'name,slug,description,logo_url'],
+    ['eq', 'slug', 'demo'],
+  ]);
 });
 
 test('direct publication actions refuse before authentication or queries',async()=>{

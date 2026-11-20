@@ -1,17 +1,11 @@
 import { isLaboratoryHttpOrigin } from "./development-lab";
-import {
-  getSafeExternalUrl,
-  socialPlatforms,
-  type PublicSocialLink,
-  type SocialPlatform,
-} from "./social-links";
+import { getSafeExternalUrl } from "./social-links";
 
 export type PublicBand = {
   slug: string;
   name: string;
   image: { src: string; alt: string } | null;
   description: string;
-  links: readonly PublicSocialLink[];
 };
 
 function invalidResponse(): never {
@@ -65,31 +59,13 @@ export function toPublicBand(
     typeof value.name !== "string" || !value.name.trim() ||
     value.slug !== expectedSlug ||
     (value.description !== null && typeof value.description !== "string") ||
-    (value.logo_url !== null && typeof value.logo_url !== "string") ||
-    !Array.isArray(value.links)
+    (value.logo_url !== null && typeof value.logo_url !== "string")
   ) return invalidResponse();
-
-  const links: PublicSocialLink[] = [];
-  for (const entry of value.links) {
-    if (!record(entry) || typeof entry.platform !== "string" || typeof entry.url !== "string") {
-      return invalidResponse();
-    }
-    const url = getSafeExternalUrl(entry.url);
-    if (!url) continue;
-    const platform: SocialPlatform = Object.prototype.hasOwnProperty.call(socialPlatforms, entry.platform)
-      ? entry.platform as SocialPlatform
-      : "other";
-    const customLabel = platform === "other" && entry.platform !== "other"
-      ? entry.platform.trim() : "";
-    links.push({ id: `public-link-${links.length}`, platform, url,
-      ...(customLabel ? { label: customLabel } : {}) });
-  }
   const src = safeBandLogo(value.logo_url as string | null, imageOrigin);
   return {
     slug: expectedSlug,
     name: value.name.trim(),
     description: (value.description as string | null) ?? "",
     image: src ? { src, alt: `Imagem da banda ${value.name.trim()}` } : null,
-    links,
   };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { requirePublicationEnabled } from "@/lib/publication-control";
+import { requirePublicationEnabled, requirePublicIdentityEnabled } from "@/lib/publication-control";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { isValidPublicSlug } from "@/lib/public-band-data";
 import { getSafeExternalUrl } from "@/lib/social-links";
@@ -37,7 +37,7 @@ const unconfirmed = () => new BandPublicationError(
 );
 
 export async function updateBandPublication(bandId: string, isPublic: boolean) {
-  requirePublicationEnabled();
+  requirePublicIdentityEnabled();
   const access = await verifyBandAdmin(bandId);
   if (!access) throw new BandPublicationError("Somente administradores da banda podem alterar o perfil público.");
 
@@ -46,16 +46,6 @@ export async function updateBandPublication(bandId: string, isPublic: boolean) {
   if (currentError || !current || typeof current.is_public !== "boolean") throw unconfirmed();
   if (isPublic && !getPublicProfilePath(current.slug)) {
     throw new BandPublicationError("A banda precisa de um endereço válido antes de ativar o perfil público.");
-  }
-
-  if (isPublic) {
-    // Legacy selected links must be repaired or hidden before re-publication.
-    const { data: selected, error: linksError } = await access.supabase
-      .from("social_links").select("url").eq("band_id", bandId).eq("is_public", true);
-    if (linksError || !Array.isArray(selected)) throw unconfirmed();
-    if (selected.some((link) => !getSafeExternalUrl(link.url))) {
-      throw new BandPublicationError("Corrija ou oculte os links com URL insegura antes de ativar o perfil p\u00fablico.");
-    }
   }
 
   const { data: updated, error } = await access.supabase

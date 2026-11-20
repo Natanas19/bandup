@@ -32,7 +32,7 @@ function modules(client, react = React) {
     const code = ts.transpileModule(fs.readFileSync(path.join(root, file), "utf8"), {
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2017, jsx: ts.JsxEmit.ReactJSX },
     }).outputText;
-    vm.runInNewContext(code, { module: loadedModule, exports: loadedModule.exports, require: localRequire, URL, process: { env: { NODE_ENV: "test", NEXT_PUBLIC_BANDUP_PUBLICATION_ENABLED: "true" } } }, { filename: file });
+    vm.runInNewContext(code, { module: loadedModule, exports: loadedModule.exports, require: localRequire, URL, process: { env: { NODE_ENV: "test", NEXT_PUBLIC_BANDUP_PUBLICATION_ENABLED: "true", NEXT_PUBLIC_BANDUP_PUBLIC_IDENTITY_ENABLED: "true" } } }, { filename: file });
     // Resolve the enabled wrapper as React would; clients stay mocked.
     if (typeof loadedModule.exports.default === "function") {
       const Component = loadedModule.exports.default;
@@ -115,17 +115,14 @@ test("withdrawing a legacy unsafe link or the band stays possible", async () => 
   assert.equal(f.calls.some((call) => call[0] === "select" && call[1] === "social_links" && call[2] === "url"), false);
 });
 
-test("band activation blocks unsafe legacy selections, ignores private links and fails closed on read errors", async () => {
-  for (const url of unsafe) {
-    const f = publicationFixture({ links: [{ id: "one", band_id: "band", url, is_public: true }] });
-    await assert.rejects(f.api.updateBandPublication("band", true), /URL insegura/);
-    assert.equal(f.calls.some((call) => call[0] === "update"), false);
-  }
-  const safe = publicationFixture({ links: [{ id: "one", band_id: "band", url: valid[1], is_public: true }, { id: "two", band_id: "band", url: unsafe[0], is_public: false }] });
-  assert.equal((await safe.api.updateBandPublication("band", true)).is_public, true);
-  const failed = publicationFixture({ readFailure: "social_links" });
-  await assert.rejects(failed.api.updateBandPublication("band", true));
-  assert.equal(failed.calls.some((call) => call[0] === "update"), false);
+test("band identity activation is admin-only and independent of the links table", async () => {
+  const admin = publicationFixture({ readFailure: "social_links" });
+  assert.equal((await admin.api.updateBandPublication("band", true)).is_public, true);
+  assert.equal((await admin.api.updateBandPublication("band", false)).is_public, false);
+  assert.equal(admin.calls.some((call) => call[1] === "social_links"), false);
+  const member = publicationFixture({ role: "member" });
+  await assert.rejects(member.api.updateBandPublication("band", true), /administradores/);
+  assert.equal(member.calls.some((call) => call[0] === "update"), false);
 });
 
 function pageFixture({ input = "", editing = false, records = [] } = {}) {
@@ -189,15 +186,16 @@ test("valid internal links keep their visible text, appearance and external-link
   assert.equal(link.props.rel, "noopener noreferrer"); assert.ok(link.props.className.includes("text-content-strong"));
 });
 
-test("public projection and public component omit legacy unsafe links without leaking credentials", () => {
+test("public identity accepts four fields and does not render extra links or linkify the bio", () => {
   const loader = modules();
   const transform = loader.load("src/lib/public-band-data.ts").toPublicBand;
   const Profile = loader.load("src/components/public-band-profile.tsx").default;
-  const row = { name: "Band", slug: "band", description: "", logo_url: null, links: [...unsafe, ...valid].map((url) => ({ platform: "website", url })) };
+  const row = { name: "Band", slug: "band", description: "Bio https://example.com/about", logo_url: null };
   const band = transform(row, "band", "https://example.com");
-  assert.equal(band.links.length, valid.length);
-  assert.equal(JSON.stringify(band).includes("secret"), false);
-  const html = renderToStaticMarkup(React.createElement(Profile, { band: { ...band, links: row.links.map((link, i) => ({ ...link, id: "link-" + i })) } }));
-  assert.equal(html.includes("secret"), false); assert.equal(html.includes("javascript:"), false);
-  assert.ok(html.includes('href="http://example.com/music?q=one#listen"'));
+  assert.deepEqual(Object.keys(band).sort(), ["description", "image", "name", "slug"]);
+  const extra = transform({ ...row, links: [{ url: unsafe[0] }] }, "band", "https://example.com");
+  assert.deepEqual(extra, band);
+  const html = renderToStaticMarkup(React.createElement(Profile, { band }));
+  assert.match(html, /Bio https:\/\/example.com\/about/);
+  assert.doesNotMatch(html, /href=|band-links-title/);
 });

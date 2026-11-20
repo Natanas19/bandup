@@ -1,5 +1,5 @@
 import "server-only";
-import { requirePublicationEnabled } from "@/lib/publication-control";
+import { requirePublicIdentityEnabled } from "@/lib/publication-control";
 
 import { createClient } from "@supabase/supabase-js";
 import { isLaboratoryHttpOrigin } from "../development-lab";
@@ -46,7 +46,7 @@ export async function readPublicBandRow(slug: string): Promise<{
   data: unknown;
   imageOrigin: string;
 }> {
-  requirePublicationEnabled();
+  requirePublicIdentityEnabled();
   const { origin, internalOrigin, key } = publicConfiguration();
   const client = createClient(internalOrigin, key, {
     auth: {
@@ -63,7 +63,7 @@ export async function readPublicBandRow(slug: string): Promise<{
   try {
     const { data, error } = await client
       .from("public_band_profiles")
-      .select("name,slug,description,logo_url,links")
+      .select("name,slug,description,logo_url")
       .eq("slug", slug)
       .abortSignal(controller.signal)
       .maybeSingle();
