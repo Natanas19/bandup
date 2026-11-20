@@ -8,24 +8,19 @@ import { useParams } from "next/navigation";
 import BandNavigation from "@/components/band-navigation";
 import { BandWorkspaceInfo } from "@/components/band-workspace";
 import BandPublicProfileSettings from "@/components/band-public-profile-settings";
+import BandSettings from "@/components/band-settings";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import ThemeSelector from "@/components/theme-selector";
-import BandDeletionPanel from "@/components/band-deletion-panel";
 
 type PageState = "loading" | "unauthenticated" | "unavailable" | "error" | "ready";
 type Band = { name: string; slug: string | null; is_public: boolean; role: string };
+const upcomingSections = ["Loja", "Ingressos", "Músicas", "Galeria"];
 
 export default function BandProfilePage() {
   const { bandId } = useParams<{ bandId: string }>();
   if (PUBLIC_IDENTITY_ENABLED) return <EnabledBandProfilePage />;
-  return <><main className="flex flex-1 justify-center px-4 py-6 sm:px-6 sm:py-10"><div className="w-full min-w-0 max-w-5xl">
-    <div className="md:hidden"><BandNavigation bandId={bandId} activeSection="perfil-publico" /></div>
-    <section aria-labelledby="band-appearance-title" className="mt-6 rounded-2xl border border-nav-border bg-surface p-5 sm:p-6">
-      <h1 id="band-appearance-title" className="text-lg font-semibold text-content">Aparência</h1>
-      <ThemeSelector className="mt-4" />
-    </section>
+  return <BandSettings bandId={bandId} activeSection="perfil-publico">
     <PublicationUnavailable />
-  </div></main><BandDeletionPanel key={bandId} bandId={bandId} /></>;
+  </BandSettings>;
 }
 
 function EnabledBandProfilePage() {
@@ -67,7 +62,7 @@ function EnabledBandProfilePage() {
 
   if (pageState !== "ready" || !band) {
     return (
-      <><main className="flex flex-1 justify-center px-4 py-8 sm:px-6 sm:py-12">
+      <main className="flex flex-1 justify-center px-4 py-8 sm:px-6 sm:py-12">
         <section className="w-full max-w-2xl">
           <Link href={`/bandas/${bandId}`} className="inline-flex min-h-11 items-center rounded-xl border border-accent-border px-4 py-2.5 text-sm font-semibold text-brand transition hover:bg-accent-soft focus:outline-none focus:ring-4 focus:ring-input-ring">
             ← Voltar para a visão geral
@@ -91,12 +86,12 @@ function EnabledBandProfilePage() {
             )}
           </div>
         </section>
-      </main><BandDeletionPanel key={bandId} bandId={bandId} /></>
+      </main>
     );
   }
 
   return (
-    <><main className="flex min-w-0 flex-1 justify-center px-4 py-6 sm:px-6 sm:py-10">
+    <main className="flex min-w-0 flex-1 justify-center px-4 py-6 sm:px-6 sm:py-10">
       <div className="w-full min-w-0 max-w-5xl">
         <BandWorkspaceInfo name={band.name} role={band.role} />
         <div className="md:hidden"><BandNavigation bandId={bandId} activeSection="perfil-publico" /></div>
@@ -105,13 +100,17 @@ function EnabledBandProfilePage() {
           <h1 className="mt-2 text-3xl font-semibold tracking-tight text-content sm:text-4xl">Perfil Público</h1>
           <p className="mt-2 text-sm leading-6 text-content-muted">Gerencie a visibilidade e o endereço público da banda.</p>
         </header>
-        <section aria-labelledby="band-appearance-title" className="mt-6 rounded-2xl border border-nav-border bg-surface p-5 sm:p-6">
-          <h2 id="band-appearance-title" className="text-lg font-semibold text-content">Aparência</h2>
-          <ThemeSelector className="mt-4" />
-        </section>
         <BandPublicProfileSettings key={bandId} bandId={bandId} initialSlug={band.slug}
           initiallyPublic={band.is_public} isAdmin={band.role === "admin"} />
+        <section aria-labelledby="band-public-upcoming-title" className="mt-6 rounded-2xl border border-nav-border bg-surface p-5 sm:p-6">
+          <h2 id="band-public-upcoming-title" className="text-lg font-semibold text-content">Em breve</h2>
+          <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {upcomingSections.map(label => <li key={label} className="rounded-xl border border-outline-subtle bg-surface-muted px-3 py-3 text-sm font-medium text-content-muted">
+              {label}
+            </li>)}
+          </ul>
+        </section>
       </div>
-    </main><BandDeletionPanel key={bandId} bandId={bandId} /></>
+    </main>
   );
 }

@@ -306,7 +306,7 @@ test('dashboard recovery handles unavailable configuration/storage with a safe r
 });
 
 test('integration uses settings independently of publication and dashboard recovery only', () => {
-  const settings = fs.readFileSync('src/app/bandas/[bandId]/perfil-publico/page.tsx', 'utf8');
+  const settings = fs.readFileSync('src/components/band-settings.tsx', 'utf8');
   const dashboard = fs.readFileSync('src/app/dashboard/page.tsx', 'utf8');
   assert.match(settings, /<BandDeletionPanel key=\{bandId\} bandId=\{bandId\}/);
   assert.match(dashboard, /<BandDeletionRecovery \/>/);

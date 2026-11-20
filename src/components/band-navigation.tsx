@@ -3,6 +3,7 @@
 import { useId, useRef, useState } from "react";
 import Link from "next/link";
 import NavigationIcon from "@/components/navigation-icon";
+import { PUBLIC_IDENTITY_ENABLED } from "@/lib/publication-control";
 
 const navigationItems = [
   { icon: "LayoutDashboard", section: "overview", label: "Visão geral", suffix: "" },
@@ -18,7 +19,12 @@ const comingSoonItems = [
   { icon: "Ticket", label: "Ingressos" },
 ] as const;
 
-type BandSection = (typeof navigationItems)[number]["section"] | "links" | "perfil-publico";
+const publicProfileItem = { icon: "Globe", section: "perfil-publico", label: "Perfil público", suffix: "/perfil-publico" } as const;
+const availableItems = PUBLIC_IDENTITY_ENABLED ? [...navigationItems, publicProfileItem] : navigationItems;
+const desktopExtras = PUBLIC_IDENTITY_ENABLED ? comingSoonItems.slice(1) : comingSoonItems;
+const mobileExtras = [comingSoonItems[0], comingSoonItems[1], comingSoonItems[3], comingSoonItems[2]];
+
+type BandSection = (typeof availableItems)[number]["section"] | "links" | "configuracoes";
 type BandNavigationProps = {
   bandId: string;
   activeSection: BandSection;
@@ -26,6 +32,7 @@ type BandNavigationProps = {
 };
 
 const focusStyles = "focus:outline-none focus:ring-4 focus:ring-focus";
+const mobileExtraLayout = "flex min-h-20 flex-col items-center justify-center gap-1 px-1 py-2 text-center text-[0.65rem] font-semibold";
 
 export default function BandNavigation({ bandId, activeSection, variant = "bottom" }: BandNavigationProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -36,7 +43,7 @@ export default function BandNavigation({ bandId, activeSection, variant = "botto
   const isSidebar = variant === "sidebar";
   const isBottom = variant === "bottom";
   const isExpandable = variant === "expandable";
-  const activeLabel = navigationItems.find(item => item.section === activeSection)?.label ?? "Outras áreas";
+  const activeLabel = availableItems.find(item => item.section === activeSection)?.label ?? "Outras áreas";
 
   function closeNavigation() {
     setIsOpen(false);
@@ -85,7 +92,7 @@ export default function BandNavigation({ bandId, activeSection, variant = "botto
     <div id={panelId} hidden={isExpandable && !isOpen}
       className={isSidebar ? "" : isBottom ? "" : "mt-3 rounded-2xl border border-nav-border bg-surface p-3"}>
       <ul className={isSidebar ? "space-y-1" : isBottom ? "mx-auto grid max-w-xl grid-cols-4" : "grid grid-cols-1 gap-2 sm:grid-cols-2"}>
-        {navigationItems.map(item => {
+        {(isBottom ? navigationItems : availableItems).map(item => {
           const active = item.section === activeSection;
           const linkStyle = isSidebar
             ? active ? "bg-accent-soft text-brand" : "text-content-muted hover:bg-accent-soft hover:text-brand"
@@ -103,7 +110,7 @@ export default function BandNavigation({ bandId, activeSection, variant = "botto
             <NavigationIcon name={item.icon} />{item.label}
           </Link></li>;
         })}
-        {isSidebar && comingSoonItems.map(item => <li key={item.label}>
+        {isSidebar && desktopExtras.map(item => <li key={item.label}>
           <span aria-disabled="true" className="flex min-h-11 items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-content-faint">
             <span className="flex min-w-0 items-center gap-3"><NavigationIcon name={item.icon} />{item.label}</span>
             <span className="shrink-0 rounded-full bg-disabled-surface px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-content-subtle">Em breve</span>
@@ -111,12 +118,20 @@ export default function BandNavigation({ bandId, activeSection, variant = "botto
         </li>)}
       </ul>
     </div>
-    {isBottom && <div id={`${panelId}-extras`} aria-hidden={!isOpen}
+    {isBottom && <div id={`${panelId}-extras`} aria-hidden={!isOpen} inert={!isOpen}
       className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none ${isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
       <div className="min-h-0 overflow-hidden">
         <ul className="mx-auto grid max-w-xl grid-cols-4">
-          {[comingSoonItems[0], comingSoonItems[1], comingSoonItems[3], comingSoonItems[2]].map(item => <li key={item.label}>
-            <span aria-disabled="true" className="flex min-h-20 flex-col items-center justify-center gap-1 px-1 py-2 text-center text-[0.65rem] font-semibold text-content-faint">
+          {PUBLIC_IDENTITY_ENABLED && <li>
+            <Link href={`/bandas/${bandId}${publicProfileItem.suffix}`}
+              onClick={closeNavigation} aria-current={activeSection === publicProfileItem.section ? "page" : undefined}
+              className={`${mobileExtraLayout} ${focusStyles} ${activeSection === publicProfileItem.section ? "text-brand" : "text-content-muted hover:text-brand"}`}>
+              <NavigationIcon name={publicProfileItem.icon} />
+              {publicProfileItem.label}
+            </Link>
+          </li>}
+          {(PUBLIC_IDENTITY_ENABLED ? mobileExtras.slice(1) : mobileExtras).map(item => <li key={item.label}>
+            <span aria-disabled="true" className={`${mobileExtraLayout} text-content-faint`}>
               <NavigationIcon name={item.icon} />
               <span>{item.label}</span>
               <span className="rounded-full bg-disabled-surface px-1.5 py-0.5 text-[9px] uppercase text-content-subtle">Em breve</span>

@@ -48,7 +48,7 @@ function modules(globals = {}, react = React, reactModule) {
     const code = ts.transpileModule(source, {
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2017, jsx: ts.JsxEmit.ReactJSX },
     }).outputText;
-    vm.runInNewContext(code, { process: { env: { NEXT_PUBLIC_BANDUP_PUBLICATION_ENABLED: "true", NEXT_PUBLIC_BANDUP_PUBLIC_IDENTITY_ENABLED: "true" } }, module: loadedModule, exports: loadedModule.exports, require: localRequire, URL, ...globals }, { filename });
+    vm.runInNewContext(code, { process: { env: { NEXT_PUBLIC_BANDUP_PUBLICATION_ENABLED: "true", NEXT_PUBLIC_BANDUP_PUBLIC_IDENTITY_ENABLED: globals.publicIdentityEnabled === false ? "false" : "true" } }, module: loadedModule, exports: loadedModule.exports, require: localRequire, URL, ...globals }, { filename });
     // Resolve the enabled wrapper as React would; clients stay mocked.
     if (typeof loadedModule.exports.default === "function") {
       const Component = loadedModule.exports.default;
@@ -330,7 +330,7 @@ test("Tailwind emits semantic selector utilities and opacity variants without mo
 
 test("appearance is configured inside personal and band settings routes", () => {
   const personal = fs.readFileSync(path.join(root, "src/app/dashboard/[section]/page.tsx"), "utf8");
-  const band = fs.readFileSync(path.join(root, "src/app/bandas/[bandId]/perfil-publico/page.tsx"), "utf8");
+  const band = fs.readFileSync(path.join(root, "src/components/band-settings.tsx"), "utf8");
   assert.match(personal, /section === "configuracoes"[\s\S]*ThemeSelector/);
   assert.match(band, /ThemeSelector/);
   for (const file of ["src/app/page.tsx", "src/app/login/page.tsx", "src/app/cadastro/page.tsx", "src/app/descobrir/page.tsx", "src/app/b/[slug]/layout.tsx", "src/components/band-navigation.tsx"]) {
@@ -736,7 +736,7 @@ test("UI color audit permits fixed palette only in the approved login and signup
 
 
 test("shared band layout reserves desktop space and retains a fixed sidebar across all internal sections", async () => {
-  for (const section of ["", "tarefas", "agenda", "membros", "links", "perfil-publico"]) {
+  for (const section of ["", "tarefas", "agenda", "membros", "links", "perfil-publico", "configuracoes"]) {
     const loader = modules({ testPathname: `/bandas/theme-band${section ? "/" + section : ""}` });
     const Layout = loader.load("src/app/bandas/[bandId]/layout.tsx").default;
     const { ThemeProvider } = loader.load("src/components/theme-provider.tsx");
@@ -755,10 +755,11 @@ test("shared band layout reserves desktop space and retains a fixed sidebar acro
       assert.doesNotMatch(navigation, /aria-current="page"/);
       assert.match(html, /<a\b[^>]*aria-current="page"[^>]*href="\/bandas\/theme-band"/);
       assert.equal(html.includes(`href="/bandas/theme-band/${section}"`), false);
-      assert.equal((html.match(/aria-disabled="true"/g) ?? []).length, 6);
+      assert.equal((html.match(/aria-disabled="true"/g) ?? []).length, 5);
     } else if (section === "perfil-publico") {
       assert.match(html, /aria-current="page"[^>]*href="\/bandas\/theme-band\/perfil-publico"/);
-      assert.equal((html.match(/aria-disabled="true"/g) ?? []).length, 6);
+      assert.match(html, /href="\/bandas\/theme-band\/configuracoes"/);
+      assert.equal((html.match(/aria-disabled="true"/g) ?? []).length, 5);
     } else {
       assert.match(html, new RegExp(`aria-current="page"[^>]*href="/bandas/theme-band${section ? "/" + section : ""}"`));
     }
@@ -779,9 +780,31 @@ test("profile management exists only in the dedicated route with the original ad
     assert.equal((html.match(/id="public-profile-heading"/g) ?? []).length, 1);
     assert.equal(html.includes('role="switch"'), admin);
     assert.match(html, /id="public-profile-url"/);
-    assert.doesNotMatch(html, /Gerenciar links/);
+    assert.doesNotMatch(html, /Gerenciar links|band-appearance-title/);
+    const upcoming = html.match(/<section aria-labelledby="band-public-upcoming-title"[\s\S]*?<\/section>/)?.[0];
+    assert.ok(upcoming);
+    for (const label of ["Loja", "Ingressos", "Músicas", "Galeria"]) assert.ok(upcoming.includes(label));
+    assert.doesNotMatch(upcoming, /<a\b|<button\b/);
     const links = renderWorkspace("src/app/bandas/[bandId]/links/page.tsx", ["ready", "Band", "band", true, false, null, "", "", admin, [], false, false, null, "", "", "", "instagram", "", ""]);
     assert.equal(links.includes('id="public-profile-heading"'), false);
+  }
+});
+
+test("band settings keep appearance and omit publication with either flag state", async () => {
+  for (const publicIdentityEnabled of [true, false]) {
+    const settings = publicIdentityEnabled ? "configuracoes" : "perfil-publico";
+    const loader = modules({ publicIdentityEnabled, testPathname: `/bandas/theme-band/${settings}` });
+    const Page = loader.load(`src/app/bandas/[bandId]/${settings}/page.tsx`).default;
+    const Layout = loader.load("src/app/bandas/[bandId]/layout.tsx").default;
+    const { ThemeProvider } = loader.load("src/components/theme-provider.tsx");
+    const params = Promise.resolve({ bandId: "theme-band" });
+    const page = await Page({ params });
+    const tree = await Layout({ params, children: page });
+    const html = renderToStaticMarkup(React.createElement(ThemeProvider, null, tree));
+    assert.match(html, new RegExp(`aria-current="page"[^>]*href="/bandas/theme-band/${settings}"`));
+    assert.match(html, /band-appearance-title|Aparência/);
+    assert.doesNotMatch(html, /public-profile-heading|public-profile-url|band-public-upcoming-title/);
+    if (!publicIdentityEnabled) assert.match(html, /Publicação pública temporariamente indisponível/);
   }
 });
 
@@ -820,7 +843,7 @@ test("card clicks toggle independently and ignore actions, links, native summary
 
 
 test("only band sidebar navigation includes disabled upcoming sections", () => {
-  const loader = modules();
+  const loader = modules({ publicIdentityEnabled: false });
   const Navigation = loader.load("src/components/band-navigation.tsx").default;
   const { ThemeProvider } = loader.load("src/components/theme-provider.tsx");
   for (const variant of ["sidebar", "expandable"]) {
@@ -841,7 +864,7 @@ test("only band sidebar navigation includes disabled upcoming sections", () => {
 });
 
 test("band bottom navigation keeps four active destinations and collapsed informational extras", () => {
-  const loader = modules();
+  const loader = modules({ publicIdentityEnabled: false });
   const Navigation = loader.load("src/components/band-navigation.tsx").default;
   const { ThemeProvider } = loader.load("src/components/theme-provider.tsx");
   const html = renderToStaticMarkup(React.createElement(ThemeProvider, null, React.createElement(Navigation, { bandId: "band", activeSection: "agenda", variant: "bottom" })));

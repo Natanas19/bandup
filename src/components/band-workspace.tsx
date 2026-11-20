@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import BandNavigation from "@/components/band-navigation";
 import { SpaceSwitcherHeader } from "@/components/space-switcher";
 import { WorkspaceSettingsNavigation } from "@/components/workspace-settings";
+import { PUBLIC_IDENTITY_ENABLED } from "@/lib/publication-control";
 
 type BandInfo = { name: string; role?: string };
 const BandInfoContext = createContext<((info: BandInfo) => void) | null>(null);
@@ -21,7 +22,8 @@ export default function BandWorkspace({ bandId, children }: { bandId: string; ch
   const pathname = usePathname();
   const [info, setInfo] = useState<BandInfo | null>(null);
   const section = pathname.split("/")[3];
-  const activeSection = section === "tarefas" || section === "agenda" || section === "membros" || section === "links" || section === "perfil-publico" ? section : "overview";
+  const activeSection = section === "tarefas" || section === "agenda" || section === "membros" || section === "links" || section === "perfil-publico" || section === "configuracoes" ? section : "overview";
+  const settingsHref = `/bandas/${bandId}/${PUBLIC_IDENTITY_ENABLED ? "configuracoes" : "perfil-publico"}`;
 
   return (
     <BandInfoContext.Provider value={setInfo}>
@@ -38,14 +40,14 @@ export default function BandWorkspace({ bandId, children }: { bandId: string; ch
             <BandNavigation bandId={bandId} activeSection={activeSection} variant="sidebar" />
           </div>
           <div className="mt-auto w-full">
-            <WorkspaceSettingsNavigation href={`/bandas/${bandId}/perfil-publico`} />
+            <WorkspaceSettingsNavigation href={settingsHref} />
           </div>
           <Link href="/dashboard" className="flex min-h-11 shrink-0 items-center rounded-xl px-3 py-3 text-sm font-medium text-content-muted transition hover:bg-accent-soft hover:text-brand focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">
             ← Voltar ao Meu Painel
           </Link>
         </aside>
         <div className="flex min-w-0 flex-1 flex-col">
-          <SpaceSwitcherHeader bandId={bandId} bandName={info?.name} settingsHref={`/bandas/${bandId}/perfil-publico`} />
+          <SpaceSwitcherHeader bandId={bandId} bandName={info?.name} settingsHref={settingsHref} />
           <div className="flex min-w-0 flex-1 flex-col pb-[calc(7.5rem+env(safe-area-inset-bottom))] group-has-[[data-band-nav-expanded=true]]/band:pb-[calc(13rem+env(safe-area-inset-bottom))] motion-safe:transition-[padding-bottom] motion-safe:duration-200 md:pb-0 md:group-has-[[data-band-nav-expanded=true]]/band:pb-0">{children}</div>
         </div>
       </div>

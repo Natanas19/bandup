@@ -25,6 +25,7 @@ function fixture() {
       useId: () => 'mobile-nav',
     };
     if (name === 'next/link' || name === '@/components/navigation-icon') return { __esModule: true, default: () => null };
+    if (name === '@/lib/publication-control') return { PUBLIC_IDENTITY_ENABLED: false };
     return require(name);
   } });
   const render = () => {

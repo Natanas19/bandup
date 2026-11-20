@@ -37,6 +37,7 @@ function fixture(pathname = '/dashboard/agenda', profileData = {}) {
       if (name === '@/lib/development-lab') return { isLaboratoryHttpOrigin: origin => origin === 'http://192.168.0.6:55321' };
       if (name === '@/lib/public-band-data') return { safeBandLogo: value => value };
       if (name === '@/lib/details-dismiss') return load('src/lib/details-dismiss.ts');
+      if (name === '@/lib/publication-control') return { PUBLIC_IDENTITY_ENABLED: profileData.publicIdentity === true };
       throw Error('Unexpected dependency: ' + name);
     } });
     return mod.exports;
@@ -76,6 +77,33 @@ for (const variant of ['sidebar', 'bottom', 'expandable']) {
       assert.match(navigation.props.className, /fixed inset-x-0 bottom-0/);
       assert.match(navigation.props.className, /safe-area-inset-bottom/);
       assert.match(tree.find(node => node.type === 'ul').props.className, /grid-cols-4/);
+    }
+  });
+  test(`band ${variant} exposes the enabled public profile as an active destination`, () => {
+    const Navigation = fixture(undefined, { publicIdentity: true }).load('src/components/band-navigation.tsx').default;
+    const tree = nodes(Navigation({ bandId: 'band-a', activeSection: 'perfil-publico', variant }));
+    const links = tree.filter(node => node.props?.href);
+    assert.equal(links.length, 5);
+    const profile = links.find(node => node.props.href === '/bandas/band-a/perfil-publico');
+    assert.equal(profile?.props['aria-current'], 'page');
+    assert.equal(profile.props.children[1], 'Perfil público');
+    assert.ok(tree.filter(node => node.props?.['aria-disabled'] === 'true')
+      .every(node => !JSON.stringify(node.props.children).includes('Perfil público')));
+    if (variant === 'bottom') {
+      const bar = tree.find(node => node.type === 'ul');
+      assert.match(bar.props.className, /grid-cols-4/);
+      assert.deepEqual(nodes(bar).filter(node => node.props?.href).map(node => node.props.href), [
+        '/bandas/band-a', '/bandas/band-a/tarefas', '/bandas/band-a/agenda', '/bandas/band-a/membros',
+      ]);
+      const trigger = tree.find(node => node.type === 'button');
+      const panel = tree.find(node => node.props?.id === trigger.props['aria-controls']);
+      assert.ok(nodes(panel).includes(profile));
+      assert.equal(panel.props.inert, true);
+      trigger.props.onClick();
+      const expanded = nodes(Navigation({ bandId: 'band-a', activeSection: 'perfil-publico', variant }))
+        .find(node => node.props?.id === panel.props.id);
+      assert.equal(expanded.props.inert, false);
+      assert.equal(expanded.props['aria-hidden'], false);
     }
   });
 }
@@ -305,7 +333,7 @@ test('settings and account actions are grouped in both desktop sidebars', () => 
 
 test('appearance control is available only within personal and band settings routes', () => {
   const personalSettings = source('src/app/dashboard/[section]/page.tsx');
-  const bandSettings = source('src/app/bandas/[bandId]/perfil-publico/page.tsx');
+  const bandSettings = source('src/components/band-settings.tsx');
   assert.match(personalSettings, /section === "configuracoes"[\s\S]*ThemeSelector/);
   assert.match(bandSettings, /ThemeSelector/);
   for (const file of ['src/app/page.tsx', 'src/app/login/page.tsx', 'src/app/cadastro/page.tsx', 'src/app/descobrir/page.tsx', 'src/app/b/[slug]/layout.tsx', 'src/components/band-navigation.tsx', 'src/components/personal-workspace.tsx', 'src/components/welcome-onboarding.tsx']) {
