@@ -1,15 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import NavigationIcon, { type NavigationIconName } from "@/components/navigation-icon";
 
 const futureSections = ["Loja", "Eventos", "Ingressos", "Música", "Fotos"] as const;
 type FutureSection = (typeof futureSections)[number];
-type Menu = "add" | "Editar perfil" | "Links" | FutureSection;
+type Menu = "add" | "Links" | FutureSection;
 
 const sectionIcons = {
-  "Editar perfil": "Settings",
   Links: "Link",
   Loja: "Store",
   Eventos: "CalendarDays",
@@ -25,8 +23,7 @@ const cardActionStyle = `${cardLabelStyle} transition hover:bg-accent-soft activ
 const scrollMargin = "scroll-mb-[calc(8rem+env(safe-area-inset-bottom))] group-has-[[data-band-nav-expanded=true]]/band:scroll-mb-[calc(13rem+env(safe-area-inset-bottom))] md:scroll-mb-4 md:group-has-[[data-band-nav-expanded=true]]/band:scroll-mb-4";
 const panelStyle = `mb-2 rounded-lg bg-surface-muted p-1 ${scrollMargin}`;
 
-export default function BandPublicSections({ bandId, isAdmin, linksManager }: {
-  bandId: string;
+export default function BandPublicSections({ isAdmin, linksManager }: {
   isAdmin: boolean;
   linksManager: ReactNode;
 }) {
@@ -38,7 +35,6 @@ export default function BandPublicSections({ bandId, isAdmin, linksManager }: {
   const openPanel = useRef<HTMLDivElement>(null);
   const linksPanel = useRef<HTMLDivElement>(null);
   const available = futureSections.filter(section => !sections.includes(section));
-  const editProfileHref = `/bandas/${encodeURIComponent(bandId)}/perfil`;
   const linksManagerId = "band-section-links-manager";
 
   useEffect(() => {
@@ -92,12 +88,11 @@ export default function BandPublicSections({ bandId, isAdmin, linksManager }: {
       </div>}
       <p role="status" className="sr-only">{notice}</p>
       <ul className="space-y-3">
-        {(["Editar perfil", "Links", ...sections] as const).map((label) => {
-          const future = label !== "Editar perfil" && label !== "Links";
+        {(["Links", ...sections] as const).map((label) => {
+          const future = label !== "Links";
           const panelId = `band-section-${label.replace(" ", "-").toLowerCase()}`;
           const expanded = menu === label;
-          const subtitle = label === "Editar perfil" ? "Foto, nome e descrição"
-            : label === "Links" ? "Links públicos" : "Em breve";
+          const subtitle = future ? "Em breve" : "Links públicos";
           const cardContent = (
             <>
               <span className="shrink-0 rounded-xl bg-accent-soft p-2 text-brand">
@@ -112,9 +107,7 @@ export default function BandPublicSections({ bandId, isAdmin, linksManager }: {
           return (
             <li key={label} onKeyDown={event => closeOnEscape(event, label)}>
               <div className="flex min-w-0 items-center gap-1 rounded-2xl border border-nav-border bg-surface pr-2 shadow-app-card">
-                {label === "Editar perfil" && isAdmin ? (
-                  <Link href={editProfileHref} className={cardActionStyle}>{cardContent}</Link>
-                ) : label === "Links" ? (
+                {label === "Links" ? (
                   <button type="button" className={cardActionStyle} aria-expanded={linksOpen}
                     aria-controls={linksManagerId} onClick={toggleLinks}>{cardContent}</button>
                 ) : (
@@ -128,9 +121,6 @@ export default function BandPublicSections({ bandId, isAdmin, linksManager }: {
                 </div>
               </div>
               <div id={panelId} hidden={!expanded} data-no-pull-refresh ref={expanded ? openPanel : undefined} className={`mt-2 ${panelStyle}`}>
-                {label === "Editar perfil" && (isAdmin ? (
-                  <Link href={editProfileHref} className={actionStyle}>Editar foto, nome e descrição</Link>
-                ) : <p className="px-3 py-2 text-sm text-content-muted">Somente administradores podem editar o perfil.</p>)}
                 {label === "Links" && <button type="button" className={actionStyle}
                   aria-expanded={linksOpen} aria-controls={linksManagerId} onClick={toggleLinks}>
                   {linksOpen ? "Recolher links" : isAdmin ? "Gerenciar links" : "Ver links"}

@@ -3,7 +3,7 @@ import PublicationUnavailable from "@/components/publication-unavailable";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import PublicBandProfile from "@/components/public-band-profile";
-import { getPublicBandBySlug, getPublicBandLinks } from "@/lib/public-bands";
+import { getPublicBandBySlug, getPublishedBandProfile } from "@/lib/public-bands";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -36,8 +36,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function PublicBandPage({ params }: Props) {
   if (!PUBLIC_IDENTITY_ENABLED) return <PublicationUnavailable />;
   const { slug } = await params;
-  const band = await getPublicBandBySlug(slug);
-  if (!band) notFound();
-  const links = await getPublicBandLinks(band.slug);
-  return <PublicBandProfile band={band} links={links} />;
+  const profile = await getPublishedBandProfile(slug);
+  if (!profile) notFound();
+  return <PublicBandProfile {...profile} />;
 }

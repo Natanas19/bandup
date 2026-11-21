@@ -2,7 +2,7 @@
 
 import { PUBLIC_IDENTITY_ENABLED } from "@/lib/publication-control";
 import PublicationUnavailable from "@/components/publication-unavailable";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ComponentProps } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import BandNavigation from "@/components/band-navigation";
@@ -13,11 +13,81 @@ import BandPublicSections from "@/components/band-public-sections";
 import BandSettings from "@/components/band-settings";
 import NavigationIcon from "@/components/navigation-icon";
 import PublicBandProfile from "@/components/public-band-profile";
-import { toPublicBand, toPublicBandLinks } from "@/lib/public-band-data";
+import type { BandPublicLink } from "@/lib/band-public-links";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type PageState = "loading" | "unauthenticated" | "unavailable" | "error" | "ready";
-type Band = { name: string; slug: string | null; is_public: boolean; role: string; description: string | null; logo_url: string | null };
+type Band = { name: string; slug: string | null; is_public: boolean; role: string };
+type PublishedProfile = Omit<ComponentProps<typeof PublicBandProfile>, "preview">;
+
+const previewAction = "absolute top-1 z-20 inline-flex h-11 w-11 items-center justify-center rounded-lg text-brand";
+const previewIcon = "inline-flex h-7 w-7 items-center justify-center rounded-lg bg-surface p-1.5";
+
+function PublishedPreview({ publicPath, editHref, links }: {
+  publicPath: string | null;
+  editHref: string | null;
+  links: BandPublicLink[] | null;
+}) {
+  const [result, setResult] = useState<{ path: string; profile: PublishedProfile | null } | null>(null);
+
+  useEffect(() => {
+    const path = publicPath;
+    if (!path) return;
+    let controller: AbortController | undefined;
+
+    const refresh = () => {
+      controller?.abort();
+      const request = new AbortController();
+      controller = request;
+      void fetch(`${path}/preview`, { signal: request.signal, cache: "no-store" })
+        .then(async response => {
+          const profile: PublishedProfile | null = response.ok ? await response.json() : null;
+          if (!request.signal.aborted) setResult({ path, profile });
+        }).catch(() => {
+          if (!request.signal.aborted) setResult({ path, profile: null });
+        });
+    };
+
+    refresh();
+    window.addEventListener("focus", refresh);
+    return () => {
+      controller?.abort();
+      window.removeEventListener("focus", refresh);
+    };
+  }, [publicPath, links]);
+
+  const current = result?.path === publicPath ? result : null;
+  const profile = current?.profile;
+  return (
+    <div className="relative isolate rounded-xl border-t border-nav-border bg-surface focus-within:ring-2 focus-within:ring-focus">
+      {profile && publicPath ? (
+        <>
+          <a href={publicPath} target="_blank" rel="noopener noreferrer"
+            aria-label="Abrir prévia do perfil público (abre em nova aba)"
+            className="group/open absolute inset-0 rounded-xl focus-visible:outline-none">
+            <span className={`${previewAction} right-1`}>
+              <span className={`${previewIcon} group-focus-visible/open:ring-4 group-focus-visible/open:ring-focus`}>
+                <NavigationIcon name="ArrowUpRight" className="h-4 w-4" />
+              </span>
+            </span>
+          </a>
+          <div className="pointer-events-none relative z-10 overflow-hidden rounded-xl [&_a]:pointer-events-auto">
+            <PublicBandProfile {...profile} preview />
+          </div>
+        </>
+      ) : <p role="status" className="px-12 py-6 text-center text-sm text-content-muted">
+        {!publicPath ? "A prévia aparece quando o perfil está publicado."
+          : current ? "A prévia está indisponível." : "Carregando prévia…"}
+      </p>}
+      {editHref && <Link href={editHref} aria-label="Editar perfil"
+        className={`${previewAction} group/edit left-1 focus-visible:outline-none`}>
+        <span className={`${previewIcon} group-hover/edit:bg-accent-soft group-focus-visible/edit:ring-4 group-focus-visible/edit:ring-focus`}>
+          <NavigationIcon name="Pencil" className="h-4 w-4" />
+        </span>
+      </Link>}
+    </div>
+  );
+}
 
 export default function BandProfilePage() {
   const { bandId } = useParams<{ bandId: string }>();
@@ -51,7 +121,7 @@ function EnabledBandProfilePage() {
         if (membershipError) { setPageState("error"); return; }
         if (!membership) { setPageState("unavailable"); return; }
         const { data, error } = await supabase.from("bands")
-          .select("name, slug, is_public, description, logo_url").eq("id", bandId).maybeSingle();
+          .select("name, slug, is_public").eq("id", bandId).maybeSingle();
         if (!isMounted) return;
         if (error) { setPageState("error"); return; }
         if (!data) { setPageState("unavailable"); return; }
@@ -96,11 +166,6 @@ function EnabledBandProfilePage() {
   }
 
   const isAdmin = band.role === "admin";
-  const previewSlug = band.slug ?? "";
-  const profile = band.name.trim()
-    ? toPublicBand({ name: band.name, slug: previewSlug, description: band.description ?? null, logo_url: band.logo_url ?? null },
-      previewSlug, process.env.NEXT_PUBLIC_SUPABASE_URL ?? "")
-    : null;
 
   return (
     <main className="flex min-w-0 flex-1 justify-center px-4 pb-6 pt-5 sm:px-6 sm:pb-10 sm:pt-8 md:pt-10">
@@ -110,32 +175,20 @@ function EnabledBandProfilePage() {
         <BandPublicLinks bandId={bandId} isAdmin={isAdmin} renderEditor={(links, manager) => (
           <>
             <BandPublicProfileSettings key={bandId} bandId={bandId} initialSlug={band.slug}
-              initiallyPublic={band.is_public} isAdmin={isAdmin} renderPreview={publicPath => (
+              initiallyPublic={band.is_public} isAdmin={isAdmin}
+              onPublicationChange={publication => setBand(current => current && { ...current, ...publication })}
+              renderPreview={publicPath => (
                 <details className="group mt-2 border-b border-nav-border" open={previewOpen}
                   onToggle={event => setPreviewOpen(event.currentTarget.open)}>
                   <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-2 py-2 text-sm font-semibold text-content hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus [&::-webkit-details-marker]:hidden">
                     Prévia da página pública
                     <span aria-hidden="true" className="mr-1 h-2.5 w-2.5 shrink-0 rotate-45 border-b-2 border-r-2 border-brand transition-transform group-open:rotate-[225deg] motion-reduce:transition-none" />
                   </summary>
-                  {previewOpen && profile && (
-                    <div className="relative isolate rounded-xl border-t border-nav-border bg-surface focus-within:ring-2 focus-within:ring-focus">
-                      {publicPath && <a href={publicPath} target="_blank" rel="noopener noreferrer"
-                        aria-label="Abrir prévia do perfil público (abre em nova aba)"
-                        className="absolute inset-0 rounded-xl focus-visible:outline-none" />}
-                      {/* Let the preview's own links receive clicks above the background link. */}
-                      <div className={publicPath ? "pointer-events-none relative z-10 overflow-hidden rounded-xl [&_a]:pointer-events-auto" : "overflow-hidden rounded-xl"}>
-                        {publicPath && <span className="absolute right-3 top-3 z-10 rounded-lg bg-surface p-1.5 text-brand">
-                          <NavigationIcon name="ArrowUpRight" className="h-4 w-4" />
-                        </span>}
-                        <PublicBandProfile band={profile} preview
-                          links={toPublicBandLinks(links?.map(link => ({ ...link, slug: previewSlug })), previewSlug)} />
-                      </div>
-                    </div>
-                  )}
-                  {previewOpen && !profile && <p className="px-2 pb-3 text-sm text-content-muted">A prévia está indisponível.</p>}
+                  {previewOpen && <PublishedPreview key={publicPath} publicPath={publicPath} links={links}
+                    editHref={isAdmin ? `/bandas/${encodeURIComponent(bandId)}/perfil` : null} />}
                 </details>
               )} />
-            <BandPublicSections bandId={bandId} isAdmin={isAdmin} linksManager={manager} />
+            <BandPublicSections isAdmin={isAdmin} linksManager={manager} />
           </>
         )} />
       </div>

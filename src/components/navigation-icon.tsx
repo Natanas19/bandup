@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 // Same lightweight, currentColor SVG approach as SocialPlatformIcon.
 const icons = {
   ArrowUpRight: <path d="M7 17 17 7M7 7h10v10" />,
+  Pencil: <><path d="m15 6 3 3M4 20l4.5-1 11-11a2.1 2.1 0 0 0-3-3l-11 11L4 20Z" /></>,
   Copy: <><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></>,
   Eye: <><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" /><circle cx="12" cy="12" r="2.5" /></>,
   EyeOff: <><path d="m3 3 18 18M10.6 6.1A10.9 10.9 0 0 1 12 6c6.5 0 10 6 10 6a15 15 0 0 1-2.9 3.3M6.2 7.8A15.2 15.2 0 0 0 2 12s3.5 6 10 6a10 10 0 0 0 4.1-.9" /><path d="M10.2 10.2a2.5 2.5 0 0 0 3.6 3.6" /></>,

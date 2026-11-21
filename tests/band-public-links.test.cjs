@@ -242,27 +242,22 @@ test("section rows expose independent primary actions and menus with temporary o
   const { load, calls, renderWithHooks } = fixture();
   const Sections = load("src/components/band-public-sections.tsx").default;
   const linksManager = React.createElement("div", null, "Existing manager");
-  const render = (isAdmin = true) => renderWithHooks(() => Sections({ bandId: "demo", isAdmin, linksManager }));
+  const render = () => renderWithHooks(() => Sections({ isAdmin: true, linksManager }));
   const trigger = (label) => nodes(render()).find(node => node.props["aria-label"] === label);
   const panel = (id) => nodes(render()).find(node => node.props.id === id);
   const action = (id) => nodes(panel(id)).find(node => node.type === "button");
-  const rowHeader = (label, isAdmin = true) => nodes(render(isAdmin)).find(node =>
+  const rowHeader = (label) => nodes(render()).find(node =>
     node.type === "li" && nodes(node.props.children[0]).some(child => child.props["aria-label"] === `Ações de ${label}`))
     .props.children[0];
 
-  const [editShortcut, editMenu] = rowHeader("Editar perfil").props.children;
-  assert.equal(editShortcut.type, "a");
-  assert.equal(editShortcut.props.href, "/bandas/demo/perfil");
-  assert.match(text(editShortcut), /Editar perfilFoto, nome e descrição/);
-  assert.ok(nodes(editMenu).some(node => node.type === "button"));
-  assert.equal(rowHeader("Editar perfil", false).props.children[0].type, "span");
-  for (const label of ["Editar perfil", "Links", "Loja", "Eventos", "Ingressos", "Música", "Fotos"]) {
+  assert.doesNotMatch(text(render()), /Editar perfil/);
+  for (const label of ["Links", "Loja", "Eventos", "Ingressos", "Música", "Fotos"]) {
     const header = rowHeader(label);
     const [primary, menu] = header.props.children;
     assert.match(header.props.className, /rounded-2xl border border-nav-border bg-surface/);
     assert.match(primary.props.children.props.children[0].props.className, /rounded-xl bg-accent-soft p-2/);
     assert.equal(nodes(menu).find(node => node.type === "button").props.children.props.name, "Ellipsis");
-    if (label !== "Editar perfil" && label !== "Links") {
+    if (label !== "Links") {
       assert.equal(primary.type, "span");
       assert.match(text(primary), /Em breve/);
     }
@@ -284,16 +279,14 @@ test("section rows expose independent primary actions and menus with temporary o
   action(add.props["aria-controls"]).props.onClick();
   assert.ok(trigger("Ações de Loja"));
 
-  const edit = trigger("Ações de Editar perfil");
-  edit.props.onClick();
-  assert.equal(nodes(panel(edit.props["aria-controls"])).find(node => node.props.href).props.href, "/bandas/demo/perfil");
-  let focused = false;
-  const editRow = nodes(render()).find(node => node.type === "li" && nodes(node).some(child => child.props["aria-controls"] === edit.props["aria-controls"]));
-  editRow.props.onKeyDown({ key: "Escape", preventDefault() {}, currentTarget: { querySelector: () => ({ focus: () => { focused = true; } }) } });
-  assert.equal(focused, true);
-  assert.equal(panel(edit.props["aria-controls"]).props.hidden, true);
-
   const links = trigger("Ações de Links");
+  links.props.onClick();
+  let focused = false;
+  const linksRow = nodes(render()).find(node => node.type === "li" && nodes(node).some(child => child.props["aria-controls"] === links.props["aria-controls"]));
+  linksRow.props.onKeyDown({ key: "Escape", preventDefault() {}, currentTarget: { querySelector: () => ({ focus: () => { focused = true; } }) } });
+  assert.equal(focused, true);
+  assert.equal(panel(links.props["aria-controls"]).props.hidden, true);
+
   const linksShortcut = () => rowHeader("Links").props.children[0];
   assert.equal(linksShortcut().type, "button");
   assert.equal(linksShortcut().props["aria-expanded"], false);

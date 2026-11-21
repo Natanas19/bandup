@@ -34,7 +34,7 @@ function modules(env={},overrides={},browser={}) {
     }
     const source=fs.readFileSync(path.join(root,file),'utf8');
     const code=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.ReactJSX}}).outputText;
-    vm.runInNewContext(code,{module:mod,exports:mod.exports,require:localRequire,process:{env},URL,Buffer,AbortController,
+    vm.runInNewContext(code,{module:mod,exports:mod.exports,require:localRequire,process:{env},URL,Buffer,AbortController,Response,
       setTimeout,clearTimeout,fetch:unexpected,...browser},{filename:file});
     return mod.exports;
   }
@@ -116,7 +116,7 @@ test('enabled public route queries only identity and returns not found for a pri
   ]);
 });
 
-function publicLinksPage(result) {
+function publicLinksPage(result, events = {data: [], error: null}) {
   const calls = [];
   const environment = {
     NEXT_PUBLIC_BANDUP_PUBLIC_IDENTITY_ENABLED: 'true',
@@ -130,7 +130,7 @@ function publicLinksPage(result) {
       assert.equal(options.auth.persistSession, false);
       return {from(name) {
         calls.push(['from', name]);
-        assert.ok(['public_band_profiles', 'public_band_links'].includes(name));
+        assert.ok(['public_band_profiles', 'public_band_links', 'public_band_events'].includes(name));
         return {
           select(columns) { calls.push(['select', columns]); return this; },
           eq(column, value) { calls.push(['eq', column, value]); return this; },
@@ -142,8 +142,7 @@ function publicLinksPage(result) {
             return {data: {slug: 'demo', name: 'Demo', description: 'Descrição pública', logo_url: null}, error: null};
           },
           then(resolve, reject) {
-            assert.equal(name, 'public_band_links');
-            return Promise.resolve(result).then(resolve, reject);
+            return Promise.resolve(name === 'public_band_events' ? events : result).then(resolve, reject);
           },
         };
       }};
@@ -151,7 +150,7 @@ function publicLinksPage(result) {
   });
   const page = load('src/app/b/[slug]/page.tsx');
   const props = {params: Promise.resolve({slug: 'demo'})};
-  return {calls, page, props};
+  return {calls, page, props, load};
 }
 
 test('published profile renders ordered platform links with safe external anchors and label fallbacks', async () => {
@@ -169,14 +168,51 @@ test('published profile renders ordered platform links with safe external anchor
   assert.equal(metadata.title, 'Demo | BandUp');
   assert.ok(!calls.some(call => call.includes('public_band_links')));
   const html = renderToStaticMarkup(await page.default(props));
-  assert.match(html, /Links da banda/);
+  assert.match(html, /<h1[^>]*>Demo<\/h1>[\s\S]*Descrição pública[\s\S]*>Explore<\/h2>[\s\S]*>Redes e plataformas<\/h2>/);
+  const explore = html.match(/<section aria-labelledby="public-band-explore-heading"[^>]*>[\s\S]*?<\/section>/)?.[0];
+  assert.ok(explore);
+  assert.match(explore, /grid grid-cols-2/);
+  assert.match(explore, /Eventos[\s\S]*Ingressos[\s\S]*Loja[\s\S]*Músicas[\s\S]*Fotos/);
+  assert.equal((explore.match(/Em breve/g) ?? []).length, 4);
+  assert.match(explore, /Sem eventos públicos/);
+  assert.doesNotMatch(explore, /<(a|button)\b|tabindex=/i);
   assert.match(html, /Ouça a banda[\s\S]*Spotify[\s\S]*Instagram[\s\S]*YouTube[\s\S]*Vídeos da banda[\s\S]*TikTok[\s\S]*example\.com/);
   assert.equal((html.match(/<a href="https:\/\/[^"]+" target="_blank" rel="noopener noreferrer"/g) ?? []).length, 5);
   assert.doesNotMatch(html, /another\.example\.com|unsafe\.example\.com|Outro perfil/);
-  assert.deepEqual(calls.slice(-5), [
+  const linksQuery = calls.findIndex(([action, table]) => action === 'from' && table === 'public_band_links');
+  assert.deepEqual(calls.slice(linksQuery, linksQuery + 5), [
     ['from', 'public_band_links'], ['select', 'slug,platform,label,url,position'],
     ['eq', 'slug', 'demo'], ['order', 'position'], ['limit', 8],
   ]);
+});
+
+test('public events use the same narrow ordered view for the page and preview endpoint', async () => {
+  const start = '2031-02-01T21:00:00Z', end = '2031-02-01T23:00:00Z';
+  const rows = [
+    {slug: 'demo', id: 'b', title: 'Show de fevereiro', start_at: start, end_at: end, location: 'Local interno'},
+    {slug: 'demo', id: 'a', title: 'Show de janeiro', start_at: '2031-01-01T21:00:00Z', end_at: null},
+    {slug: 'other', id: 'c', title: 'Outra banda', start_at: start, end_at: null},
+    {slug: 'demo', id: 'invalid', title: 'Data inválida', start_at: 'invalid', end_at: null},
+  ];
+  const {calls, page, props, load} = publicLinksPage({data: []}, {data: rows});
+  const profile = await page.default(props);
+  const html = renderToStaticMarkup(profile);
+  assert.match(html, /href="#eventos"/);
+  assert.match(html, /Show de janeiro[\s\S]*Show de fevereiro/);
+  assert.match(html, /<time datetime="2031-02-01T23:00:00Z"/i);
+  assert.doesNotMatch(html, /Local interno|Outra banda|Data inválida/);
+  assert.deepEqual(calls.slice(-5), [
+    ['from', 'public_band_events'], ['select', 'slug,id,title,start_at,end_at'],
+    ['eq', 'slug', 'demo'], ['order', 'start_at'], ['order', 'id'],
+  ]);
+  const preview = load('src/app/b/[slug]/preview/route.ts');
+  const previewResponse = await preview.GET(undefined, props);
+  assert.equal(previewResponse.headers.get('cache-control'), 'no-store');
+  assert.deepEqual(await previewResponse.json(), JSON.parse(JSON.stringify(profile.props)));
+  const missing = publicLinksPage({data: []}, {error: {code: '42P01'}});
+  const unavailable = renderToStaticMarkup(await missing.page.default(missing.props));
+  assert.match(unavailable, /Sem eventos públicos/);
+  assert.doesNotMatch(unavailable, /id="eventos"/);
 });
 
 test('a fresh server render reads updated public profile links', async () => {
@@ -198,72 +234,114 @@ test('empty or failed public link requests hide the section and preserve the pro
     const {page, props} = publicLinksPage(result);
     const html = renderToStaticMarkup(await page.default(props));
     assert.match(html, /Descrição pública/);
-    assert.doesNotMatch(html, /Links da banda|public-band-links-heading|private backend detail/);
+    assert.match(html, />Explore<\/h2>/);
+    assert.doesNotMatch(html, /Redes e plataformas|public-band-links-heading|private backend detail/);
   }
 });
 
-test('private profile preview starts open and can close and reopen with the shared public profile', () => {
+test('private profile preview starts open and can close and reopen with the shared public profile', async () => {
   const logo = 'https://example.invalid/storage/v1/object/public/band-logos/demo.webp';
-  const state = ['ready', {name: 'Minha banda', slug: null, is_public: false, role: 'admin',
-    description: 'Biografia da banda', logo_url: logo}];
+  const state = ['ready', {name: 'Minha banda', slug: 'demo', is_public: false, role: 'admin'}];
+  let snapshot = {
+    band: {name: 'Minha banda', slug: 'demo', description: 'Biografia da banda', image: {src: logo, alt: 'Foto'}},
+    events: [{id: 'event', title: 'Evento público na prévia', start_at: '2031-02-01T21:00:00Z', end_at: null}],
+    links: [{platform: 'custom', position: 1, label: 'Site', url: 'https://example.com'}],
+  };
   let cursor = 0;
+  const effects = [], requests = [];
+  let focus;
   const {load} = modules({
     NEXT_PUBLIC_BANDUP_PUBLIC_IDENTITY_ENABLED: 'true',
     NEXT_PUBLIC_SUPABASE_URL: 'https://example.invalid',
   }, {
     react: {
       ...React,
-      useEffect() {},
+      useEffect(effect) { effects.push(effect); },
       useState(initial) {
         const index = cursor++;
-        return [index < state.length ? state[index] : initial, next => { state[index] = next; }];
+        return [index in state ? state[index] : initial, next => { state[index] = next; }];
       },
+    },
+  }, {
+    window: {
+      addEventListener(name, listener) { if (name === 'focus') focus = listener; },
+      removeEventListener(name, listener) { if (name === 'focus' && focus === listener) focus = undefined; },
+    },
+    async fetch(url) {
+      requests.push(url);
+      return Response.json(snapshot, {status: snapshot ? 200 : 404});
     },
   });
   const Page = load('src/app/bandas/[bandId]/perfil-publico/page.tsx').default;
   const PublicBandLinks = load('src/components/band-public-links.tsx').default;
   const PublicBandProfile = load('src/components/public-band-profile.tsx').default;
-  function renderPreview() {
+  function renderPreview(publicPath) {
     cursor = 0;
+    effects.length = 0;
     const enabled = Page();
     const tree = enabled.type(enabled.props);
     const manager = tree.props.children.props.children.find(element => element.type === PublicBandLinks);
-    return manager.props.renderEditor([
-      {id: 'b', platform: 'custom', label: 'Site', url: 'https://example.com', position: 5},
-      {id: 'a', platform: 'spotify', label: null, url: 'https://open.spotify.com/artist/demo', position: 1},
-    ], null).props.children[0].props.renderPreview;
+    const details = manager.props.renderEditor([
+      {id: 'private', platform: 'custom', label: 'Link do editor', url: 'https://private.example.com', position: 1},
+    ], null).props.children[0].props.renderPreview(publicPath);
+    const preview = details.props.children[1];
+    return {details, container: preview ? preview.type(preview.props) : null};
   }
-  const expanded = renderPreview()(null);
-  assert.equal(expanded.type, 'details');
-  assert.equal(expanded.props.open, true);
-  const [privateLink, visual] = expanded.props.children[1].props.children;
-  assert.equal(privateLink, null);
-  const profile = visual.props.children[1];
-  assert.equal(profile.type, PublicBandProfile);
-  assert.equal(profile.props.preview, true);
-  assert.equal(profile.props.band.image.src, logo);
-  const html = renderToStaticMarkup(expanded);
-  assert.match(html, /Minha banda[\s\S]*Biografia da banda[\s\S]*Spotify[\s\S]*Site/);
-  assert.doesNotMatch(html, /<main|<h1/);
-  const publicPreview = renderPreview()('/b/demo');
-  assert.equal(publicPreview.props.children[0].type, 'summary');
-  const [previewLink, publicVisual] = publicPreview.props.children[1].props.children;
+  const priv = renderPreview(null);
+  assert.equal(priv.details.props.open, true);
+  assert.match(renderToStaticMarkup(priv.container), /A prévia aparece quando o perfil está publicado/);
+  assert.doesNotMatch(renderToStaticMarkup(priv.container), /Minha banda|Link do editor|href="\/b\/demo"/);
+  effects.at(-1)();
+  assert.deepEqual(requests, []);
+  renderPreview('/b/demo');
+  const cancelFetch = effects.at(-1)();
+  await new Promise(setImmediate);
+  assert.deepEqual(requests, ['/b/demo/preview']);
+  const publicPreview = renderPreview('/b/demo');
+  assert.equal(publicPreview.details.props.children[0].type, 'summary');
+  const [publicContent, editLink] = publicPreview.container.props.children;
+  const [previewLink, publicVisual] = publicContent.props.children;
   assert.equal(previewLink.props.href, '/b/demo');
   assert.equal(previewLink.props.target, '_blank');
   assert.equal(previewLink.props.rel, 'noopener noreferrer');
+  assert.equal(editLink.props.href, '/bandas/demo-band/perfil');
+  assert.equal(editLink.props['aria-label'], 'Editar perfil');
+  assert.match(editLink.props.className, /h-11 w-11.*left-1/);
+  assert.match(previewLink.props.children.props.className, /h-11 w-11.*right-1/);
+  const pencil = editLink.props.children, arrow = previewLink.props.children.props.children;
+  for (const icon of [pencil, arrow]) {
+    assert.match(icon.props.className, /h-7 w-7.*rounded-lg.*p-1.5.*focus-visible/);
+    assert.equal(icon.props.children.props.className, 'h-4 w-4');
+  }
+  assert.equal(pencil.props.children.props.name, 'Pencil');
+  assert.equal(arrow.props.children.props.name, 'ArrowUpRight');
   assert.match(publicVisual.props.className, /\[&_a\]:pointer-events-auto/);
-  assert.match(renderToStaticMarkup(publicPreview), /href="https:\/\/example\.com"/);
-  expanded.props.onToggle({currentTarget: {open: false}});
-  const collapsed = renderPreview()('/b/demo');
-  assert.equal(collapsed.props.open, false);
-  assert.doesNotMatch(renderToStaticMarkup(collapsed), /Biografia da banda|Links da banda|href="\/b\/demo"/);
-  collapsed.props.onToggle({currentTarget: {open: true}});
-  const reopened = renderPreview()(null);
-  assert.equal(reopened.props.open, true);
-  assert.equal(renderToStaticMarkup(reopened), html);
+  assert.equal(publicVisual.props.children.type, PublicBandProfile);
+  const html = renderToStaticMarkup(publicVisual.props.children);
+  const full = renderToStaticMarkup(React.createElement(PublicBandProfile, snapshot));
+  assert.equal(html.replace(/^<div/, '<main').replace(/<\/div>$/, '</main>')
+    .replace(/<(\/?)h2\b/g, '<$1h1').replace(/<(\/?)h3\b/g, '<$1h2'), full);
+  assert.match(html, /Minha banda[\s\S]*Biografia da banda[\s\S]*Explore[\s\S]*Evento público na prévia[\s\S]*Redes e plataformas[\s\S]*Site/);
+  assert.match(html, /grid-cols-2[\s\S]*sm:grid-cols-2/);
+  assert.doesNotMatch(html, /Link do editor|private\.example\.com/);
+  snapshot = {...snapshot, events: []};
+  focus();
+  await new Promise(setImmediate);
+  assert.doesNotMatch(renderToStaticMarkup(renderPreview('/b/demo').container), /Evento público na prévia/);
+  snapshot = null;
+  focus();
+  await new Promise(setImmediate);
+  assert.doesNotMatch(renderToStaticMarkup(renderPreview('/b/demo').container), /Minha banda|href="\/b\/demo"/);
+  cancelFetch();
+  priv.details.props.onToggle({currentTarget: {open: false}});
+  const collapsed = renderPreview('/b/demo');
+  assert.equal(collapsed.details.props.open, false);
+  assert.equal(collapsed.container, null);
+  collapsed.details.props.onToggle({currentTarget: {open: true}});
+  assert.equal(renderPreview('/b/demo').details.props.open, true);
 });
 
-test('public address starts hidden and keeps copy, share and view available', async () => {
+test('public address starts hidden and keeps copy and share available', async () => {
   const origin = 'https://example.invalid';
   const url = origin + '/b/demo';
   const calls = [];
@@ -328,7 +406,7 @@ test('public address starts hidden and keeps copy, share and view available', as
   assert.match(renderToStaticMarkup(tree), /data-preview-destination="\/b\/demo"/);
   assert.match(renderToStaticMarkup(tree), /Endereço oculto/);
   assert.doesNotMatch(renderToStaticMarkup(tree), /https:\/\/example\.invalid/);
-  assert.equal(byLabel(tree, 'Visualizar perfil (abre em nova aba)').props.href, '/b/demo');
+  assert.equal(byLabel(tree, 'Visualizar perfil (abre em nova aba)'), undefined);
   byLabel(tree, 'Copiar endereço').props.onClick();
   await settle();
   byLabel(render(), 'Compartilhar').props.onClick();

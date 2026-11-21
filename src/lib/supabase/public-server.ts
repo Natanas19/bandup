@@ -81,3 +81,10 @@ export async function readPublicBandLinkRows(slug: string): Promise<unknown> {
     .order("position").limit(PUBLIC_LINK_LIMIT).abortSignal(signal));
   return data;
 }
+
+export async function readPublicBandEventRows(slug: string): Promise<unknown> {
+  const { data } = await readPublic((client, signal) => client.from("public_band_events")
+    .select("slug,id,title,start_at,end_at").eq("slug", slug)
+    .order("start_at").order("id").abortSignal(signal));
+  return data;
+}

@@ -783,14 +783,15 @@ test("profile management exists only in the dedicated route with the original ad
     assert.equal(html.includes('role="switch"'), admin);
     assert.match(html, /id="public-profile-url"/);
     assert.doesNotMatch(html, /band-appearance-title|Conteúdo da página|As mudanças nas seções/);
-    assert.match(html, /<h1[^>]*>Perfil Público<\/h1>[\s\S]*<details[^>]* open=""[^>]*>[\s\S]*Prévia da página pública[\s\S]*id="public-profile-url"[\s\S]*Endereço oculto[\s\S]*aria-label="Seções do perfil público"[\s\S]*Ações de Editar perfil[\s\S]*Ações de Links[\s\S]*Ações de Loja[\s\S]*Ações de Eventos[\s\S]*Ações de Ingressos[\s\S]*Ações de Música[\s\S]*Ações de Fotos/);
+    assert.match(html, /<h1[^>]*>Perfil Público<\/h1>[\s\S]*<details[^>]* open=""[^>]*>[\s\S]*Prévia da página pública[\s\S]*id="public-profile-url"[\s\S]*Endereço oculto[\s\S]*aria-label="Seções do perfil público"[\s\S]*Ações de Links[\s\S]*Ações de Loja[\s\S]*Ações de Eventos[\s\S]*Ações de Ingressos[\s\S]*Ações de Música[\s\S]*Ações de Fotos/);
     assert.doesNotMatch(html, /band-public-upcoming-title|public-band-links-heading/);
-    assert.match(html, /<h2[^>]*>Band<\/h2>[\s\S]*Descrição real da banda/);
-    assert.match(html, /aria-label="Visualizar perfil \(abre em nova aba\)" title="Visualizar perfil"/);
+    assert.match(html, /Carregando prévia/);
+    assert.doesNotMatch(html, /Descrição real da banda/);
+    assert.doesNotMatch(html, /Visualizar perfil|Ações de Editar perfil/);
     assert.match(html, /aria-label="Copiar endereço" title="Copiar endereço"/);
     assert.match(html, /aria-label="Compartilhar" title="Compartilhar"/);
     assert.equal(html.includes('href="/bandas/theme-band/perfil"'), admin);
-    assert.equal(html.includes("Editar foto, nome e descrição"), admin);
+    assert.equal(html.includes('aria-label="Editar perfil"'), admin);
     assert.equal(html.includes('aria-label="Adicionar seção"'), admin);
     const links = renderWorkspace("src/app/bandas/[bandId]/links/page.tsx", ["ready", "Band", "band", true, false, null, "", "", admin, [], false, false, null, "", "", "", "instagram", "", ""]);
     assert.equal(links.includes('id="public-profile-heading"'), false);
@@ -800,7 +801,7 @@ test("profile management exists only in the dedicated route with the original ad
     assert.match(html, />Privado<\/span>/);
     assert.doesNotMatch(html, /aria-label="Compartilhar"|href="\/b\/band"/);
     assert.equal(html.includes('id="public-profile-url"'), role === "admin");
-    if (role === "admin") assert.match(html, /<button[^>]* disabled=""[^>]* aria-label="Visualizar perfil"/);
+    assert.doesNotMatch(html, /Visualizar perfil/);
   }
 });
 

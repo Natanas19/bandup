@@ -158,14 +158,6 @@ function EnabledBandPublicProfileSettings({ bandId, initialSlug, initiallyPublic
               aria-label="Compartilhar" title="Compartilhar" className={iconButtonStyles}>
               <NavigationIcon name="Share" className="h-4 w-4" />
             </button>}
-            {isPublic && !saving ? (
-              <a href={path} target="_blank" rel="noopener noreferrer"
-                aria-label="Visualizar perfil (abre em nova aba)" title="Visualizar perfil" className={iconButtonStyles}>
-                <NavigationIcon name="ArrowUpRight" className="h-4 w-4" />
-              </a>
-            ) : <button type="button" disabled aria-label="Visualizar perfil" title="Visualizar perfil" className={iconButtonStyles}>
-              <NavigationIcon name="ArrowUpRight" className="h-4 w-4" />
-            </button>}
           </div>
           <p role="status" aria-live="polite" className="mt-2 text-sm text-brand empty:sr-only">{copyMessage}</p>
           {copyError && <p role="alert" className="mt-2 text-sm text-danger">{copyError}</p>}

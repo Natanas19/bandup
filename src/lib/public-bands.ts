@@ -3,7 +3,8 @@ import { PUBLIC_IDENTITY_ENABLED } from "@/lib/publication-control";
 
 import { cache } from "react";
 import { isValidPublicSlug, toPublicBand, toPublicBandLinks } from "@/lib/public-band-data";
-import { readPublicBandLinkRows, readPublicBandRow } from "@/lib/supabase/public-server";
+import { readPublicBandEventRows, readPublicBandLinkRows, readPublicBandRow } from "@/lib/supabase/public-server";
+import { toPublicBandEvents } from "@/lib/public-band-events";
 
 export type { PublicBand } from "@/lib/public-band-data";
 
@@ -23,4 +24,20 @@ export async function getPublicBandLinks(slug: string) {
     // Links are optional. Keep the published profile available if the view fails.
     return [];
   }
+}
+
+export async function getPublicBandEvents(slug: string) {
+  if (!PUBLIC_IDENTITY_ENABLED || !isValidPublicSlug(slug)) return [];
+  try {
+    return toPublicBandEvents(await readPublicBandEventRows(slug), slug);
+  } catch {
+    return [];
+  }
+}
+
+export async function getPublishedBandProfile(slug: string) {
+  const band = await getPublicBandBySlug(slug);
+  if (!band) return null;
+  const [links, events] = await Promise.all([getPublicBandLinks(band.slug), getPublicBandEvents(band.slug)]);
+  return { band, links, events };
 }
