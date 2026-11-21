@@ -3,7 +3,7 @@ import PublicationUnavailable from "@/components/publication-unavailable";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import PublicBandProfile from "@/components/public-band-profile";
-import { getPublicBandBySlug } from "@/lib/public-bands";
+import { getPublicBandBySlug, getPublicBandLinks } from "@/lib/public-bands";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -38,5 +38,6 @@ export default async function PublicBandPage({ params }: Props) {
   const { slug } = await params;
   const band = await getPublicBandBySlug(slug);
   if (!band) notFound();
-  return <PublicBandProfile band={band} />;
+  const links = await getPublicBandLinks(band.slug);
+  return <PublicBandProfile band={band} links={links} />;
 }

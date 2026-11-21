@@ -1,7 +1,8 @@
 import "server-only";
 import { requirePublicIdentityEnabled } from "@/lib/publication-control";
 
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { PUBLIC_LINK_LIMIT } from "@/lib/public-link-url";
 import { isLaboratoryHttpOrigin } from "../development-lab";
 
 const unavailable = () => new Error("Não foi possível carregar a página pública.");
@@ -42,10 +43,7 @@ function publicConfiguration() {
   }
 }
 
-export async function readPublicBandRow(slug: string): Promise<{
-  data: unknown;
-  imageOrigin: string;
-}> {
+async function readPublic<T>(query: (client: SupabaseClient, signal: AbortSignal) => PromiseLike<{ data: T; error: unknown }>) {
   requirePublicIdentityEnabled();
   const { origin, internalOrigin, key } = publicConfiguration();
   const client = createClient(internalOrigin, key, {
@@ -61,12 +59,7 @@ export async function readPublicBandRow(slug: string): Promise<{
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
   try {
-    const { data, error } = await client
-      .from("public_band_profiles")
-      .select("name,slug,description,logo_url")
-      .eq("slug", slug)
-      .abortSignal(controller.signal)
-      .maybeSingle();
+    const { data, error } = await query(client, controller.signal);
     if (error) throw unavailable();
     return { data, imageOrigin: origin };
   } catch {
@@ -75,4 +68,16 @@ export async function readPublicBandRow(slug: string): Promise<{
   } finally {
     clearTimeout(timer);
   }
+}
+
+export async function readPublicBandRow(slug: string): Promise<{ data: unknown; imageOrigin: string }> {
+  return readPublic((client, signal) => client.from("public_band_profiles")
+    .select("name,slug,description,logo_url").eq("slug", slug).abortSignal(signal).maybeSingle());
+}
+
+export async function readPublicBandLinkRows(slug: string): Promise<unknown> {
+  const { data } = await readPublic((client, signal) => client.from("public_band_links")
+    .select("slug,platform,label,url,position").eq("slug", slug)
+    .order("position").limit(PUBLIC_LINK_LIMIT).abortSignal(signal));
+  return data;
 }

@@ -7,17 +7,21 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import BandNavigation from "@/components/band-navigation";
 import { BandWorkspaceInfo } from "@/components/band-workspace";
+import BandPublicLinks from "@/components/band-public-links";
 import BandPublicProfileSettings from "@/components/band-public-profile-settings";
+import BandPublicSections from "@/components/band-public-sections";
 import BandSettings from "@/components/band-settings";
+import NavigationIcon from "@/components/navigation-icon";
+import PublicBandProfile from "@/components/public-band-profile";
+import { toPublicBand, toPublicBandLinks } from "@/lib/public-band-data";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type PageState = "loading" | "unauthenticated" | "unavailable" | "error" | "ready";
-type Band = { name: string; slug: string | null; is_public: boolean; role: string };
-const upcomingSections = ["Loja", "Ingressos", "Músicas", "Galeria"];
+type Band = { name: string; slug: string | null; is_public: boolean; role: string; description: string | null; logo_url: string | null };
 
 export default function BandProfilePage() {
   const { bandId } = useParams<{ bandId: string }>();
-  if (PUBLIC_IDENTITY_ENABLED) return <EnabledBandProfilePage />;
+  if (PUBLIC_IDENTITY_ENABLED) return <EnabledBandProfilePage key={bandId} />;
   return <BandSettings bandId={bandId} activeSection="perfil-publico">
     <PublicationUnavailable />
   </BandSettings>;
@@ -27,6 +31,7 @@ function EnabledBandProfilePage() {
   const { bandId } = useParams<{ bandId: string }>();
   const [pageState, setPageState] = useState<PageState>("loading");
   const [band, setBand] = useState<Band | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
@@ -46,7 +51,7 @@ function EnabledBandProfilePage() {
         if (membershipError) { setPageState("error"); return; }
         if (!membership) { setPageState("unavailable"); return; }
         const { data, error } = await supabase.from("bands")
-          .select("name, slug, is_public").eq("id", bandId).maybeSingle();
+          .select("name, slug, is_public, description, logo_url").eq("id", bandId).maybeSingle();
         if (!isMounted) return;
         if (error) { setPageState("error"); return; }
         if (!data) { setPageState("unavailable"); return; }
@@ -90,26 +95,49 @@ function EnabledBandProfilePage() {
     );
   }
 
+  const isAdmin = band.role === "admin";
+  const previewSlug = band.slug ?? "";
+  const profile = band.name.trim()
+    ? toPublicBand({ name: band.name, slug: previewSlug, description: band.description ?? null, logo_url: band.logo_url ?? null },
+      previewSlug, process.env.NEXT_PUBLIC_SUPABASE_URL ?? "")
+    : null;
+
   return (
     <main className="flex min-w-0 flex-1 justify-center px-4 pb-6 pt-5 sm:px-6 sm:pb-10 sm:pt-8 md:pt-10">
       <div className="w-full min-w-0 max-w-5xl">
         <BandWorkspaceInfo name={band.name} role={band.role} />
         <div className="md:hidden"><BandNavigation bandId={bandId} activeSection="perfil-publico" /></div>
-        <header className="md:mt-7">
-          <p className="break-words text-xs font-semibold tracking-[0.16em] text-accent uppercase">{band.name}</p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-content sm:text-4xl">Perfil Público</h1>
-          <p className="mt-2 text-sm leading-6 text-content-muted">Gerencie a visibilidade e o endereço público da banda.</p>
-        </header>
-        <BandPublicProfileSettings key={bandId} bandId={bandId} initialSlug={band.slug}
-          initiallyPublic={band.is_public} isAdmin={band.role === "admin"} />
-        <section aria-labelledby="band-public-upcoming-title" className="mt-6 rounded-2xl border border-nav-border bg-surface p-5 sm:p-6">
-          <h2 id="band-public-upcoming-title" className="text-lg font-semibold text-content">Em breve</h2>
-          <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {upcomingSections.map(label => <li key={label} className="rounded-xl border border-outline-subtle bg-surface-muted px-3 py-3 text-sm font-medium text-content-muted">
-              {label}
-            </li>)}
-          </ul>
-        </section>
+        <BandPublicLinks bandId={bandId} isAdmin={isAdmin} renderEditor={(links, manager) => (
+          <>
+            <BandPublicProfileSettings key={bandId} bandId={bandId} initialSlug={band.slug}
+              initiallyPublic={band.is_public} isAdmin={isAdmin} renderPreview={publicPath => (
+                <details className="group mt-2 border-b border-nav-border" open={previewOpen}
+                  onToggle={event => setPreviewOpen(event.currentTarget.open)}>
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-2 py-2 text-sm font-semibold text-content hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus [&::-webkit-details-marker]:hidden">
+                    Prévia da página pública
+                    <span aria-hidden="true" className="mr-1 h-2.5 w-2.5 shrink-0 rotate-45 border-b-2 border-r-2 border-brand transition-transform group-open:rotate-[225deg] motion-reduce:transition-none" />
+                  </summary>
+                  {previewOpen && profile && (
+                    <div className="relative isolate rounded-xl border-t border-nav-border bg-surface focus-within:ring-2 focus-within:ring-focus">
+                      {publicPath && <a href={publicPath} target="_blank" rel="noopener noreferrer"
+                        aria-label="Abrir prévia do perfil público (abre em nova aba)"
+                        className="absolute inset-0 rounded-xl focus-visible:outline-none" />}
+                      {/* Let the preview's own links receive clicks above the background link. */}
+                      <div className={publicPath ? "pointer-events-none relative z-10 overflow-hidden rounded-xl [&_a]:pointer-events-auto" : "overflow-hidden rounded-xl"}>
+                        {publicPath && <span className="absolute right-3 top-3 z-10 rounded-lg bg-surface p-1.5 text-brand">
+                          <NavigationIcon name="ArrowUpRight" className="h-4 w-4" />
+                        </span>}
+                        <PublicBandProfile band={profile} preview
+                          links={toPublicBandLinks(links?.map(link => ({ ...link, slug: previewSlug })), previewSlug)} />
+                      </div>
+                    </div>
+                  )}
+                  {previewOpen && !profile && <p className="px-2 pb-3 text-sm text-content-muted">A prévia está indisponível.</p>}
+                </details>
+              )} />
+            <BandPublicSections bandId={bandId} isAdmin={isAdmin} linksManager={manager} />
+          </>
+        )} />
       </div>
     </main>
   );

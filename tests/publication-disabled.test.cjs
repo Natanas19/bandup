@@ -9,7 +9,7 @@ const ts = require('typescript');
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const root = path.resolve(__dirname,'..');
-function modules(env={},overrides={}) {
+function modules(env={},overrides={},browser={}) {
   const cache=new Map();
   const unexpected=()=>{throw new Error('Unexpected backend access');};
   function load(file) {
@@ -35,7 +35,7 @@ function modules(env={},overrides={}) {
     const source=fs.readFileSync(path.join(root,file),'utf8');
     const code=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.ReactJSX}}).outputText;
     vm.runInNewContext(code,{module:mod,exports:mod.exports,require:localRequire,process:{env},URL,Buffer,AbortController,
-      setTimeout,clearTimeout,fetch:unexpected},{filename:file});
+      setTimeout,clearTimeout,fetch:unexpected,...browser},{filename:file});
     return mod.exports;
   }
   return {load};
@@ -90,7 +90,7 @@ test('public loader and both route entry points make zero data calls',async()=>{
   assert.doesNotMatch(html,/<form|public_band_profiles/);
 });
 
-test('enabled public route queries only identity and returns not found for an absent row', async () => {
+test('enabled public route queries only identity and returns not found for a private or absent band', async () => {
   const calls = [];
   const query = {
     select(columns) { calls.push(['select', columns]); return this; },
@@ -114,6 +114,251 @@ test('enabled public route queries only identity and returns not found for an ab
     ['select', 'name,slug,description,logo_url'],
     ['eq', 'slug', 'demo'],
   ]);
+});
+
+function publicLinksPage(result) {
+  const calls = [];
+  const environment = {
+    NEXT_PUBLIC_BANDUP_PUBLIC_IDENTITY_ENABLED: 'true',
+    NEXT_PUBLIC_SUPABASE_URL: 'https://example.invalid',
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_fixture',
+  };
+  const {load} = modules(environment, {
+    '@supabase/supabase-js': {createClient(origin, key, options) {
+      assert.equal(origin, environment.NEXT_PUBLIC_SUPABASE_URL);
+      assert.equal(key, environment.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
+      assert.equal(options.auth.persistSession, false);
+      return {from(name) {
+        calls.push(['from', name]);
+        assert.ok(['public_band_profiles', 'public_band_links'].includes(name));
+        return {
+          select(columns) { calls.push(['select', columns]); return this; },
+          eq(column, value) { calls.push(['eq', column, value]); return this; },
+          order(column) { calls.push(['order', column]); return this; },
+          limit(limit) { calls.push(['limit', limit]); return this; },
+          abortSignal() { return this; },
+          async maybeSingle() {
+            assert.equal(name, 'public_band_profiles');
+            return {data: {slug: 'demo', name: 'Demo', description: 'Descrição pública', logo_url: null}, error: null};
+          },
+          then(resolve, reject) {
+            assert.equal(name, 'public_band_links');
+            return Promise.resolve(result).then(resolve, reject);
+          },
+        };
+      }};
+    }},
+  });
+  const page = load('src/app/b/[slug]/page.tsx');
+  const props = {params: Promise.resolve({slug: 'demo'})};
+  return {calls, page, props};
+}
+
+test('published profile renders ordered platform links with safe external anchors and label fallbacks', async () => {
+  const {calls, page, props} = publicLinksPage({error: null, data: [
+    {slug: 'demo', platform: 'custom', label: null, url: 'https://example.com', position: 7},
+    {slug: 'demo', platform: 'tiktok', label: 'Vídeos da banda', url: 'https://www.tiktok.com/@band', position: 5},
+    {slug: 'another-band', platform: 'custom', label: 'Outro perfil', url: 'https://another.example.com', position: 6},
+    {slug: 'demo', platform: 'youtube', label: null, url: 'https://youtu.be/demo', position: 4},
+    {slug: 'demo', platform: 'instagram', label: '', url: 'https://www.instagram.com/demo', position: 3},
+    {slug: 'demo', platform: 'spotify', label: 'Ouça a banda', url: 'https://open.spotify.com/artist/demo', position: 1},
+    {slug: 'demo', platform: 'spotify', label: 'Domínio incorreto', url: 'https://unsafe.example.com', position: 2},
+    {slug: 'demo', platform: 'custom', label: 'Sem HTTPS', url: 'http://unsafe.example.com', position: 8},
+  ]});
+  const metadata = await page.generateMetadata(props);
+  assert.equal(metadata.title, 'Demo | BandUp');
+  assert.ok(!calls.some(call => call.includes('public_band_links')));
+  const html = renderToStaticMarkup(await page.default(props));
+  assert.match(html, /Links da banda/);
+  assert.match(html, /Ouça a banda[\s\S]*Spotify[\s\S]*Instagram[\s\S]*YouTube[\s\S]*Vídeos da banda[\s\S]*TikTok[\s\S]*example\.com/);
+  assert.equal((html.match(/<a href="https:\/\/[^"]+" target="_blank" rel="noopener noreferrer"/g) ?? []).length, 5);
+  assert.doesNotMatch(html, /another\.example\.com|unsafe\.example\.com|Outro perfil/);
+  assert.deepEqual(calls.slice(-5), [
+    ['from', 'public_band_links'], ['select', 'slug,platform,label,url,position'],
+    ['eq', 'slug', 'demo'], ['order', 'position'], ['limit', 8],
+  ]);
+});
+
+test('a fresh server render reads updated public profile links', async () => {
+  const result = {data: [], error: null};
+  const {calls, page, props} = publicLinksPage(result);
+  assert.equal((await page.default(props)).props.links.length, 0);
+  result.data = [{slug: 'demo', platform: 'custom', label: 'Novo site', url: 'https://example.com', position: 1}];
+  const refreshed = await page.default(props);
+  assert.equal(refreshed.props.links[0].label, 'Novo site');
+  assert.equal(calls.filter(([action, table]) => action === 'from' && table === 'public_band_links').length, 2);
+  assert.equal(page.fetchCache, 'force-no-store');
+});
+
+test('empty or failed public link requests hide the section and preserve the profile', async () => {
+  for (const result of [
+    {data: [], error: null},
+    {data: null, error: {message: 'private backend detail'}},
+  ]) {
+    const {page, props} = publicLinksPage(result);
+    const html = renderToStaticMarkup(await page.default(props));
+    assert.match(html, /Descrição pública/);
+    assert.doesNotMatch(html, /Links da banda|public-band-links-heading|private backend detail/);
+  }
+});
+
+test('private profile preview starts open and can close and reopen with the shared public profile', () => {
+  const logo = 'https://example.invalid/storage/v1/object/public/band-logos/demo.webp';
+  const state = ['ready', {name: 'Minha banda', slug: null, is_public: false, role: 'admin',
+    description: 'Biografia da banda', logo_url: logo}];
+  let cursor = 0;
+  const {load} = modules({
+    NEXT_PUBLIC_BANDUP_PUBLIC_IDENTITY_ENABLED: 'true',
+    NEXT_PUBLIC_SUPABASE_URL: 'https://example.invalid',
+  }, {
+    react: {
+      ...React,
+      useEffect() {},
+      useState(initial) {
+        const index = cursor++;
+        return [index < state.length ? state[index] : initial, next => { state[index] = next; }];
+      },
+    },
+  });
+  const Page = load('src/app/bandas/[bandId]/perfil-publico/page.tsx').default;
+  const PublicBandLinks = load('src/components/band-public-links.tsx').default;
+  const PublicBandProfile = load('src/components/public-band-profile.tsx').default;
+  function renderPreview() {
+    cursor = 0;
+    const enabled = Page();
+    const tree = enabled.type(enabled.props);
+    const manager = tree.props.children.props.children.find(element => element.type === PublicBandLinks);
+    return manager.props.renderEditor([
+      {id: 'b', platform: 'custom', label: 'Site', url: 'https://example.com', position: 5},
+      {id: 'a', platform: 'spotify', label: null, url: 'https://open.spotify.com/artist/demo', position: 1},
+    ], null).props.children[0].props.renderPreview;
+  }
+  const expanded = renderPreview()(null);
+  assert.equal(expanded.type, 'details');
+  assert.equal(expanded.props.open, true);
+  const [privateLink, visual] = expanded.props.children[1].props.children;
+  assert.equal(privateLink, null);
+  const profile = visual.props.children[1];
+  assert.equal(profile.type, PublicBandProfile);
+  assert.equal(profile.props.preview, true);
+  assert.equal(profile.props.band.image.src, logo);
+  const html = renderToStaticMarkup(expanded);
+  assert.match(html, /Minha banda[\s\S]*Biografia da banda[\s\S]*Spotify[\s\S]*Site/);
+  assert.doesNotMatch(html, /<main|<h1/);
+  const publicPreview = renderPreview()('/b/demo');
+  assert.equal(publicPreview.props.children[0].type, 'summary');
+  const [previewLink, publicVisual] = publicPreview.props.children[1].props.children;
+  assert.equal(previewLink.props.href, '/b/demo');
+  assert.equal(previewLink.props.target, '_blank');
+  assert.equal(previewLink.props.rel, 'noopener noreferrer');
+  assert.match(publicVisual.props.className, /\[&_a\]:pointer-events-auto/);
+  assert.match(renderToStaticMarkup(publicPreview), /href="https:\/\/example\.com"/);
+  expanded.props.onToggle({currentTarget: {open: false}});
+  const collapsed = renderPreview()('/b/demo');
+  assert.equal(collapsed.props.open, false);
+  assert.doesNotMatch(renderToStaticMarkup(collapsed), /Biografia da banda|Links da banda|href="\/b\/demo"/);
+  collapsed.props.onToggle({currentTarget: {open: true}});
+  const reopened = renderPreview()(null);
+  assert.equal(reopened.props.open, true);
+  assert.equal(renderToStaticMarkup(reopened), html);
+});
+
+test('public address starts hidden and keeps copy, share and view available', async () => {
+  const origin = 'https://example.invalid';
+  const url = origin + '/b/demo';
+  const calls = [];
+  let clipboardAvailable = true;
+  const state = [], refs = [], dependencies = [];
+  let stateIndex, refIndex, effectIndex, effects;
+  const {load} = modules({NEXT_PUBLIC_BANDUP_PUBLIC_IDENTITY_ENABLED: 'true'}, {
+    react: {
+      ...React,
+      useState(initial) {
+        const index = stateIndex++;
+        if (!(index in state)) state[index] = initial;
+        return [state[index], value => { state[index] = value; }];
+      },
+      useRef(initial) { return refs[refIndex++] ??= {current: initial}; },
+      useEffect(effect, next) {
+        const index = effectIndex++;
+        if (next.some((value, i) => value !== dependencies[index]?.[i]) || !dependencies[index]) {
+          dependencies[index] = next;
+          effects.push(effect);
+        }
+      },
+    },
+  }, {
+    window: {location: {origin}},
+    navigator: {
+      clipboard: {async writeText(value) {
+        if (!clipboardAvailable) throw new Error('Clipboard unavailable');
+        calls.push(['copy', value]);
+      }},
+      async share({url}) { calls.push(['share', url]); },
+    },
+  });
+  const Settings = load('src/components/band-public-profile-settings.tsx').default;
+  function settings(initialSlug, initiallyPublic) {
+    return Settings({bandId: 'demo', initialSlug, initiallyPublic, isAdmin: true,
+      renderPreview: path => React.createElement('div', {'data-preview-destination': path}),
+    });
+  }
+  let enabled = settings('demo', true);
+  function nodes(tree) {
+    if (Array.isArray(tree)) return tree.flatMap(nodes);
+    return tree?.props ? [tree, ...nodes(tree.props.children)] : [];
+  }
+  function render() {
+    stateIndex = refIndex = effectIndex = 0;
+    effects = [];
+    const tree = enabled.type(enabled.props);
+    const input = nodes(tree).find(node => node.type === 'input');
+    if (input) input.props.ref.current = {
+      focus: () => calls.push(['focus']),
+      select: () => calls.push(['select']),
+    };
+    effects.forEach(effect => effect());
+    return tree;
+  }
+  const byLabel = (tree, label) => nodes(tree).find(node => node.props['aria-label'] === label);
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+
+  render(); // Initialize the browser origin.
+  let tree = render();
+  assert.match(renderToStaticMarkup(tree), /data-preview-destination="\/b\/demo"/);
+  assert.match(renderToStaticMarkup(tree), /Endereço oculto/);
+  assert.doesNotMatch(renderToStaticMarkup(tree), /https:\/\/example\.invalid/);
+  assert.equal(byLabel(tree, 'Visualizar perfil (abre em nova aba)').props.href, '/b/demo');
+  byLabel(tree, 'Copiar endereço').props.onClick();
+  await settle();
+  byLabel(render(), 'Compartilhar').props.onClick();
+  await settle();
+  assert.deepEqual(calls, [['copy', url], ['share', url]]);
+
+  tree = render();
+  const show = byLabel(tree, 'Mostrar endereço público');
+  assert.equal(show.props['aria-expanded'], false);
+  assert.equal(show.props.children.props.name, 'Eye');
+  show.props.onClick();
+  tree = render();
+  assert.equal(byLabel(tree, 'Endereço público').props.value, url);
+  const hide = byLabel(tree, 'Ocultar endereço público');
+  assert.equal(hide.props['aria-expanded'], true);
+  assert.equal(hide.props.children.props.name, 'EyeOff');
+  hide.props.onClick();
+  assert.doesNotMatch(renderToStaticMarkup(render()), /https:\/\/example\.invalid/);
+
+  clipboardAvailable = false;
+  byLabel(render(), 'Copiar endereço').props.onClick();
+  await settle();
+  assert.equal(byLabel(render(), 'Endereço público').props.value, url);
+  assert.deepEqual(calls.slice(-2), [['focus'], ['select']]);
+
+  for (const [slug, published] of [['demo', false], [null, true]]) {
+    state.length = refs.length = dependencies.length = 0;
+    enabled = settings(slug, published);
+    assert.doesNotMatch(renderToStaticMarkup(render()), /data-preview-destination/);
+  }
 });
 
 test('direct publication actions refuse before authentication or queries',async()=>{

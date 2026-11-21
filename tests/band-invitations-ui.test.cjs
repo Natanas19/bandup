@@ -18,6 +18,9 @@ const service=()=>load('src/lib/band-invitations.ts',{
   './public-band-data':load('src/lib/public-band-data.ts',{
     './social-links':load('src/lib/social-links.ts'),
     './development-lab':load('src/lib/development-lab.ts'),
+    '@/lib/public-link-url':load('src/lib/public-link-url.ts',{
+      '@/lib/social-links':load('src/lib/social-links.ts'),
+    }),
   }),
 });
 const [band,ref,id]=['a','b','c'].map(letter=>`${letter}0000000-0000-0000-0000-000000000001`);

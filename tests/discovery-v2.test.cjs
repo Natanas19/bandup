@@ -13,6 +13,7 @@ function load(file) {
   }).outputText, { module: mod, exports: mod.exports, URL,
     process: { env: { NODE_ENV: 'production' } }, require(name) {
       if (name.startsWith('.')) return load(path.resolve(path.dirname(file), name + '.ts'));
+      if (name.startsWith('@/lib/')) return load(path.resolve(__dirname, '../src', name.slice(2) + '.ts'));
       return require(name);
     } });
   return mod.exports;

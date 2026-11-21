@@ -21,6 +21,9 @@ const service = () => load('src/lib/musician-discovery.ts', {
   './public-band-data': load('src/lib/public-band-data.ts', {
     './social-links': load('src/lib/social-links.ts', {}),
     './development-lab': load('src/lib/development-lab.ts', {}),
+    '@/lib/public-link-url': load('src/lib/public-link-url.ts', {
+      '@/lib/social-links': load('src/lib/social-links.ts', {}),
+    }),
   }),
 });
 test('musician route uses existing private session boundary', () => {

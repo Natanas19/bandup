@@ -1,11 +1,21 @@
 import { isLaboratoryHttpOrigin } from "./development-lab";
 import { getSafeExternalUrl } from "./social-links";
+import {
+  getBandPublicLinkUrl, isPublicLinkPlatform, isValidPublicLinkLabel, PUBLIC_LINK_LIMIT, type PublicLinkPlatform,
+} from "@/lib/public-link-url";
 
 export type PublicBand = {
   slug: string;
   name: string;
   image: { src: string; alt: string } | null;
   description: string;
+};
+
+export type PublicBandProfileLink = {
+  platform: PublicLinkPlatform;
+  label: string | null;
+  url: string;
+  position: number;
 };
 
 function invalidResponse(): never {
@@ -68,4 +78,19 @@ export function toPublicBand(
     description: (value.description as string | null) ?? "",
     image: src ? { src, alt: `Imagem da banda ${value.name.trim()}` } : null,
   };
+}
+
+export function toPublicBandLinks(value: unknown, slug: string): PublicBandProfileLink[] {
+  if (!Array.isArray(value)) return [];
+  const links: PublicBandProfileLink[] = [];
+  for (const row of value) {
+    if (!record(row) || row.slug !== slug || !isPublicLinkPlatform(row.platform) || typeof row.url !== "string"
+      || typeof row.position !== "number" || !Number.isInteger(row.position)
+      || row.position < 1 || row.position > PUBLIC_LINK_LIMIT) continue;
+    const url = getBandPublicLinkUrl(row.url, row.platform);
+    if (!url) continue;
+    const label = typeof row.label === "string" && isValidPublicLinkLabel(row.label) ? row.label.trim() || null : null;
+    links.push({ platform: row.platform, label, url, position: row.position });
+  }
+  return links.sort((a, b) => a.position - b.position);
 }
