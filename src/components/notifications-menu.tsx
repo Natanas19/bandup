@@ -75,7 +75,7 @@ export default function NotificationsMenu({ source = notificationSource }: { sou
       {unread > 0 && <span aria-hidden="true" className="absolute -right-1 -top-1 min-w-4 rounded-full bg-primary px-0.5 text-center text-[0.6rem] font-bold leading-4 text-on-primary">{unread > 99 ? "99+" : unread}</span>}
     </summary>
 
-    <section aria-labelledby={headingId}
+    <section aria-labelledby={headingId} data-no-pull-refresh
       className="absolute inset-x-0 top-full z-40 mt-2 flex max-h-[min(32rem,calc(100dvh-10rem-env(safe-area-inset-bottom)))] flex-col overflow-hidden rounded-panel border border-outline bg-surface shadow-app-panel md:left-auto md:right-0 md:w-96">
       <div className="flex flex-wrap items-center justify-between gap-x-2 border-b border-outline-subtle px-3 py-2">
         <h2 id={headingId} ref={heading} tabIndex={-1} className="font-semibold text-content">Notificações</h2>

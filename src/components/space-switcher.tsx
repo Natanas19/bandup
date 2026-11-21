@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode, type Ref } from "react";
 import Link from "next/link";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { normalizeDisplayName } from "@/lib/display-name";
@@ -25,7 +25,10 @@ function safePersonalAvatar(value: unknown): string | null {
   } catch { return null; }
 }
 
-export default function SpaceSwitcher({ bandId, bandName }: { bandId?: string; bandName?: string }) {
+type SwitcherProps = { bandId?: string; bandName?: string; onSearch?: () => void; summaryRef?: Ref<HTMLElement> };
+const searchAction = "inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-control border border-accent-border px-3 py-2.5 text-center text-sm font-semibold text-brand hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus";
+
+export default function SpaceSwitcher({ bandId, bandName, onSearch, summaryRef }: SwitcherProps) {
   const [bands, setBands] = useState<SpaceMembership[]>([]);
   const [personal, setPersonal] = useState<PersonalProfile>({ name: "Meu Espaço", imageUrl: null });
   const [loadFailed, setLoadFailed] = useState(false);
@@ -86,9 +89,9 @@ export default function SpaceSwitcher({ bandId, bandName }: { bandId?: string; b
     supabaseOrigin ?? "https://invalid.local",
   );
 
-  return <section aria-label="Alternar espaço" className="workspace-profile-switcher w-full min-w-0 sm:w-auto sm:min-w-72">
-    <details ref={selector} className="group relative">
-      <summary aria-label={`Perfis. Perfil selecionado: ${selectedName}. Abrir seletor`} className="flex min-h-14 w-full cursor-pointer list-none items-center gap-3 rounded-panel border border-outline bg-surface px-3 py-2.5 text-left shadow-app-card transition hover:border-accent-border focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus [&::-webkit-details-marker]:hidden">
+  return <section aria-label="Alternar espaço" className="workspace-profile-switcher w-full min-w-0 sm:w-auto sm:min-w-72 md:min-w-0">
+    <details ref={selector} className="group">
+      <summary aria-label={`Perfis. Perfil selecionado: ${selectedName}. Abrir seletor`} ref={summaryRef} className="flex min-h-14 w-full cursor-pointer list-none items-center gap-3 rounded-panel border border-outline bg-surface px-3 py-2.5 text-left shadow-app-card transition hover:border-accent-border focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus [&::-webkit-details-marker]:hidden">
         <ProfileAvatar name={selectedName} imageUrl={selectedImage} />
         <span className="min-w-0 flex-1">
           <span className="block text-[0.62rem] font-bold uppercase tracking-[0.17em] text-content-muted">Meus perfis</span>
@@ -98,7 +101,7 @@ export default function SpaceSwitcher({ bandId, bandName }: { bandId?: string; b
           <path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </summary>
-      <div className="absolute left-0 right-0 top-full z-40 mt-2 flex max-h-[min(32rem,calc(100dvh-6rem))] flex-col overflow-hidden rounded-panel border border-outline bg-surface p-2 shadow-app-panel sm:left-auto sm:w-80">
+      <div data-no-pull-refresh className="absolute left-0 right-14 top-full z-40 mt-2 flex max-h-[min(32rem,calc(100dvh-6rem))] flex-col overflow-hidden rounded-panel border border-outline bg-surface p-2 shadow-app-panel md:left-auto md:w-[min(28rem,calc(100%_-_3.5rem))]">
         <section aria-labelledby="current-profile-section" className="shrink-0">
           <h2 id="current-profile-section" className="px-2 py-2 text-[0.65rem] font-semibold uppercase tracking-[0.15em] text-content-muted">Perfil atual</h2>
           <ul>
@@ -134,21 +137,30 @@ export default function SpaceSwitcher({ bandId, bandName }: { bandId?: string; b
         {loadFailed && <p role="status" className="mt-2 shrink-0 px-3 py-2 text-xs text-content-subtle">Não foi possível carregar todos os perfis.</p>}
         <div className="mt-2 grid shrink-0 gap-2 border-t border-outline-subtle px-1 pt-2">
           <Link href="/bandas/nova" onClick={() => { if (selector.current) selector.current.open = false; }} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-control bg-primary px-3 py-2.5 text-center text-sm font-semibold text-on-primary hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus"><NavigationIcon name="Plus" className="h-4 w-4" />Criar banda</Link>
-          <Link href="/descobrir" onClick={() => { if (selector.current) selector.current.open = false; }} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-control border border-accent-border px-3 py-2.5 text-center text-sm font-semibold text-brand hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus"><NavigationIcon name="Search" className="h-4 w-4" />Procurar</Link>
+          {onSearch ? <button type="button" onClick={() => {
+            if (selector.current) selector.current.open = false;
+            onSearch();
+          }} className={searchAction}><NavigationIcon name="Search" className="h-4 w-4" />Procurar banda</button>
+          : <Link href="/descobrir" onClick={() => { if (selector.current) selector.current.open = false; }} className={searchAction}><NavigationIcon name="Search" className="h-4 w-4" />Procurar</Link>}
         </div>
       </div>
     </details>
   </section>;
 }
 
-export function SpaceSwitcherHeader({ bandId, bandName, settingsHref }: { bandId?: string; bandName?: string; settingsHref: string }) {
+export function SpaceSwitcherHeader({ bandId, bandName, settingsHref, onSearch, summaryRef, search, searchActive = false }: SwitcherProps & {
+  settingsHref: string;
+  search?: ReactNode;
+  searchActive?: boolean;
+}) {
   return <header className="sticky top-0 z-30 border-b border-outline-subtle bg-surface/95 px-4 py-2.5 backdrop-blur sm:px-6 md:px-8 lg:px-10">
     <div className="relative mx-auto flex w-full max-w-7xl items-center justify-between gap-3">
-      <div className="min-w-0 flex-1 md:flex md:justify-end">
-        <div className="w-full min-w-0 sm:w-auto"><SpaceSwitcher bandId={bandId} bandName={bandName} /></div>
+      <div className="min-w-0 flex-1 md:flex md:items-center md:justify-end md:gap-3">
+        {search}
+        <div className={`${searchActive ? "hidden md:block" : ""} w-full min-w-0 sm:w-auto md:w-72`}><SpaceSwitcher bandId={bandId} bandName={bandName} onSearch={onSearch} summaryRef={summaryRef} /></div>
       </div>
-      <NotificationsMenu />
-      <div className="shrink-0 md:hidden"><WorkspaceSettingsMenu href={settingsHref} /></div>
+      <div className={searchActive ? "hidden md:contents" : "contents"}><NotificationsMenu /></div>
+      <div className={searchActive ? "hidden" : "shrink-0 md:hidden"}><WorkspaceSettingsMenu href={settingsHref} /></div>
     </div>
   </header>;
 }

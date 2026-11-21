@@ -16,8 +16,8 @@ function fixture(pathname = '/dashboard/agenda', profileData = {}) {
     const mod = { exports: {} }; cache.set(file, mod);
     vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), {
       compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
-    }).outputText, { module: mod, exports: mod.exports, require(name) {
-      if (name === 'react') return { ...React,
+    }).outputText, { module: mod, exports: mod.exports, window: profileData.browser, require(name) {
+      if (name === 'react') return profileData.hooks ?? { ...React,
         useState: initial => [Array.isArray(initial) ? profileData.bands ?? initial
           : initial?.name ? profileData.personal ?? initial : typeof initial === 'boolean' ? open : initial,
         value => { open = typeof value === 'function' ? value(open) : value; }],
@@ -28,7 +28,9 @@ function fixture(pathname = '/dashboard/agenda', profileData = {}) {
           return ref;
         },
       };
-      if (name === 'next/navigation') return { usePathname: () => pathname, useRouter: () => ({ push: value => pushed.push(value) }) };
+      if (name === 'next/navigation') return { usePathname: () => profileData.pathname ?? pathname, useRouter: () => ({ push: value => pushed.push(value) }) };
+      if (name === '@/components/space-switcher') return load('src/components/space-switcher.tsx');
+      if (name === '@/components/notifications-menu') return { __esModule: true, default: function NotificationsMenu() {} };
       if (name === '@/components/workspace-settings') return { WorkspaceSettingsMenu: function SettingsMenu() {}, WorkspaceSettingsNavigation: () => null };
       if (name === 'next/link' || name.startsWith('@/components/')) return { __esModule: true, default: () => null };
       if (name === 'react/jsx-runtime') return require(name);
@@ -169,6 +171,8 @@ test('space switcher is present in both responsive workspaces and offers creatio
   assert.match(switcher, /ProfileAvatar name=\{selectedName\}/);
   assert.match(switcher, /band:bands!inner\(id, name, logo_url\)/);
   assert.match(switcher, /<summary aria-label=\{/);
+  assert.match(switcher, /<details ref=\{selector\} className="group">/);
+  assert.match(switcher, /absolute left-0 right-14 top-full[^"]*md:left-auto md:w-\[min\(28rem,calc\(100%_-_3\.5rem\)\)\]/);
   assert.match(switcher, /max-h-64 flex-initial space-y-1 overflow-y-auto overscroll-contain/);
   assert.match(switcher, /<NavigationIcon name="Plus"/);
   assert.match(switcher, /<NavigationIcon name="Search"/);
@@ -177,8 +181,9 @@ test('space switcher is present in both responsive workspaces and offers creatio
   assert.match(switcher, /href="\/bandas\/nova"/);
   assert.match(switcher, /href="\/descobrir"/);
   for (const file of ['src/components/personal-workspace.tsx', 'src/components/band-workspace.tsx']) {
-    assert.match(source(file), /<SpaceSwitcherHeader/);
+    assert.match(source(file), /<WorkspaceSearch/);
   }
+  assert.match(source('src/components/workspace-search.tsx'), /<SpaceSwitcherHeader/);
 });
 
 test('profile selector keeps its identity header for personal and band contexts', () => {
@@ -210,6 +215,115 @@ test('space switcher closes after creating a band or opening discovery', () => {
     link.props.onClick();
     assert.equal(f.refs[0].current.open, false);
   }
+  const f = fixture(), Switcher = f.load('src/components/space-switcher.tsx').default;
+  let opened = false;
+  const search = nodes(Switcher({ onSearch: () => { opened = true; } }))
+    .find(node => node.type === 'button' && node.props.children.includes('Procurar banda'));
+  assert.ok(search);
+  search.props.onClick();
+  assert.equal(opened, true);
+  assert.equal(f.refs[0].current.open, false);
+});
+
+test('global search replaces the main view, keeps navigation and restores the previous screen', () => {
+  const slots = [], changes = [], scroll = [];
+  let cursor = 0;
+  const options = {
+    pathname: '/dashboard/agenda',
+    browser: { scrollY: 150, scrollTo: value => scroll.push(value.top) },
+    hooks: { ...React,
+      useId: () => 'global-search',
+      useState(initial) {
+        const i = cursor++;
+        if (!(i in slots)) slots[i] = initial;
+        return [slots[i], next => { slots[i] = next; }];
+      },
+      useRef(initial) { return slots[cursor++] ??= { current: initial }; },
+      useEffect(effect, deps) {
+        const i = cursor++;
+        if (!slots[i] || deps.some((value, j) => value !== slots[i][j])) changes.push(effect);
+        slots[i] = deps;
+      },
+    },
+  };
+  const { load } = fixture(undefined, options);
+  const Workspace = load('src/components/workspace-search.tsx').default;
+  const { SpaceSwitcherHeader } = load('src/components/space-switcher.tsx');
+  const previous = React.createElement('main', null, 'Agenda aberta');
+  const nav = React.createElement('nav', { 'aria-label': 'Navegação inferior' });
+  let desktop = false;
+  let focused = '';
+  function render() {
+    cursor = 0;
+    const tree = nodes(Workspace({ settingsHref: '/dashboard/configuracoes', mobileNavigation: nav, contentClassName: 'content', children: previous }));
+    const header = tree.find(node => node.type === SpaceSwitcherHeader);
+    header.props.summaryRef.current = { focus: () => { focused = 'summary'; } };
+    const input = nodes(header.props.search).find(node => node.type === 'input');
+    if (input) input.props.ref.current = {
+      focus: () => { focused = 'query'; input.props.onFocus(); },
+      getClientRects: () => desktop ? [{}] : [],
+    };
+    changes.splice(0).forEach(effect => effect());
+    return { tree, header, input };
+  }
+  render().header.props.onSearch();
+  let view = render();
+  assert.equal(focused, 'query');
+  assert.equal(view.tree.find(node => node.props.children === previous).props.hidden, true);
+  assert.ok(view.tree.includes(nav));
+  assert.equal(view.input.props.placeholder, 'Encontre músicos ou bandas...');
+  assert.equal(view.input.props.form, 'global-search');
+  const headerRow = nodes(SpaceSwitcherHeader(view.header.props));
+  assert.ok(headerRow.includes(view.header.props.search));
+  assert.match(view.header.props.search.props.className, /w-full min-w-0/);
+  const notifications = header => nodes(SpaceSwitcherHeader(header.props)).find(node =>
+    node.props.children?.type?.name === 'NotificationsMenu');
+  assert.equal(notifications(view.header).props.className, 'hidden md:contents');
+  assert.match(nodes(view.header.props.search).find(node => node.props.children === 'Cancelar').props.className, /shrink-0/);
+  assert.match(view.input.props.className, /w-0 flex-1/);
+  const filter = label => view.tree.find(node => node.type === 'button' && node.props.children === label);
+  assert.equal(filter('Todos').props['aria-pressed'], true);
+  filter('Bandas').props.onClick();
+  view = render();
+  assert.equal(filter('Bandas').props['aria-pressed'], true);
+  assert.equal(view.input.props.form, 'global-search');
+  filter('Músicos').props.onClick();
+  view = render();
+  assert.equal(view.input.props.form, undefined);
+  assert.ok(view.tree.some(node => node.props.children === 'Busca de músicos em breve.'));
+  assert.ok(view.tree.some(node => node.props.hidden && node.props.children?.props?.headerFormId === 'global-search'));
+  nodes(view.header.props.search).find(node => node.props.children === 'Cancelar').props.onClick();
+  view = render();
+  assert.equal(view.header.props.searchActive, false);
+  assert.match(view.header.props.search.props.className, /^hidden md:flex/);
+  assert.equal(notifications(view.header).props.className, 'contents');
+  assert.equal(view.tree.find(node => node.props.children === previous).props.hidden, false);
+  assert.equal(focused, 'summary');
+  assert.deepEqual(scroll, [0, 150]);
+  view.header.props.onSearch();
+  render();
+  options.pathname = '/dashboard/tarefas';
+  view = render();
+  assert.equal(view.header.props.searchActive, false);
+  assert.equal(notifications(view.header).props.className, 'contents');
+
+  desktop = true;
+  assert.equal(nodes(view.header.props.search).filter(node => node.type === 'input').length, 1);
+  assert.match(view.header.props.search.props.className, /md:mr-auto.*md:min-w-40.*md:flex-1/);
+  view.input.props.onFocus();
+  view = render();
+  assert.equal(view.header.props.searchActive, true);
+  assert.equal(notifications(view.header).props.className, 'hidden md:contents');
+  assert.ok(nodes(SpaceSwitcherHeader(view.header.props)).some(node => node.props.className?.includes('hidden md:block')));
+  let prevented = false;
+  view.header.props.search.props.onKeyDown({ key: 'Escape', preventDefault() { prevented = true; } });
+  view = render();
+  assert.equal(prevented, true);
+  assert.equal(view.header.props.searchActive, false);
+  assert.equal(focused, 'query');
+  assert.equal(render().header.props.searchActive, false);
+  view.input.props.onChange();
+  assert.equal(render().header.props.searchActive, true);
 });
 
 test('restored selector keeps active photos and the disabled Profile action', () => {
@@ -301,7 +415,8 @@ test('personal profile alone and a loading band keep one current row and no empt
 test('band layout keeps one sidebar brand, desktop navigation and the primary profile header', () => {
   const band = source('src/components/band-workspace.tsx');
   assert.equal((band.match(/Band<span/g) ?? []).length, 1);
-  assert.match(band, /<SpaceSwitcherHeader bandId=\{bandId\}/);
+  assert.match(band, /<WorkspaceSearch bandId=\{bandId\}/);
+  assert.match(band, /searchNavigation=\{<BandNavigation bandId=\{bandId\} activeSection=\{activeSection\}/);
   assert.match(band, /<BandNavigation bandId=\{bandId\} activeSection=\{activeSection\} variant="sidebar"/);
   assert.match(band, /hidden w-64[\s\S]*md:flex/);
   assert.doesNotMatch(band, /BandLogo|ProfileAvatar/);
@@ -326,7 +441,8 @@ test('settings and account actions are grouped in both desktop sidebars', () => 
   const header = source('src/components/space-switcher.tsx');
   assert.match(header, /<WorkspaceSettingsMenu href=\{settingsHref\}\s*\/>/);
   assert.match(header, /justify-between/);
-  assert.match(header, /md:flex md:justify-end/);
+  const headerClasses = [...header.matchAll(/className="([^"]+)"/g)].map(([, value]) => value.split(/\s+/));
+  assert.ok(headerClasses.some(classes => classes.includes('md:flex') && classes.includes('md:justify-end')));
   assert.match(header, /shrink-0 md:hidden/);
   assert.doesNotMatch(header, /ThemeSelector/);
 });

@@ -73,7 +73,7 @@ test('an existing pending request is reported without issuing another request', 
 function componentFixture(eligibility, options = {}) {
   const state = { slots: [], cursor: 0, effects: [], scheduled: [], writes: 0, focus: null, checks: 0, eligibilityChecks: [], targets: [] };
   const modal = { open: false, showModal() { this.open = true; }, close() { this.open = false; } };
-  const api = { async entryEligibility(band) { state.eligibilityChecks.push(band); return options.eligibility ? options.eligibility(band) : eligibility; }, async pendingRequest() { state.checks++; return options.persisted ?? null; } };
+  const api = { discover: options.discover, async entryEligibility(band) { state.eligibilityChecks.push(band); return options.eligibility ? options.eligibility(band) : eligibility; }, async pendingRequest() { state.checks++; return options.persisted ?? null; } };
   const hooks = { ...React,
     useState(initial) {
       const index = state.cursor++;
@@ -98,13 +98,11 @@ function componentFixture(eligibility, options = {}) {
   const mod = { exports: {} };
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
-  }).outputText, { module: mod, exports: mod.exports, process: { env: {} }, require(name) {
+  }).outputText, { module: mod, exports: mod.exports, process: { env: {} },
+    FormData: class { constructor(form) { this.form = form; } get(key) { return this.form[key] ?? null; } },
+    require(name) {
     if (name === 'react') return hooks;
-    if (name === 'react/jsx-runtime') return {
-      jsx: (type, props, key) => React.createElement(type, { ...props, key }),
-      jsxs: (type, props, key) => React.createElement(type, { ...props, key }),
-      Fragment: React.Fragment,
-    };
+    if (name === 'react/jsx-runtime') return require(name);
     if (name === 'next/link') return { __esModule: true, default: ({ children, ...props }) => React.createElement('a', props, children) };
     if (name === '@/components/profile-avatar') return { __esModule: true, default: () => null };
     if (name === '@/lib/public-band-data') return { safeBandLogo: () => null };
@@ -115,7 +113,8 @@ function componentFixture(eligibility, options = {}) {
     if (name === '@/lib/band-entry') return { BAND_ENTRY_BACKEND_VALIDATED: true, entryError: () => ({ message: 'Falha' }),
       createBandEntryService: () => api };
     if (name === '@/lib/band-search') return { defaultEntryMessage: () => '',
-      async searchBandNames() { return { matches: options.bands ?? [{ band_id: id(77), name: 'Band' }], next: null }; },
+      searchBandNames: options.discover ? loadBandSearch().searchBandNames
+        : async () => ({ matches: options.bands ?? [{ band_id: id(77), name: 'Band' }], next: null }),
       async registerEntryRequest(_api, band) { state.writes++; state.targets.push(band); return options.submit ? options.submit() : 'created'; } };
     if (name === '@/lib/display-name') return { normalizeDisplayName: value => value };
     throw new Error(`Unexpected import ${name}`);
@@ -123,7 +122,7 @@ function componentFixture(eligibility, options = {}) {
   const component = mod.exports.default;
   function render() {
     state.cursor = 0;
-    const tree = component();
+    const tree = component({ headerFormId: options.headerFormId });
     for (const node of nodes(tree)) {
       if (node.props?.ref) node.props.ref.current = node.type === 'dialog' ? modal : {
         focus() { state.focus = node.type; },
@@ -141,6 +140,45 @@ function nodes(tree) {
   return [tree, ...nodes(tree.props?.children)];
 }
 const settle = async () => { for (let index = 0; index < 8; index++) await new Promise(resolve => setImmediate(resolve)); };
+
+test('compact global results reuse explicit band-only search, pagination, empty and error states', async () => {
+  const cursors = [];
+  let failure = false;
+  const h = componentFixture('eligible', { headerFormId: 'header-search', async discover(after) {
+    cursors.push(after);
+    if (failure) throw new Error('Unavailable');
+    const start = after ? Number(after.slice(-12)) + 1 : 1;
+    return Array.from({ length: start > 100 ? 1 : 20 }, (_, index) => ({
+      band_id: id(start + index), name: start > 100 ? 'Banda Horizonte' : `Grupo ${start + index}`,
+    }));
+  } });
+  h.render(); await settle();
+  assert.deepEqual(cursors, []);
+  const submit = term => nodes(h.render()).find(node => node.props?.id === 'header-search').props.onSubmit({
+    preventDefault() {}, currentTarget: { 'band-query': term },
+  });
+  submit('Horizonte');
+  assert.match(renderToStaticMarkup(h.render()), /Pesquisando bandas cadastradas/);
+  await settle();
+  assert.equal(cursors.length, 5);
+  const more = nodes(h.render()).find(node => node.props?.children === 'Pesquisar mais bandas');
+  assert.ok(more);
+  more.props.onClick();
+  await settle();
+  const html = renderToStaticMarkup(h.render());
+  assert.match(html, /Banda Horizonte[\s\S]*>Banda<\//);
+  assert.doesNotMatch(html, />Músico<\/|Grupo 1/);
+  assert.equal(h.state.writes, 0);
+  submit('inexistente');
+  await settle();
+  nodes(h.render()).find(node => node.props?.children === 'Pesquisar mais bandas').props.onClick();
+  await settle();
+  assert.match(renderToStaticMarkup(h.render()), /Nenhuma banda encontrada/);
+  failure = true;
+  submit('Horizonte');
+  await settle();
+  assert.match(renderToStaticMarkup(h.render()), /role="alert"[^>]*>Falha/);
+});
 
 async function openEntry(h) {
   h.render(); await settle();

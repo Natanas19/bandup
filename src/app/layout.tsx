@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import { THEME_INITIALIZATION_SCRIPT } from "@/lib/theme";
 import { ThemeProvider } from "@/components/theme-provider";
 import PrivateSessionBoundary from "@/components/private-session-boundary";
+import PullToRefresh from "@/components/pull-to-refresh";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], display: "swap", variable: "--font-inter" });
@@ -33,7 +34,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <head>
         <script id="bandup-theme-init" dangerouslySetInnerHTML={{ __html: THEME_INITIALIZATION_SCRIPT }} />
       </head>
-      <body className="flex min-h-full flex-col"><ThemeProvider><PrivateSessionBoundary>{children}</PrivateSessionBoundary></ThemeProvider></body>
+      <body className="flex min-h-full flex-col"><ThemeProvider>
+        <PullToRefresh />
+        <PrivateSessionBoundary>{children}</PrivateSessionBoundary>
+      </ThemeProvider></body>
     </html>
   );
 }

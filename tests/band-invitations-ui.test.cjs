@@ -98,17 +98,35 @@ function nodes(tree){if(!tree||typeof tree!=='object')return [];if(Array.isArray
 const settle=async()=>{for(let i=0;i<12;i++)await Promise.resolve();};
 const button=(tree,text)=>nodes(tree).find(node=>node.type==='button'&&node.props.children===text);
 test('received loading/empty/error/retry, confirmation, success and completed states',async()=>{
-  const h=harness('BandInvitations');assert.ok(nodes(h.render()).some(n=>n.props?.children==='Carregando convites...'));await settle();
+  let accepted=0;
+  const h=harness('BandInvitations',{onAccepted:()=>{accepted++;}});assert.ok(nodes(h.render()).some(n=>n.props?.children==='Carregando convites...'));await settle();
   let tree=h.render();button(tree,'Aceitar convite').props.onClick();tree=h.render();
   button(tree,'Confirmar').props.onClick();button(tree,'Confirmar').props.onClick();assert.equal(h.decisions,1);
   h.controls.list=()=>Promise.resolve([row('accepted')]);await settle();h.render();await settle();tree=h.render();
-  assert.ok(!button(tree,'Aceitar convite'));assert.ok(nodes(tree).some(n=>n.props?.children==='Aceito'));
+  assert.ok(!button(tree,'Aceitar convite'));assert.ok(nodes(tree).some(n=>n.props?.children==='Aceito'));assert.equal(accepted,1);
   h.controls.list=()=>Promise.resolve([row('superseded')]);button(tree,'Atualizar convites').props.onClick();h.render();await settle();tree=h.render();
   assert.ok(nodes(tree).some(n=>n.props?.children==='Encerrado pela entrada na banda'));assert.ok(!button(tree,'Aceitar convite'));
   h.controls.list=()=>Promise.reject({code:'55P03'});button(tree,'Atualizar convites').props.onClick();h.render();await settle();tree=h.render();
   assert.ok(nodes(tree).some(n=>n.props?.role==='alert'));
   h.controls.list=()=>Promise.resolve([]);button(tree,'Atualizar convites').props.onClick();h.render();await settle();
   assert.ok(nodes(h.render()).some(n=>n.props?.children==='Nenhum convite nesta página.'));h.unmount();
+});
+test('confirmed refusal refreshes the received list without calling onAccepted',async()=>{
+  const h=harness('BandInvitations',{onAccepted:()=>assert.fail('Refusal does not add membership')});
+  h.render();await settle();
+  button(h.render(),'Recusar convite').props.onClick();
+  h.controls.decide=async(_id,decision)=>{
+    assert.equal(decision,'rejected');
+    h.controls.list=async()=>[row('rejected')];
+    return decision;
+  };
+  button(h.render(),'Confirmar').props.onClick();
+  await settle();h.render();await settle();
+  const tree=h.render();
+  assert.equal(h.decisions,1);
+  assert.ok(nodes(tree).some(n=>n.props?.children==='Recusado'));
+  assert.ok(!button(tree,'Recusar convite'));
+  h.unmount();
 });
 test('already completed decision refreshes without retry; sent list has no decision controls or private refs',async()=>{
   const h=harness('BandInvitations');h.render();await settle();button(h.render(),'Recusar convite').props.onClick();
@@ -198,5 +216,6 @@ test('dashboard invitations are independent of band count and sent list stays ad
   }
   assert.ok(conditions.every(condition=>!condition.includes('bands')));
   const members=fs.readFileSync('src/app/bandas/[bandId]/membros/page.tsx','utf8');
-  assert.match(members,/\{isAdmin && <BandInvitations[^>]*bandId=\{bandId\}/);
+  assert.match(members,/const activePanel = isAdmin \? panel : "members"/);
+  assert.match(members,/\{activePanel === "sent" && <BandInvitations[^>]*bandId=\{bandId\}/);
 });

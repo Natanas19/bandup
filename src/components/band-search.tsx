@@ -13,7 +13,11 @@ import { safeBandLogo } from "@/lib/public-band-data";
 const button = "min-h-11 rounded-xl border border-accent-border px-4 py-3 text-sm font-semibold text-brand hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus disabled:opacity-50";
 const input = "min-h-11 w-full min-w-0 rounded-xl border border-outline bg-surface px-4 py-3 text-base text-content focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus";
 
-export default function BandSearch({ onRequestsChanged }: { onRequestsChanged?: () => void } = {}) {
+export default function BandSearch({ onRequestsChanged, headerFormId }: {
+  onRequestsChanged?: () => void;
+  headerFormId?: string;
+} = {}) {
+  const compact = headerFormId !== undefined;
   const [name, setName] = useState<string | null>(null);
   const [accountReady, setAccountReady] = useState(false);
   const [accountFailed, setAccountFailed] = useState(false);
@@ -66,17 +70,23 @@ export default function BandSearch({ onRequestsChanged }: { onRequestsChanged?: 
     }
   }, [confirming]);
 
-  if (!BAND_ENTRY_BACKEND_VALIDATED) return <section className="mt-7 min-w-0 space-y-3 rounded-2xl border border-nav-border bg-surface p-4 sm:p-6" aria-label="Buscar banda pelo nome ou ID">
+  if (!BAND_ENTRY_BACKEND_VALIDATED) return <section className={compact ? "min-w-0" : "mt-7 min-w-0 space-y-3 rounded-2xl border border-nav-border bg-surface p-4 sm:p-6"} aria-label="Buscar banda pelo nome ou ID">
     <h2 className="text-xl font-semibold text-content">Busca de bandas</h2>
-    <p role="status" className="text-sm leading-6 text-content-muted">A busca e os pedidos de entrada precisam da configuração Supabase deste projeto. Configure NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY para habilitar esta tela.</p>
+    <p role="status" className="text-sm leading-6 text-content-muted">{compact ? "A busca de bandas está indisponível." : "A busca e os pedidos de entrada precisam da configuração Supabase deste projeto. Configure NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY para habilitar esta tela."}</p>
   </section>;
 
-  async function search(after: string | null = null) {
-    if (pending.current || checkingEligibility.current || !query.trim()) return;
+  function resetSearch(term: string) {
+    generation.current++; setQuery(term); setBands([]); setNext(null); setSearched(false);
+    setSelected(null); setConfirming(false); setOutcome(null); setError(""); setLoading(false);
+    setEntryEligibility(null);
+  }
+
+  async function search(after: string | null = null, term = query) {
+    if (pending.current || checkingEligibility.current || !term.trim()) return;
     const ticket = ++generation.current;
     setLoading(true); setError(""); setSelected(null); setConfirming(false); setOutcome(null);
     try {
-      const result = await searchBandNames(createBandEntryService(getSupabaseBrowserClient()), query, after);
+      const result = await searchBandNames(createBandEntryService(getSupabaseBrowserClient()), term, after);
       if (!live.current || ticket !== generation.current) return;
       setBands(previous => after ? [...previous, ...result.matches] : result.matches);
       setNext(result.next); setSearched(true);
@@ -134,26 +144,31 @@ export default function BandSearch({ onRequestsChanged }: { onRequestsChanged?: 
     }
   }
 
-  return <section className="mt-7 min-w-0 space-y-5 rounded-2xl border border-nav-border bg-surface p-4 sm:p-6" aria-label="Buscar banda pelo nome ou ID">
-    <h2 className="text-xl font-semibold text-content">Encontre uma banda pelo nome ou ID</h2>
+  return <section className={compact ? "min-w-0 space-y-3" : "mt-7 min-w-0 space-y-5 rounded-2xl border border-nav-border bg-surface p-4 sm:p-6"} aria-label="Buscar banda pelo nome ou ID">
+    {!compact && <h2 className="text-xl font-semibold text-content">Encontre uma banda pelo nome ou ID</h2>}
     {error && <p role="alert" className="text-sm leading-6 text-danger">{error}</p>}
-    <form className="space-y-3" onSubmit={event => { event.preventDefault(); void search(); }}>
+    {compact ? <form id={headerFormId} onSubmit={event => {
+      event.preventDefault();
+      const term = new FormData(event.currentTarget).get("band-query");
+      if (typeof term !== "string" || !term.trim() || loading || pending.current || checkingEligibility.current) return;
+      resetSearch(term);
+      void search(null, term);
+    }} /> : <form className="space-y-3" onSubmit={event => { event.preventDefault(); void search(); }}>
       <label htmlFor="band-search-name" className="block text-sm font-semibold text-content">Nome ou ID da banda</label>
       <input id="band-search-name" type="search" required maxLength={100} autoComplete="off" className={input} value={query} disabled={sending}
-        onChange={event => {
-          generation.current++; setQuery(event.target.value); setBands([]); setNext(null); setSearched(false);
-          setSelected(null); setConfirming(false); setOutcome(null); setError(""); setLoading(false);
-          setEntryEligibility(null);
-        }} />
+        onChange={event => resetSearch(event.target.value)} />
       <button className={button} disabled={!query.trim() || loading || sending}>{loading ? "Buscando..." : "Buscar bandas"}</button>
-    </form>
+    </form>}
     {!searched && !loading && <p role="status" className="text-sm text-content-muted">Digite o nome ou ID de uma banda para começar. Nenhuma banda é listada antes da sua busca.</p>}
     {loading && <p role="status" className="text-sm text-content-muted">Pesquisando bandas cadastradas...</p>}
     {searched && !loading && !bands.length && <p role="status" className="text-sm text-content-muted">{next ? "Nenhuma correspondência neste trecho da busca. Continue pesquisando mais bandas." : "Nenhuma banda encontrada para essa pesquisa."}</p>}
-    {bands.map(band => <article key={band.band_id} className="space-y-3 rounded-xl border border-nav-border p-4">
+    {bands.map(band => <article key={band.band_id} className={compact ? "flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-nav-border bg-surface p-2.5" : "space-y-3 rounded-xl border border-nav-border p-4"}>
       <div className="flex min-w-0 items-center gap-3">
         <ProfileAvatar name={band.name} imageUrl={safeBandLogo(band.logo_url, process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://invalid.local")} />
-        <h3 className="min-w-0 break-words font-semibold text-content [overflow-wrap:anywhere]">{band.name}</h3>
+        <div className="min-w-0">
+          <h3 className="break-words font-semibold text-content [overflow-wrap:anywhere]">{band.name}</h3>
+          {compact && <p className="text-xs text-content-muted">Banda</p>}
+        </div>
       </div>
       <button ref={selected?.band_id === band.band_id ? opener : undefined} type="button" className={button}
         aria-label={`Solicitar entrada em ${band.name}`}

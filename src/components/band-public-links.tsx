@@ -183,7 +183,7 @@ function LinkManager({ bandId, isAdmin, renderEditor }: Props) {
                             }}><NavigationIcon name="Ellipsis" /></button>}
                         </div>
                         {isAdmin && <div id={actionsId} hidden={!actionsOpen} ref={actionsOpen ? linkActions : undefined}
-                          role="group" aria-label={`Ações do link ${name}`}
+                          role="group" aria-label={`Ações do link ${name}`} data-no-pull-refresh
                           className="scroll-mb-[calc(8rem+env(safe-area-inset-bottom))] group-has-[[data-band-nav-expanded=true]]/band:scroll-mb-[calc(13rem+env(safe-area-inset-bottom))] md:scroll-mb-4">
                           {actionsOpen && <div className="mt-1 grid grid-cols-2 gap-1 rounded-lg bg-surface-muted p-1 sm:flex sm:justify-end">
                             <button type="button" className={menuActionStyles} disabled={busy || editing} aria-label={`Editar link ${name}`}

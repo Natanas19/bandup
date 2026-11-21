@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
-import { UnavailableNotificationTarget } from "@/components/notification-target";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { NotificationTargetStatus, useNotificationTarget } from "@/components/notification-target";
 import Link from "next/link";
 import BandEntryFlow from "@/components/band-entry-flow";
 import { BandInvitations } from "@/components/band-invitations";
@@ -24,6 +24,18 @@ type Member = {
 
 type ListedMember = Member & { label: string; isCurrentUser: boolean };
 type PageState = "loading" | "unauthenticated" | "unavailable" | "error" | "ready";
+type MembersPanel = "members" | "requests" | "received" | "sent";
+type PanelFocus = "trigger" | "heading" | "received" | "sent";
+const requestOptions = [{ panel: "received", title: "Pedidos recebidos" }, { panel: "sent", title: "Convites enviados" }] as const;
+const panelButton = "inline-flex min-h-11 w-fit items-center rounded-xl border border-accent-border px-3 py-2 text-sm font-semibold text-brand hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus disabled:opacity-50";
+
+function RequestsNotification({ canOpen, open }: { canOpen: boolean; open: (panel: MembersPanel) => void }) {
+  const target = useNotificationTarget();
+  useEffect(() => {
+    if (target && canOpen) open("received");
+  }, [target, canOpen, open]);
+  return canOpen ? null : <NotificationTargetStatus target={target} found={false} />;
+}
 
 export default function BandMembersPage() {
   const { bandId } = useParams<{ bandId: string }>();
@@ -38,6 +50,30 @@ export default function BandMembersPage() {
   const [memberActionError, setMemberActionError] = useState("");
   const [leaving, setLeaving] = useState(false);
   const [left, setLeft] = useState(false);
+  const [panel, setPanel] = useState<MembersPanel>("members");
+  const [visitedReceived, setVisitedReceived] = useState(false);
+  const region = useRef<HTMLElement>(null);
+  const nextFocus = useRef<PanelFocus | null>(null);
+  const activePanel = isAdmin ? panel : "members";
+  const canOpenNotification = isAdmin && BAND_ENTRY_BACKEND_VALIDATED;
+
+  useEffect(() => {
+    if (!isAdmin && panel !== "members") setPanel("members");
+    const target = nextFocus.current;
+    if (!target) return;
+    nextFocus.current = null;
+    region.current?.querySelector<HTMLElement>(`[data-panel-focus="${target}"]`)?.focus();
+  }, [activePanel, isAdmin, panel]);
+
+  useEffect(() => {
+    if (!isAdmin) setVisitedReceived(false);
+    else if (activePanel === "received") setVisitedReceived(true);
+  }, [activePanel, isAdmin]);
+
+  function navigatePanel(next: MembersPanel, focus: PanelFocus = "heading") {
+    nextFocus.current = focus;
+    setPanel(next);
+  }
 
   async function removeMember(member: ListedMember) {
     if (!isAdmin || member.role !== "member" || member.isCurrentUser || removingMemberId || leaving || left) return;
@@ -230,12 +266,21 @@ export default function BandMembersPage() {
     );
   }
 
+  const memberCount = (
+    <span className="inline-flex w-fit shrink-0 rounded-full border border-accent-border bg-accent-soft px-3.5 py-2 text-sm font-semibold text-brand">
+      {members.length} {members.length === 1 ? "integrante" : "integrantes"}
+    </span>
+  );
+
   return (
-    <main className="min-w-0 flex-1 px-4 pb-6 pt-5 sm:px-6 sm:py-8 lg:px-10 lg:py-10">
+    <main ref={region} className="min-w-0 flex-1 px-4 pb-6 pt-5 sm:px-6 sm:py-8 lg:px-10 lg:py-10">
       <div className="mx-auto w-full max-w-4xl">
         <BandWorkspaceInfo name={bandName} />
         <div className="md:hidden"><BandNavigation bandId={bandId} activeSection="membros" /></div>
 
+        <Suspense fallback={null}><RequestsNotification canOpen={canOpenNotification} open={setPanel} /></Suspense>
+
+        {activePanel === "members" ? <>
         <header className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between md:mt-6">
           <div className="min-w-0">
             <p className="text-xs font-semibold tracking-[0.16em] text-accent uppercase">Membros</p>
@@ -245,16 +290,12 @@ export default function BandMembersPage() {
             </div>
             <p className="mt-2 text-sm text-content-muted">Integrantes que fazem parte desta banda.</p>
           </div>
-          <span className="inline-flex w-fit shrink-0 rounded-full border border-accent-border bg-accent-soft px-3.5 py-2 text-sm font-semibold text-brand">
-            {members.length} {members.length === 1 ? "integrante" : "integrantes"}
-          </span>
+          {isAdmin ? <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {memberCount}
+            <button type="button" data-panel-focus="trigger" className={panelButton}
+              disabled={removingMemberId !== null || leaving} onClick={() => navigatePanel("requests")}>Solicitações</button>
+          </div> : memberCount}
         </header>
-
-        {BAND_ENTRY_BACKEND_VALIDATED && isAdmin && <>
-          <BandEntryFlow key={`requests:${bandId}`} bandId={bandId} onMembersChanged={() => setMembersRevision(value => value + 1)} />
-        </>}
-        {(!BAND_ENTRY_BACKEND_VALIDATED || !isAdmin) && <Suspense fallback={null}><UnavailableNotificationTarget /></Suspense>}
-        {isAdmin && <BandInvitations key={`invitations:${bandId}`} bandId={bandId} />}
 
         {memberActionError && <p role="alert" className="mt-5 rounded-xl border border-danger-border bg-danger-surface px-4 py-3 text-sm text-danger">{memberActionError}</p>}
 
@@ -292,6 +333,33 @@ export default function BandMembersPage() {
         )}
         <LeaveBandButton key={bandId} bandId={bandId} disabled={removingMemberId !== null}
           onBusyChange={setLeaving} onLeft={() => { setLeft(true); setMembers([]); setIsAdmin(false); }} />
+        </> : <>
+          <header className="flex flex-wrap items-center gap-3 md:mt-6">
+            <button type="button" className={panelButton} onClick={() => {
+              if (activePanel === "requests") navigatePanel("members", "trigger");
+              else navigatePanel("requests", activePanel);
+            }}>← Voltar</button>
+            <h1 tabIndex={-1} data-panel-focus="heading" className="scroll-mt-24 text-xl font-semibold text-content sm:text-2xl">
+              {activePanel === "requests" ? "Solicitações" : requestOptions.find(option => option.panel === activePanel)?.title}
+            </h1>
+          </header>
+          {activePanel === "requests" && <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+            {requestOptions.map(option => <li key={option.panel}>
+              <button type="button" data-panel-focus={option.panel} onClick={() => navigatePanel(option.panel)}
+                className="flex min-h-11 w-full items-center justify-between gap-2 rounded-xl border border-nav-border bg-surface px-3 py-1.5 text-left text-sm font-semibold text-content hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">
+                {option.title}<span aria-hidden="true" className="text-brand">›</span>
+              </button>
+            </li>)}
+          </ul>}
+          {activePanel === "received" && !BAND_ENTRY_BACKEND_VALIDATED &&
+            <p role="status" className="mt-4 text-sm text-content-muted">Solicitações de entrada indisponíveis.</p>}
+          {activePanel === "sent" && <BandInvitations key={`invitations:${bandId}`} bandId={bandId} />}
+        </>}
+        {/* Let an approval finish and refresh members even if the admin goes back. */}
+        {canOpenNotification && (activePanel === "received" || visitedReceived) &&
+          <div hidden={activePanel !== "received"}>
+            <BandEntryFlow key={`requests:${bandId}`} bandId={bandId} onMembersChanged={() => setMembersRevision(value => value + 1)} />
+          </div>}
       </div>
     </main>
   );

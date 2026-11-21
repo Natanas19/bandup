@@ -114,8 +114,8 @@ test('only the sidebar card renders the account name; navigation and responsive 
   assert.match(source, /<aside[\s\S]*<PersonalAccountName\s*\/>[\s\S]*<\/aside>/);
   assert.match(source, /hidden w-64[\s\S]*md:flex/);
   assert.match(source, /<PersonalNavigation sidebar\s*\/>/);
-  assert.match(source, /<SpaceSwitcherHeader settingsHref="\/dashboard\/configuracoes"\s*\/>[\s\S]*<PersonalNavigation\s*\/>/);
+  assert.match(source, /<WorkspaceSearch settingsHref="\/dashboard\/configuracoes" mobileNavigation=\{<PersonalNavigation\s*\/>\}/);
   const header = fs.readFileSync('src/components/space-switcher.tsx', 'utf8');
   assert.match(header, /justify-between/);
-  assert.match(header, /<SpaceSwitcher bandId=\{bandId\} bandName=\{bandName\}\s*\/>[\s\S]*<WorkspaceSettingsMenu href=\{settingsHref\}\s*\/>/);
+  assert.match(header, /<SpaceSwitcher bandId=\{bandId\} bandName=\{bandName\}[^>]*\/>[\s\S]*<WorkspaceSettingsMenu href=\{settingsHref\}\s*\/>/);
 });

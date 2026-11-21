@@ -8,7 +8,7 @@ const React = require('react');
 const ts = require('typescript');
 
 const Avatar = () => null;
-const Flow = () => null, Settings = () => null, Search = () => null;
+const Flow = () => null, Settings = () => null, Search = () => null, Invitations = () => null, Notice = () => null;
 function nodes(tree) {
   if (!tree || typeof tree !== 'object') return [];
   if (Array.isArray(tree)) return tree.flatMap(nodes);
@@ -22,6 +22,7 @@ function fixture({ role = 'admin', enabled = true, signedIn = true, nameError = 
   const hooks = { ...React,
     useState(initial) { const i = cursor++; if (!(i in slots)) slots[i] = initial;
       return [slots[i], value => { slots[i] = typeof value === 'function' ? value(slots[i]) : value; }]; },
+    useRef(initial) { return slots[cursor++] ??= { current: initial }; },
     useEffect(fn, deps) {
       const i = cursor++, old = effects[i];
       if (!old || deps.some((value, j) => value !== old.deps[j])) {
@@ -83,6 +84,8 @@ function fixture({ role = 'admin', enabled = true, signedIn = true, nameError = 
       if (name === '@/lib/record-permissions') return { recordWriteError: error => error?.code === '42501'
         ? 'Sem permissão para remover o integrante.' : 'Não foi possível remover este integrante.' };
       if (name === '@/components/band-entry-flow') return { __esModule: true, default: Flow };
+      if (name === '@/components/band-invitations') return { BandInvitations: Invitations };
+      if (name === '@/components/notification-target') return { useNotificationTarget: () => state.target ?? null, NotificationTargetStatus: Notice };
       if (name === '@/components/band-discovery-settings') return { __esModule: true, default: Settings };
       if (name === '@/components/band-search') return { __esModule: true, default: Search };
       if (name === '@/components/band-workspace') return { BandWorkspaceInfo: () => null };
@@ -96,14 +99,30 @@ function fixture({ role = 'admin', enabled = true, signedIn = true, nameError = 
     const render = () => {
       cursor = 0;
       const tree = Component();
+      if (tree.props.ref) tree.props.ref.current = { querySelector: selector => ({
+        focus() { state.focused = selector; },
+      }) };
       while (scheduled.length) scheduled.shift()();
       return tree;
     };
-    return { render, dispose() { effects.forEach(e => e?.cleanup?.()); } };
+    return {
+      render,
+      renderNotification(tree) {
+        const boundary = nodes(tree).find(node => node.type === React.Suspense);
+        const child = boundary.props.children;
+        cursor = slots.length + 1;
+        const result = child.type(child.props);
+        while (scheduled.length) scheduled.shift()();
+        return result;
+      },
+      dispose() { effects.forEach(e => e?.cleanup?.()); },
+    };
   }
   return { state, mount };
 }
 const settle = async () => { for (let i = 0; i < 8; i++) await new Promise(setImmediate); };
+const panelButton = (tree, key) => tree.find(n => n.type === 'button' && n.props['data-panel-focus'] === key);
+const back = tree => tree.find(n => n.type === 'button' && n.props.children === '← Voltar');
 
 for (const role of ['admin', 'member']) for (const enabled of [true, false]) {
   test(`member page admin panels: role=${role}, local gate=${enabled}`, async () => {
@@ -111,29 +130,77 @@ for (const role of ['admin', 'member']) for (const enabled of [true, false]) {
     const h = f.mount('src/app/bandas/[bandId]/membros/page.tsx');
     h.render(); await settle();
     const tree = nodes(h.render());
-    const expected = role === 'admin' && enabled;
-    assert.equal(tree.some(n => n.type === Flow), expected);
+    assert.equal(!!panelButton(tree, 'trigger'), role === 'admin');
+    assert.equal(tree.some(n => n.type === Flow || n.type === Invitations), false);
     assert.equal(tree.some(n => n.type === Settings), false);
     assert.ok(tree.some(n => n.props?.['aria-label'] === 'Lista de integrantes'));
     for (const q of f.state.reads.filter(q => q.table === 'band_members')) {
       assert.ok(q.filters.some(([key, value]) => key === 'band_id' && value === 'band-a'));
     }
-    if (expected) {
-      assert.equal(tree.find(n => n.type === Flow).props.bandId, 'band-a');
+    if (role === 'admin') {
+      panelButton(tree, 'trigger').props.onClick();
+      const requests = nodes(h.render());
+      assert.equal(requests.some(n => n.props?.['aria-label'] === 'Lista de integrantes'), false);
+      assert.ok(panelButton(requests, 'received') && panelButton(requests, 'sent'));
+      panelButton(requests, 'received').props.onClick();
+      const received = nodes(h.render());
+      assert.equal(received.some(n => n.type === Flow), enabled);
+      assert.equal(received.some(n => n.type === Invitations), false);
+      if (enabled) assert.equal(received.find(n => n.type === Flow).props.bandId, 'band-a');
+      back(received).props.onClick();
+      const hub = nodes(h.render());
+      assert.equal(f.state.focused, '[data-panel-focus="received"]');
+      panelButton(hub, 'sent').props.onClick();
+      const sent = nodes(h.render());
+      assert.ok(sent.some(n => n.type === Invitations));
+      if (enabled) assert.ok(sent.some(n => n.props.hidden && n.props.children?.type === Flow));
+      back(sent).props.onClick();
+      back(nodes(h.render())).props.onClick();
+      assert.ok(nodes(h.render()).some(n => n.props?.['aria-label'] === 'Lista de integrantes'));
+      assert.equal(f.state.focused, '[data-panel-focus="trigger"]');
     }
     h.dispose();
   });
 }
 
+test('a request notification opens the received panel only with admin access and an available backend', async () => {
+  for (const [role, enabled] of [['admin', true], ['member', true], ['admin', false]]) {
+    const f = fixture({ role, enabled });
+    f.state.target = 'a0000000-0000-0000-0000-000000000001';
+    const h = f.mount('src/app/bandas/[bandId]/membros/page.tsx');
+    h.render(); await settle();
+    const notice = h.renderNotification(h.render());
+    const tree = nodes(h.render());
+    if (role === 'admin' && enabled) {
+      assert.equal(notice, null);
+      assert.ok(tree.some(node => node.type === Flow));
+      assert.equal(tree.some(node => node.type === Invitations), false);
+      back(tree).props.onClick();
+      assert.ok(panelButton(nodes(h.render()), 'received'));
+    } else {
+      assert.equal(notice.type, Notice);
+      assert.equal(notice.props.target, f.state.target);
+      assert.equal(tree.some(node => node.type === Flow), false);
+    }
+    h.dispose();
+  }
+});
+
 test('approval callback reloads real member list without unmounting panels; role loss hides panels', async () => {
   const f = fixture(), h = f.mount('src/app/bandas/[bandId]/membros/page.tsx');
   h.render(); await settle();
   let tree = nodes(h.render());
+  panelButton(tree, 'trigger').props.onClick();
+  panelButton(nodes(h.render()), 'received').props.onClick();
+  tree = nodes(h.render());
   const panel = tree.find(n => n.type === Flow);
   f.state.members.push({ user_id: 'new-member', role: 'member' });
   panel.props.onMembersChanged();
   assert.ok(nodes(h.render()).some(n => n.type === Flow), 'keep panel mounted during member refresh');
   await settle(); tree = nodes(h.render());
+  back(tree).props.onClick();
+  back(nodes(h.render())).props.onClick();
+  tree = nodes(h.render());
   const list = tree.find(n => n.props?.['aria-label'] === 'Lista de integrantes');
   assert.equal(nodes(list).filter(n => n.type === 'article').length, 2);
   f.state.role = 'member';

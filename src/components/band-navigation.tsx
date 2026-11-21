@@ -102,7 +102,7 @@ export default function BandNavigation({ bandId, activeSection, variant = "botto
           const itemLayout = isSidebar
             ? "flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm"
             : isBottom
-              ? "relative flex min-h-[4.25rem] flex-col items-center justify-center gap-1 px-1 text-[0.65rem]"
+              ? "relative flex min-h-[4.25rem] flex-col items-center justify-center gap-1 px-1 text-center text-[0.65rem]"
               : "flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm";
           return <li key={item.section}><Link href={`/bandas/${bandId}${item.suffix}`}
             onClick={isExpandable ? closeNavigation : undefined} aria-current={active ? "page" : undefined}

@@ -81,7 +81,7 @@ export default function BandPublicSections({ bandId, isAdmin, linksManager }: {
             <NavigationIcon name="Plus" />
           </button>
         </div>
-        <div id="band-section-add" hidden={menu !== "add"}
+        <div id="band-section-add" hidden={menu !== "add"} data-no-pull-refresh
           ref={menu === "add" ? openPanel : undefined} className={panelStyle}>
           {available.length ? available.map(label => (
             <button key={label} type="button" className={actionStyle} onClick={() => changeSection(label, true)}>
@@ -127,7 +127,7 @@ export default function BandPublicSections({ bandId, isAdmin, linksManager }: {
                   </button>
                 </div>
               </div>
-              <div id={panelId} hidden={!expanded} ref={expanded ? openPanel : undefined} className={`mt-2 ${panelStyle}`}>
+              <div id={panelId} hidden={!expanded} data-no-pull-refresh ref={expanded ? openPanel : undefined} className={`mt-2 ${panelStyle}`}>
                 {label === "Editar perfil" && (isAdmin ? (
                   <Link href={editProfileHref} className={actionStyle}>Editar foto, nome e descrição</Link>
                 ) : <p className="px-3 py-2 text-sm text-content-muted">Somente administradores podem editar o perfil.</p>)}

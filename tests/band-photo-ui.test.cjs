@@ -8,7 +8,7 @@ const { test } = require('node:test');
 const settle = async () => { for (let i = 0; i < 8; i++) await new Promise(setImmediate); };
 function nodes(tree) { if (!tree || typeof tree !== 'object') return []; if (Array.isArray(tree)) return tree.flatMap(nodes); return [tree, ...nodes(tree.props?.children)]; }
 function harness(filename, extra = {}) {
-  const slots = [], effects = [], pending = [], urls = []; let cursor = 0;
+  const slots = [], effects = [], pending = [], urls = [], focus = []; let cursor = 0;
   const hooks = { ...React,
     useState(value) { const i = cursor++; if (!(i in slots)) slots[i] = value; return [slots[i], value => { slots[i] = typeof value === 'function' ? value(slots[i]) : value; }]; },
     useRef(value) { const i = cursor++; return slots[i] ??= { current: value }; },
@@ -30,7 +30,15 @@ function harness(filename, extra = {}) {
       return require(name);
     },
   });
-  return { slots, urls, render(props) { cursor = 0; const tree = mod.exports.default(props); while (pending.length) pending.shift()(); return nodes(tree); },
+  return { slots, urls, focus, render(props) {
+    cursor = 0;
+    const tree = mod.exports.default(props);
+    if (tree.type === 'main' && tree.props.ref) tree.props.ref.current = {
+      querySelector: selector => ({ focus: () => focus.push(selector) }),
+    };
+    while (pending.length) pending.shift()();
+    return nodes(tree);
+  },
     unmount() { effects.forEach(e => e?.cleanup?.()); } };
 }
 
@@ -70,6 +78,55 @@ test('personal bands render validated photos beside long names without per-band 
   assert.ok(tree.some(n => n.type === 'span' && n.props.children === longBandName && n.props.className.includes('[overflow-wrap:anywhere]')));
   assert.ok(tree.some(n => n.props.href === '/bandas/0' && n.props.className.includes('sm:flex-row')));
   assert.equal(reads, 1);
+  f.unmount();
+});
+
+test('personal bands drill-down shows one list and refreshes bands after an invitation is accepted', async () => {
+  const p = photoPresentation();
+  const Requests = () => null, Invitations = () => null;
+  let accepted = false, reads = 0;
+  const f = harness('src/app/dashboard/bandas/page.tsx', {
+    ...p.modules,
+    '@/components/band-entry-flow': { default: Requests },
+    '@/components/band-invitations': { BandInvitations: Invitations },
+    '@/lib/supabase/client': { getSupabaseBrowserClient: () => ({}) },
+    '@/lib/personal-profile': { async loadPersonalOverview() {
+      reads++;
+      return { bands: accepted ? [{ role: 'member', band: { id: 'nova', name: 'Nova Banda' } }] : [] };
+    } },
+  });
+  const byFocus = (tree, name) => tree.find(n => n.props['data-panel-focus'] === name);
+  const back = tree => tree.find(n => n.type === 'button' && n.props.children === '← Voltar');
+  const visible = (tree, component) => tree.some(n => n.props.children?.type === component && !n.props.hidden);
+  f.render(); await settle();
+  let tree = f.render();
+  assert.ok(tree.some(n => n.props.href === '/descobrir'));
+  assert.ok(!tree.some(n => n.type === Requests || n.type === Invitations));
+  byFocus(tree, 'trigger').props.onClick();
+  tree = f.render();
+  assert.ok(!tree.some(n => n.props.href === '/descobrir'));
+  assert.ok(byFocus(tree, 'sent') && byFocus(tree, 'received'));
+  assert.equal(f.focus.at(-1), '[data-panel-focus="heading"]');
+  byFocus(tree, 'sent').props.onClick();
+  tree = f.render();
+  assert.ok(visible(tree, Requests));
+  assert.ok(!tree.some(n => n.type === Invitations));
+  back(tree).props.onClick();
+  tree = f.render();
+  assert.equal(f.focus.at(-1), '[data-panel-focus="sent"]');
+  byFocus(tree, 'received').props.onClick();
+  tree = f.render();
+  assert.ok(!visible(tree, Requests) && visible(tree, Invitations));
+  const invites = tree.find(n => n.type === Invitations);
+  back(tree).props.onClick();
+  back(f.render()).props.onClick();
+  f.render();
+  assert.equal(f.focus.at(-1), '[data-panel-focus="trigger"]');
+  accepted = true;
+  invites.props.onAccepted();
+  f.render(); await settle();
+  assert.ok(f.render().some(n => n.props.href === '/bandas/nova' && nodes(n).some(child => child.props.children === 'Nova Banda')));
+  assert.equal(reads, 2);
   f.unmount();
 });
 

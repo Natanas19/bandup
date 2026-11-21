@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import NavigationIcon, { type NavigationIconName } from "@/components/navigation-icon";
 import PersonalAccountName from "@/components/personal-account-name";
-import { SpaceSwitcherHeader } from "@/components/space-switcher";
+import WorkspaceSearch from "@/components/workspace-search";
 import { WorkspaceSettingsNavigation } from "@/components/workspace-settings";
 
 const items: { href: string; label: string; icon: NavigationIconName }[] = [
@@ -45,8 +45,7 @@ export default function PersonalWorkspace({ children }: { children: ReactNode })
       <PersonalNavigation sidebar />
       <div className="mt-auto w-full"><WorkspaceSettingsNavigation href="/dashboard/configuracoes" /></div>
     </aside>
-    <SpaceSwitcherHeader settingsHref="/dashboard/configuracoes" />
-    <PersonalNavigation />
-    <div className="flex min-w-0 flex-1 flex-col pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0">{children}</div>
+    <WorkspaceSearch settingsHref="/dashboard/configuracoes" mobileNavigation={<PersonalNavigation />}
+      contentClassName="flex min-w-0 flex-1 flex-col pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0">{children}</WorkspaceSearch>
   </div>;
 }

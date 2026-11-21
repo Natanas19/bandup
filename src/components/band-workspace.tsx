@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import BandNavigation from "@/components/band-navigation";
-import { SpaceSwitcherHeader } from "@/components/space-switcher";
+import WorkspaceSearch from "@/components/workspace-search";
 import { WorkspaceSettingsNavigation } from "@/components/workspace-settings";
 import { PUBLIC_IDENTITY_ENABLED } from "@/lib/publication-control";
 
@@ -47,8 +47,9 @@ export default function BandWorkspace({ bandId, children }: { bandId: string; ch
           </Link>
         </aside>
         <div className="flex min-w-0 flex-1 flex-col">
-          <SpaceSwitcherHeader bandId={bandId} bandName={info?.name} settingsHref={settingsHref} />
-          <div className="flex min-w-0 flex-1 flex-col pb-[calc(7.5rem+env(safe-area-inset-bottom))] group-has-[[data-band-nav-expanded=true]]/band:pb-[calc(13rem+env(safe-area-inset-bottom))] motion-safe:transition-[padding-bottom] motion-safe:duration-200 md:pb-0 md:group-has-[[data-band-nav-expanded=true]]/band:pb-0">{children}</div>
+          <WorkspaceSearch bandId={bandId} bandName={info?.name} settingsHref={settingsHref}
+            searchNavigation={<BandNavigation bandId={bandId} activeSection={activeSection} />}
+            contentClassName="flex min-w-0 flex-1 flex-col pb-[calc(7.5rem+env(safe-area-inset-bottom))] group-has-[[data-band-nav-expanded=true]]/band:pb-[calc(13rem+env(safe-area-inset-bottom))] motion-safe:transition-[padding-bottom] motion-safe:duration-200 md:pb-0 md:group-has-[[data-band-nav-expanded=true]]/band:pb-0">{children}</WorkspaceSearch>
         </div>
       </div>
     </BandInfoContext.Provider>
