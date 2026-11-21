@@ -36,9 +36,18 @@ type BandEvent = {
   created_at: string;
   created_by: string;
   flyer_path?: string | null;
+  is_public?: boolean;
 };
 
 const eventColumns = "id, title, description, event_type, start_at, end_at, location, created_at, created_by";
+function eventReadColumns(flyers: boolean, publication: boolean) {
+  return eventColumns + (flyers ? ", flyer_path" : "") + (publication ? ", is_public" : "");
+}
+
+function isMissingEventPublication(error: { code?: string; message?: string } | null) {
+  return (error?.code === "42703" && /^column (?:public\.)?events\.is_public does not exist$/.test(error.message ?? ""))
+    || (error?.code === "PGRST204" && error.message === "Could not find the 'is_public' column of 'events' in the schema cache");
+}
 const clientsWithoutRelatedTasks = new WeakSet<ReturnType<typeof getSupabaseBrowserClient>>();
 const relatedTasksUnsupported = "Tarefas associadas indisponíveis neste ambiente. Os eventos continuam disponíveis na agenda.";
 const relatedTasksLoadError = "Não foi possível carregar as tarefas dos eventos. Atualize a página para tentar novamente.";
@@ -158,6 +167,9 @@ function BandAgenda() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [relatedTasksNotice, setRelatedTasksNotice] = useState("");
   const [supportsFlyers, setSupportsFlyers] = useState(false);
+  const [supportsPublication, setSupportsPublication] = useState(false);
+  const [publishingEventId, setPublishingEventId] = useState<string | null>(null);
+  const [publicationError, setPublicationError] = useState("");
   const [flyerDraft, setFlyerDraft] = useState<FlyerDraft>(null);
   const access = getBandAccess(currentUserId, isAdmin ? "admin" : "member");
   const originalEvent = events.find((item) => item.id === editingEventId);
@@ -231,14 +243,20 @@ function BandAgenda() {
           return;
         }
 
-        const readEvents = (withFlyers: boolean) => supabase
+        let hasFlyerSupport = true;
+        let hasPublicationSupport = true;
+        const readEvents = () => supabase
           .from("events")
-          .select(eventColumns + (withFlyers ? ", flyer_path" : ""))
+          .select(eventReadColumns(hasFlyerSupport, hasPublicationSupport))
           .eq("band_id", bandId)
           .order("start_at", { ascending: true });
-        let { data, error } = await readEvents(true);
-        const hasFlyerSupport = !isMissingEventFlyerColumn(error);
-        if (!hasFlyerSupport) ({ data, error } = await readEvents(false));
+        let { data, error } = await readEvents();
+        while (error) {
+          if (hasFlyerSupport && isMissingEventFlyerColumn(error)) hasFlyerSupport = false;
+          else if (hasPublicationSupport && isMissingEventPublication(error)) hasPublicationSupport = false;
+          else break;
+          ({ data, error } = await readEvents());
+        }
 
         if (!isMounted) return;
         if (error) {
@@ -249,7 +267,7 @@ function BandAgenda() {
 
         const loadedEvents = (data ?? []) as unknown as BandEvent[];
         if (notificationEvent && !loadedEvents.some(event => event.id === notificationEvent)) {
-          const { data: target } = await supabase.from("events").select(eventColumns + (hasFlyerSupport ? ", flyer_path" : ""))
+          const { data: target } = await supabase.from("events").select(eventReadColumns(hasFlyerSupport, hasPublicationSupport))
             .eq("band_id", bandId).eq("id", notificationEvent).maybeSingle();
           if (!isMounted) return;
           if (target) loadedEvents.push(target as unknown as BandEvent);
@@ -295,6 +313,7 @@ function BandAgenda() {
         setTasksByEvent(groupedTasks);
         setRelatedTasksNotice(taskNotice);
         setSupportsFlyers(hasFlyerSupport);
+        setSupportsPublication(hasPublicationSupport);
         setCurrentTime(Date.now());
         setPageState("ready");
       } catch {
@@ -360,7 +379,7 @@ function BandAgenda() {
 
   async function handleCreateEvent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isSubmitting || deletingEventId) return;
+    if (isSubmitting || deletingEventId || publishingEventId) return;
 
     setFormError("");
     setFormSuccess("");
@@ -443,14 +462,14 @@ function BandAgenda() {
       const scheduleValues = eventSchedulePatch(submittedStartAt, submittedEndAt, originalEvent);
 
       const eventValues = {
-        title: normalizedTitle,
+        ...(editingEventId && normalizedTitle === originalEvent?.title.trim() ? {} : { title: normalizedTitle }),
         description: description.trim() || null,
         event_type: normalizedEventType,
         ...scheduleValues,
         location: location.trim() || null,
       };
 
-      const columns = eventColumns + (supportsFlyers ? ", flyer_path" : "");
+      const columns = eventReadColumns(supportsFlyers, supportsPublication);
       const result = editingEventId
         ? await supabase.from("events").update({ ...eventValues, updated_at: new Date().toISOString() }).eq("id", editingEventId).eq("band_id", bandId).select(columns).maybeSingle()
         : await supabase.from("events").insert({ ...eventValues, band_id: bandId, created_by: user.id }).select(columns).single();
@@ -458,7 +477,10 @@ function BandAgenda() {
       const error = result.error;
 
       if (error || !savedEvent) {
-        setFormError(recordWriteError(error, editingEventId ? "editar este evento" : "criar o evento"));
+        setFormError(error?.code === "42501" && (originalEvent?.is_public
+          || error.message === "Only a band admin may change event publication or public event details")
+          ? "Somente administradores podem alterar o título ou os horários de um evento público. Atualize a página e tente novamente."
+          : recordWriteError(error, editingEventId ? "editar este evento" : "criar o evento"));
         return;
       }
 
@@ -491,8 +513,33 @@ function BandAgenda() {
     }
   }
 
+  async function toggleEventPublication(bandEvent: BandEvent) {
+    if (!isAdmin || !supportsPublication || typeof bandEvent.is_public !== "boolean"
+      || publishingEventId || isSubmitting || deletingEventId) return;
+    const next = !bandEvent.is_public;
+    setPublicationError("");
+    setPublishingEventId(bandEvent.id);
+    try {
+      const { data, error } = await getSupabaseBrowserClient().from("events")
+        .update({ is_public: next }).eq("band_id", bandId).eq("id", bandEvent.id)
+        .eq("is_public", bandEvent.is_public).select("id, is_public").maybeSingle();
+      if (isMissingEventPublication(error)) {
+        setSupportsPublication(false);
+        setPublicationError("A divulgação de eventos ainda está indisponível neste ambiente.");
+      } else if (error || data?.id !== bandEvent.id || data.is_public !== next) {
+        setPublicationError(recordWriteError(error, "alterar a divulgação deste evento"));
+      } else {
+        setEvents(current => current.map(event => event.id === bandEvent.id ? { ...event, is_public: next } : event));
+      }
+    } catch {
+      setPublicationError("Não foi possível confirmar a divulgação. Atualize a página antes de tentar novamente.");
+    } finally {
+      setPublishingEventId(null);
+    }
+  }
+
   async function handleDeleteEvent(bandEvent: BandEvent) {
-    if (isSubmitting || deletingEventId || !window.confirm(`Excluir o evento "${bandEvent.title}"? Esta ação não pode ser desfeita.`)) return;
+    if (isSubmitting || deletingEventId || publishingEventId || !window.confirm(`Excluir o evento "${bandEvent.title}"? Esta ação não pode ser desfeita.`)) return;
 
     setDeleteError("");
     setDeletingEventId(bandEvent.id);
@@ -603,9 +650,12 @@ function BandAgenda() {
               <p className="mt-1 text-sm text-content-subtle">{editingEventId ? "Atualize os detalhes deste evento." : "Informe os detalhes para adicionar à agenda da banda."}</p>
             </div>
             <form onSubmit={handleCreateEvent} className="space-y-5">
+              {!isAdmin && originalEvent?.is_public && <p className="text-sm text-content-muted">
+                Somente administradores podem alterar o título e os horários de um evento público.
+              </p>}
               <div>
                 <label htmlFor="event-title" className="mb-2 block text-sm font-medium text-content-label">Título *</label>
-                <input id="event-title" type="text" required maxLength={200} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex.: Ensaio no estúdio" className="min-h-11 w-full rounded-xl border border-outline bg-surface px-4 py-3 text-base md:text-sm text-content outline-none transition placeholder:text-content-faint focus:border-input-focus focus:ring-4 focus:ring-input-ring" />
+                <input id="event-title" type="text" required maxLength={200} value={title} readOnly={!isAdmin && originalEvent?.is_public === true} onChange={(event) => setTitle(event.target.value)} placeholder="Ex.: Ensaio no estúdio" className="min-h-11 w-full rounded-xl border border-outline bg-surface px-4 py-3 text-base md:text-sm text-content outline-none transition placeholder:text-content-faint focus:border-input-focus focus:ring-4 focus:ring-input-ring" />
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -641,11 +691,11 @@ function BandAgenda() {
                 </div>
                 <div>
                   <label htmlFor="event-start" className="mb-2 block text-sm font-medium text-content-label">Início *</label>
-                  <input id="event-start" type="datetime-local" required min={editingEventId ? undefined : minimumStartAt || undefined} value={startAt} disabled={isSubmitting} onChange={(event) => setStartAt(event.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-outline bg-surface px-3 py-2.5 text-base md:text-sm text-content outline-none focus:border-input-focus focus:ring-4 focus:ring-input-ring" />
+                  <input id="event-start" type="datetime-local" required min={editingEventId ? undefined : minimumStartAt || undefined} value={startAt} disabled={isSubmitting} readOnly={!isAdmin && originalEvent?.is_public === true} onChange={(event) => setStartAt(event.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-outline bg-surface px-3 py-2.5 text-base md:text-sm text-content outline-none focus:border-input-focus focus:ring-4 focus:ring-input-ring" />
                 </div>
                 <div>
                   <label htmlFor="event-end" className="mb-2 block text-sm font-medium text-content-label">Término <span className="font-normal text-content-faint">(opcional)</span></label>
-                  <input id="event-end" type="datetime-local" min={endAtMinimum} value={endAt} disabled={isSubmitting} onChange={(event) => setEndAt(event.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-outline bg-surface px-3 py-2.5 text-base md:text-sm text-content outline-none focus:border-input-focus focus:ring-4 focus:ring-input-ring" />
+                  <input id="event-end" type="datetime-local" min={endAtMinimum} value={endAt} disabled={isSubmitting} readOnly={!isAdmin && originalEvent?.is_public === true} onChange={(event) => setEndAt(event.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-outline bg-surface px-3 py-2.5 text-base md:text-sm text-content outline-none focus:border-input-focus focus:ring-4 focus:ring-input-ring" />
                 </div>
               </div>
 
@@ -671,6 +721,7 @@ function BandAgenda() {
         )}
 
         {deleteError && <p role="alert" className="mt-5 rounded-xl border border-danger-border bg-danger-surface px-4 py-3 text-sm text-danger">{deleteError}</p>}
+        {publicationError && <p role="alert" className="mt-5 rounded-xl border border-danger-border bg-danger-surface px-4 py-3 text-sm text-danger">{publicationError}</p>}
 
         <NotificationTargetStatus target={notificationEvent} found={events.some(event => event.id === notificationEvent)} />
         {events.length === 0 ? (
@@ -702,6 +753,8 @@ function BandAgenda() {
                         <div className="flex flex-wrap items-center gap-2">
                           <h2 className="break-words text-base font-semibold text-content sm:text-lg">{bandEvent.title}</h2>
                           {isUpcoming && <span className="rounded-full bg-accent-soft px-2.5 py-1 text-[11px] font-semibold text-accent">Próximo</span>}
+                          {supportsPublication && typeof bandEvent.is_public === "boolean" &&
+                            <span className="rounded-full bg-surface-muted px-2.5 py-1 text-xs font-semibold text-content-muted">{bandEvent.is_public ? "Público" : "Interno"}</span>}
                         </div>
                         <p className="mt-2 text-xs font-semibold tracking-wide text-accent uppercase">{getEventTypeLabel(bandEvent.event_type)}</p>
                       </div>
@@ -738,10 +791,23 @@ function BandAgenda() {
                   )}
                   </CardDetails>
                   {(canEditEvent(access, bandEvent) || isAdmin) && <div className="mt-4 flex flex-wrap justify-end gap-2 pt-3">
+                    {isAdmin && supportsPublication && typeof bandEvent.is_public === "boolean" && (
+                      <label className="inline-flex min-h-11 items-center gap-2 px-2 text-sm font-semibold text-content">
+                        <input type="checkbox" checked={bandEvent.is_public}
+                          disabled={publishingEventId !== null || isSubmitting || deletingEventId !== null}
+                          aria-label={`Divulgar na Página Pública: ${bandEvent.title}`}
+                          onChange={() => void toggleEventPublication(bandEvent)}
+                          className="h-4 w-4 accent-primary focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus" />
+                        <span>
+                          Divulgar na Página Pública
+                          <span className="block text-xs font-normal text-content-muted">Visível quando o perfil da banda estiver público.</span>
+                        </span>
+                      </label>
+                    )}
                     {canEditEvent(access, bandEvent) && <button
                       type="button"
                       onClick={() => startEditingEvent(bandEvent)}
-                      disabled={isSubmitting || deletingEventId !== null}
+                      disabled={isSubmitting || deletingEventId !== null || publishingEventId !== null}
                       className="inline-flex min-h-10 items-center rounded-xl border border-accent-border px-4 py-2 text-sm font-semibold text-brand transition hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Editar
@@ -751,7 +817,7 @@ function BandAgenda() {
                       <button
                         type="button"
                         onClick={() => void handleDeleteEvent(bandEvent)}
-                        disabled={isSubmitting || deletingEventId !== null}
+                        disabled={isSubmitting || deletingEventId !== null || publishingEventId !== null}
                         className="inline-flex min-h-10 items-center rounded-xl border border-danger-border px-4 py-2 text-sm font-semibold text-danger transition hover:bg-danger-surface focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {deletingEventId === bandEvent.id ? "Excluindo..." : "Excluir"}

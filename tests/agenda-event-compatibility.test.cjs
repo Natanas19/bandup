@@ -11,7 +11,7 @@ const event = { id: 'event', title: 'Show', event_type: 'show', start_at: '2099-
   end_at: null, description: null, location: null, created_by: 'user' };
 const task = { id: 'task', event_id: 'event', title: 'Soundcheck', status: 'todo', priority: 'high' };
 
-async function loadAgenda({ taskError = null, taskThrows = false, flyerError = null, events = [event], signedIn = true, member = true, updateError = null, notificationTarget = null, targetEvent = null } = {}) {
+async function loadAgenda({ taskError = null, taskThrows = false, flyerError = null, publicationError = null, events = [event], signedIn = true, member = true, role = 'admin', updateError = null, notificationTarget = null, targetEvent = null } = {}) {
   const states = [], effects = [], calls = [], cache = new Map();
   let cursor = 0;
   const client = {
@@ -21,12 +21,13 @@ async function loadAgenda({ taskError = null, taskThrows = false, flyerError = n
       const result = (single = false) => {
         if (table === 'tasks' && taskThrows) throw new Error('Network failure');
         const isTargetRead = notificationTarget && call.filters.some(([column, value]) => column === 'id' && value === notificationTarget);
-        const data = table === 'band_members' ? member ? { role: 'admin' } : null
+        const data = table === 'band_members' ? member ? { role } : null
           : table === 'bands' ? { name: 'Demo' }
           : table === 'events' ? (single ? isTargetRead ? targetEvent : { ...events[0], ...call.update } : events)
           : taskError ? null : [task];
         return { data, error: table === 'tasks' ? taskError : call.update && updateError ? updateError
-          : table === 'events' && call.columns.includes('flyer_path') ? flyerError : null };
+          : table === 'events' && call.columns?.includes('flyer_path') && flyerError ? flyerError
+          : table === 'events' && call.columns?.includes('is_public') ? publicationError : null };
       };
       return {
         select(columns) { call.columns = columns; return this; },
@@ -92,6 +93,43 @@ function text(tree) {
   if (Array.isArray(tree)) return tree.map(text).join(' ');
   return text(tree.props?.children);
 }
+
+test('band agenda independently removes missing publication and flyer columns', async () => {
+  const f = await loadAgenda({
+    flyerError: {code: '42703', message: 'column events.flyer_path does not exist'},
+    publicationError: {code: '42703', message: 'column events.is_public does not exist'},
+  });
+  assert.equal(f.states[0], 'ready');
+  assert.deepEqual(f.calls.filter(call => call.table === 'events').map(call => [
+    call.columns.includes('flyer_path'), call.columns.includes('is_public'),
+  ]), [[true, true], [false, true], [false, false]]);
+  assert.doesNotMatch(text(f.tree), /Divulgar na Página Pública/);
+});
+
+test('administrator toggles publication on the existing event and member only sees its status', async () => {
+  function controls(tree) {
+    if (Array.isArray(tree)) return tree.flatMap(controls);
+    if (!tree?.props) return [];
+    return [tree, ...controls(tree.props.children)];
+  }
+  const switchOf = tree => controls(tree).find(el => el.type === 'input' && el.props.type === 'checkbox');
+  const f = await loadAgenda({events: [{...event, is_public: false}]});
+  assert.match(text(f.tree), /Interno/);
+  switchOf(f.tree).props.onChange();
+  await new Promise(setImmediate);
+  const write = f.calls.find(call => call.update);
+  assert.deepEqual(JSON.parse(JSON.stringify(write.update)), {is_public: true});
+  assert.deepEqual(write.filters, [['band_id', 'band'], ['id', 'event'], ['is_public', false]]);
+  const published = f.render();
+  assert.match(text(published), /Público/);
+  assert.equal(switchOf(published).props.checked, true);
+  switchOf(published).props.onChange();
+  await new Promise(setImmediate);
+  assert.match(text(f.render()), /Interno/);
+  const member = await loadAgenda({role: 'member', events: [{...event, is_public: true}]});
+  assert.match(text(member.tree), /Público/);
+  assert.equal(switchOf(member.tree), undefined);
+});
 
 test('agenda recognizes and remembers a missing task event column on the same client', async () => {
   const f = await loadAgenda({ taskError: { code: '42703', message: 'column public.tasks.event_id does not exist' } });
