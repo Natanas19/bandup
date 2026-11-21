@@ -168,6 +168,9 @@ export default function LoginPage() {
                     placeholder="Sua senha"
                     className="w-full rounded-xl border border-outline bg-surface px-4 py-3 text-base md:text-sm text-content outline-none transition placeholder:text-content-faint focus:border-input-focus focus:ring-4 focus:ring-input-ring"
                   />
+                  <Link href="/esqueci-minha-senha" className="mt-1 inline-flex min-h-11 items-center rounded-control text-sm font-semibold text-brand underline focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus">
+                    Esqueci minha senha?
+                  </Link>
                 </div>
 
                 {error && (

@@ -205,8 +205,10 @@ test('UI identifies per-card actions, exposes processing and provides narrow-lay
   assert.equal(button(tree,'Convidar músico').props.disabled,true);
   resolveSend(id);await settle();assert.ok(button(discovery.render(),'Convite enviado'));discovery.unmount();
 });
-test('dashboard invitations are independent of band count and sent list stays admin-only',()=>{
-  const source=ts.createSourceFile('dashboard.tsx',fs.readFileSync('src/app/dashboard/page.tsx','utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+test('personal invitations live in My Bands regardless of band count and sent list stays admin-only',()=>{
+  const overview=fs.readFileSync('src/app/dashboard/page.tsx','utf8');
+  assert.doesNotMatch(overview,/BandInvitations|band-invitations/);
+  const source=ts.createSourceFile('bands.tsx',fs.readFileSync('src/app/dashboard/bandas/page.tsx','utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
   let invitation;
   function visit(node){if(ts.isJsxSelfClosingElement(node)&&node.tagName.getText(source)==='BandInvitations')invitation=node;ts.forEachChild(node,visit);}
   visit(source);assert.ok(invitation);const conditions=[];
