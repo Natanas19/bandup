@@ -160,7 +160,7 @@ export function SpaceSwitcherHeader({ bandId, bandName, settingsHref, onSearch, 
         <div className={`${searchActive ? "hidden md:block" : ""} w-full min-w-0 sm:w-auto md:w-72`}><SpaceSwitcher bandId={bandId} bandName={bandName} onSearch={onSearch} summaryRef={summaryRef} /></div>
       </div>
       <div className={searchActive ? "hidden md:contents" : "contents"}><NotificationsMenu /></div>
-      <div className={searchActive ? "hidden" : "shrink-0 md:hidden"}><WorkspaceSettingsMenu href={settingsHref} /></div>
+      <div className={searchActive ? "hidden" : "shrink-0 md:hidden"}><WorkspaceSettingsMenu href={settingsHref} bandId={bandId} /></div>
     </div>
   </header>;
 }

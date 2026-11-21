@@ -757,7 +757,12 @@ test("shared band layout reserves desktop space and retains a fixed sidebar acro
       assert.equal(html.includes(`href="/bandas/theme-band/${section}"`), false);
       assert.equal((html.match(/aria-disabled="true"/g) ?? []).length, 5);
     } else if (section === "perfil-publico") {
-      assert.match(html, /aria-current="page"[^>]*href="\/bandas\/theme-band\/perfil-publico"/);
+      const sidebar = html.match(/<aside\b[^>]*>[\s\S]*?<\/aside>/)?.[0];
+      const mobileSettings = html.match(/<nav aria-label="Configurações rápidas"[^>]*>[\s\S]*?<\/nav>/)?.[0];
+      for (const navigation of [sidebar, mobileSettings]) {
+        assert.ok(navigation);
+        assert.match(navigation, /aria-current="page"[^>]*bg-accent-soft text-brand[^>]*href="\/bandas\/theme-band\/perfil-publico"/);
+      }
       assert.match(html, /href="\/bandas\/theme-band\/configuracoes"/);
       assert.equal((html.match(/aria-disabled="true"/g) ?? []).length, 5);
     } else {
@@ -857,18 +862,19 @@ test("card clicks toggle independently and ignore actions, links, native summary
 });
 
 
-test("only band sidebar navigation includes disabled upcoming sections", () => {
+test("band sidebar links to the public profile while keeping upcoming sections disabled", () => {
   const loader = modules({ publicIdentityEnabled: false });
   const Navigation = loader.load("src/components/band-navigation.tsx").default;
   const { ThemeProvider } = loader.load("src/components/theme-provider.tsx");
   for (const variant of ["sidebar", "expandable"]) {
     const html = renderToStaticMarkup(React.createElement(ThemeProvider, null, React.createElement(Navigation, { bandId: "band", activeSection: "agenda", variant })));
     assert.match(html, /aria-current="page"[^>]*href="\/bandas\/band\/agenda"/);
-    assert.equal(/href="\/bandas\/band\/(links|perfil-publico|loja|ingressos)"/.test(html), false);
+    assert.match(html, /href="\/bandas\/band\/perfil-publico"/);
+    assert.doesNotMatch(html, /href="\/bandas\/band\/(links|loja|ingressos)"/);
     const sidebar = variant === "sidebar";
-    assert.equal((html.match(/Em breve/g) ?? []).length, sidebar ? 4 : 0);
-    assert.equal((html.match(/aria-disabled="true"/g) ?? []).length, sidebar ? 4 : 0);
-    for (const label of sidebar ? ["Perfil público", "Links", "Loja", "Ingressos"] : []) assert.ok(html.includes(label));
+    assert.equal((html.match(/Em breve/g) ?? []).length, sidebar ? 3 : 0);
+    assert.equal((html.match(/aria-disabled="true"/g) ?? []).length, sidebar ? 3 : 0);
+    for (const label of sidebar ? ["Links", "Loja", "Ingressos"] : []) assert.ok(html.includes(label));
 
     assert.ok((html.match(/<svg /g) ?? []).length >= 4);
     for (const svg of html.match(/<svg[^>]*>/g)) {
@@ -887,18 +893,20 @@ test("band bottom navigation keeps four active destinations and collapsed inform
   for (const href of ["/bandas/band", "/bandas/band/tarefas", "/bandas/band/agenda", "/bandas/band/membros"]) {
     assert.equal((html.match(new RegExp(`href="${href}"`, "g")) ?? []).length, 1);
   }
-  assert.equal((html.match(/aria-disabled="true"/g) ?? []).length, 4);
+  assert.match(html, /href="\/bandas\/band\/perfil-publico"/);
+  assert.equal((html.match(/aria-disabled="true"/g) ?? []).length, 3);
   assert.match(html, /aria-expanded="false"/);
   assert.match(html, /aria-hidden="true"[^>]*grid-rows-\[0fr\]/);
-  assert.equal((html.match(/Em breve/g) ?? []).length, 4);
+  assert.equal((html.match(/Em breve/g) ?? []).length, 3);
   assert.match(html, /fixed inset-x-0 bottom-0[^\"]*md:hidden/);
 });
 
-test("mobile settings retain functional controls without duplicating upcoming band destinations", () => {
-  const loader = modules();
+test("mobile band settings link to the public profile and retain the existing controls", () => {
+  const loader = modules({ publicIdentityEnabled: false, testPathname: "/bandas/band/perfil-publico" });
   const { WorkspaceSettingsMenu } = loader.load("src/components/workspace-settings.tsx");
   const bandHtml = renderToStaticMarkup(React.createElement(WorkspaceSettingsMenu, {
-    href: "/bandas/band/settings",
+    href: "/bandas/band/configuracoes",
+    bandId: "band",
   }));
   const personalHtml = renderToStaticMarkup(React.createElement(WorkspaceSettingsMenu, {
     href: "/dashboard/configuracoes",
@@ -910,7 +918,9 @@ test("mobile settings retain functional controls without duplicating upcoming ba
     assert.match(html, /Privacidade/);
     assert.match(html, />Sair<\/button>/);
   }
-  for (const label of ["Perfil público", "Links", "Loja", "Ingressos"]) {
+  assert.match(bandHtml, /aria-current="page"[^>]*bg-accent-soft text-brand[^>]*href="\/bandas\/band\/perfil-publico"/);
+  assert.doesNotMatch(personalHtml, /Perfil público|perfil-publico/);
+  for (const label of ["Links", "Loja", "Ingressos"]) {
     assert.equal(bandHtml.includes(label), false);
     assert.equal(bandHtml.includes(`>${label}</a>`), false);
     assert.equal(personalHtml.includes(label), false);
@@ -919,7 +929,7 @@ test("mobile settings retain functional controls without duplicating upcoming ba
   assert.match(bandHtml, /max-h-\[calc\(100dvh-6rem\)\][^\"]*overflow-y-auto/);
   assert.equal(/tabindex=/i.test(bandHtml), false);
   assert.equal(/onclick=/i.test(bandHtml), false);
-  assert.match(bandHtml, /href="\/bandas\/band\/settings"/);
+  assert.match(bandHtml, /href="\/bandas\/band\/configuracoes"/);
 });
 
 function linksInteractionFixture(options = {}) {

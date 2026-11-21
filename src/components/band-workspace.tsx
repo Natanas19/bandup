@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 import BandNavigation from "@/components/band-navigation";
 import WorkspaceSearch from "@/components/workspace-search";
 import { WorkspaceSettingsNavigation } from "@/components/workspace-settings";
-import { PUBLIC_IDENTITY_ENABLED } from "@/lib/publication-control";
 
 type BandInfo = { name: string; role?: string };
 const BandInfoContext = createContext<((info: BandInfo) => void) | null>(null);
@@ -23,7 +22,7 @@ export default function BandWorkspace({ bandId, children }: { bandId: string; ch
   const [info, setInfo] = useState<BandInfo | null>(null);
   const section = pathname.split("/")[3];
   const activeSection = section === "tarefas" || section === "agenda" || section === "membros" || section === "links" || section === "perfil-publico" || section === "configuracoes" ? section : "overview";
-  const settingsHref = `/bandas/${bandId}/${PUBLIC_IDENTITY_ENABLED ? "configuracoes" : "perfil-publico"}`;
+  const settingsHref = `/bandas/${bandId}/configuracoes`;
 
   return (
     <BandInfoContext.Provider value={setInfo}>

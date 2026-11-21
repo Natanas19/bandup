@@ -35,8 +35,9 @@ function SignOutButton() {
   </>;
 }
 
-function SettingsLinks({ href, onNavigate }: {
+function SettingsLinks({ href, publicProfileHref, onNavigate }: {
   href: string;
+  publicProfileHref?: string;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
@@ -46,6 +47,11 @@ function SettingsLinks({ href, onNavigate }: {
       className={`${base} ${pathname === href ? "bg-accent-soft text-brand" : "text-content-muted hover:bg-accent-soft hover:text-brand"}`}>
       <NavigationIcon name="Settings" />Configurações
     </Link>
+    {publicProfileHref && <Link href={publicProfileHref} onClick={onNavigate}
+      aria-current={pathname === publicProfileHref ? "page" : undefined}
+      className={`${base} ${pathname === publicProfileHref ? "bg-accent-soft text-brand" : "text-content-muted hover:bg-accent-soft hover:text-brand"}`}>
+      <NavigationIcon name="Globe" />Perfil público
+    </Link>}
     <span aria-disabled="true" className="flex min-h-11 items-center justify-between gap-2 rounded-control px-3 py-2.5 text-sm text-content-faint">
       <span className="inline-flex items-center gap-3"><NavigationIcon name="ShieldCheck" />Privacidade</span>
       <span className="rounded-full bg-disabled-surface px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-content-subtle">Em breve</span>
@@ -62,7 +68,7 @@ export function WorkspaceSettingsNavigation({ href }: { href: string }) {
   </div>;
 }
 
-export function WorkspaceSettingsMenu({ href }: { href: string }) {
+export function WorkspaceSettingsMenu({ href, bandId }: { href: string; bandId?: string }) {
   const menu = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
     if (menu.current) return bindDetailsDismiss(menu.current);
@@ -75,7 +81,7 @@ export function WorkspaceSettingsMenu({ href }: { href: string }) {
     <div className="absolute right-0 top-full z-40 mt-2 max-h-[calc(100dvh-6rem)] w-64 overflow-y-auto overscroll-contain rounded-panel border border-outline bg-surface p-2 shadow-app-panel">
       <p className="px-3 py-2 text-xs font-semibold uppercase tracking-widest text-content-muted">Configurações e conta</p>
       <nav aria-label="Configurações rápidas" className="space-y-1">
-        <SettingsLinks href={href} onNavigate={close} />
+        <SettingsLinks href={href} publicProfileHref={bandId ? `/bandas/${encodeURIComponent(bandId)}/perfil-publico` : undefined} onNavigate={close} />
         <div className="my-1 border-t border-outline-subtle" />
         <SignOutButton />
       </nav>
