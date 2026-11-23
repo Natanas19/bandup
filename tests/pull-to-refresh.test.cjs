@@ -38,7 +38,7 @@ function fixture(pathname = "/dashboard") {
   function send(type, touches, options = {}) {
     let prevented = false;
     listeners.get(type)?.fn({
-      touches, changedTouches: [], target, cancelable: true,
+      type, touches, changedTouches: [], target, cancelable: true,
       preventDefault() { prevented = true; }, ...options,
     });
     return prevented;
@@ -47,7 +47,8 @@ function fixture(pathname = "/dashboard") {
   const move = (x, y, options) => send("touchmove", [touch(x, y)], options);
   const end = (x, y) => send("touchend", [], { changedTouches: [touch(x, y)] });
   return { doc, browser, listeners, styles, pulls, target, start, move, end, send,
-    install: () => installPullToRefresh(doc, browser, {
+    install: onDiagnostics => installPullToRefresh(doc, browser, {
+      onDiagnostics,
       isRefreshing: () => updates > 0,
       onPull: (distance, ready) => pulls.push([distance, ready]),
       onRefresh: () => { updates++; },
@@ -120,6 +121,68 @@ test("desktop and browsers without overscroll control retain native behavior", (
     assert.equal(f.listeners.size, 0);
     assert.equal(f.styles.size, 0);
   }
+});
+
+test("diagnostics report listener gates and observe touch events passively when gated off", () => {
+  const f = fixture();
+  f.browser.matchMedia = query => ({ matches: query === "(display-mode: standalone)" });
+  f.browser.CSS.supports = () => false;
+  const snapshots = [];
+  const dispose = f.install(snapshot => snapshots.push(snapshot));
+  assert.equal(snapshots[0].standalone, true);
+  assert.equal(snapshots[0].maxTouchPoints, 1);
+  assert.equal(snapshots[0].cssSupported, false);
+  assert.equal(snapshots[0].listenersInstalled, false);
+  assert.equal(f.styles.size, 0);
+  assert.ok([...f.listeners.values()].every(listener => listener.options.passive));
+  f.start();
+  assert.equal(f.move(0, 90), false);
+  assert.equal(snapshots.at(-1).events.touchmove.count, 1);
+  assert.match(snapshots.at(-1).reason, /CSS/);
+  assert.equal(snapshots[0].events.touchmove, undefined);
+  dispose();
+  assert.equal(f.listeners.size, 0);
+});
+
+test("diagnostics retain the rejection through touchend and report cancellation and refresh", () => {
+  const f = fixture();
+  f.browser.navigator.standalone = true;
+  let status;
+  f.install(snapshot => { status = snapshot; });
+  assert.equal(status.listenersInstalled, true);
+  assert.equal(status.standalone, true);
+  f.start();
+  assert.equal(f.move(0, 90, { cancelable: false }), false);
+  f.end(0, 90);
+  assert.equal(status.reason, "touchmove não cancelável");
+  assert.equal(status.events.touchstart.count, 1);
+  assert.equal(status.events.touchmove.cancelable, false);
+  assert.equal(status.events.touchend.count, 1);
+  f.start();
+  f.move(0, 90);
+  f.send("touchcancel", [], { cancelable: false });
+  assert.equal(status.events.touchcancel.cancelable, false);
+  assert.equal(status.reason, "Gesto cancelado pelo navegador");
+  assert.equal(f.updates(), 0);
+  f.start();
+  f.move(0, 90);
+  f.end(0, 90);
+  assert.equal(status.reason, "Atualização solicitada");
+  assert.equal(f.updates(), 1);
+});
+
+test("the diagnostic icon launches with the URL flag and has a separate manifest ID", async () => {
+  const normal = load("src/app/manifest.ts").default();
+  const { GET } = load("src/app/pull-refresh-debug-manifest/route.ts", {
+    Response, require: () => ({ default: () => normal }),
+  });
+  const response = GET();
+  const debug = await response.json();
+  assert.equal(response.headers.get("content-type"), "application/manifest+json");
+  assert.notEqual(debug.id, normal.id);
+  assert.equal(debug.start_url, "/cadastro?debugPullRefresh=1");
+  assert.equal(debug.display, "standalone");
+  assert.equal(normal.start_url, "/");
 });
 
 test("the global control uses Next refresh for server profiles and document reload for client queries", () => {
