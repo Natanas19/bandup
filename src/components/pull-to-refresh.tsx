@@ -1,16 +1,18 @@
 "use client";
 
 import { Suspense, useEffect, useRef, useState, useTransition } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { installPullToRefresh, pullRefreshTouchEvents, usesServerRefresh, type PullRefreshDiagnostics } from "@/lib/pull-to-refresh";
 
-function DebugFlag({ onChange }: { onChange: (enabled: boolean) => void }) {
-  const enabled = useSearchParams()?.get("debugPullRefresh") === "1";
+function DebugFlag({ debugPath, onChange }: { debugPath?: string; onChange: (enabled: boolean) => void }) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const enabled = pathname === debugPath || searchParams?.get("debugPullRefresh") === "1";
   useEffect(() => onChange(enabled), [enabled, onChange]);
   return null;
 }
 
-export default function PullToRefresh() {
+export default function PullToRefresh({ debugPath }: { debugPath?: string }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [refresh, setRefresh] = useState<"server" | "document" | null>(null);
@@ -36,15 +38,7 @@ export default function PullToRefresh() {
   }), [debug, router, startTransition]);
 
   useEffect(() => {
-    if (!debug) {
-      setDiagnostics(null);
-      return;
-    }
-    const manifest = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
-    const href = manifest?.getAttribute("href");
-    if (!manifest || !href) return;
-    manifest.setAttribute("href", "/pull-refresh-debug-manifest");
-    return () => manifest.setAttribute("href", href);
+    if (!debug) setDiagnostics(null);
   }, [debug]);
 
   useEffect(() => {
@@ -66,7 +60,7 @@ export default function PullToRefresh() {
 
   return (
     <>
-      <Suspense fallback={null}><DebugFlag onChange={setDebug} /></Suspense>
+      <Suspense fallback={null}><DebugFlag debugPath={debugPath} onChange={setDebug} /></Suspense>
       {debug && diagnostics && (
         <aside aria-label="Diagnóstico de pull-to-refresh"
           className="pointer-events-none fixed right-2 top-[calc(env(safe-area-inset-top)+3rem)] z-50 max-w-[calc(100vw-1rem)] rounded-lg border border-nav-border bg-surface px-2 py-1.5 font-mono text-xs text-content shadow-app-card">

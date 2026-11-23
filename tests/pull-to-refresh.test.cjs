@@ -171,16 +171,25 @@ test("diagnostics retain the rejection through touchend and report cancellation 
   assert.equal(f.updates(), 1);
 });
 
-test("the diagnostic icon launches with the URL flag and has a separate manifest ID", async () => {
+test("only Preview exposes a separate diagnostic manifest with same-origin launch and scope", async () => {
   const normal = load("src/app/manifest.ts").default();
-  const { GET } = load("src/app/pull-refresh-debug-manifest/route.ts", {
-    Response, require: () => ({ default: () => normal }),
-  });
+  function loadManifestFor(environment) {
+    const preview = load("src/lib/pull-refresh-preview.ts", { process: { env: { VERCEL_ENV: environment } } });
+    return load("src/app/pull-refresh-debug-manifest/route.ts", {
+      Response,
+      require: name => name === "../manifest" ? { default: () => normal } : preview,
+    });
+  }
+  assert.equal(loadManifestFor("production").GET().status, 404);
+  assert.equal(loadManifestFor(undefined).GET().status, 404);
+  const { GET } = loadManifestFor("preview");
   const response = GET();
   const debug = await response.json();
   assert.equal(response.headers.get("content-type"), "application/manifest+json");
-  assert.notEqual(debug.id, normal.id);
-  assert.equal(debug.start_url, "/cadastro?debugPullRefresh=1");
+  assert.notEqual(debug.name, normal.name);
+  assert.equal(debug.id, "/pull-refresh-debug");
+  assert.equal(debug.start_url, debug.id);
+  assert.equal(debug.scope, debug.start_url);
   assert.equal(debug.display, "standalone");
   assert.equal(normal.start_url, "/");
 });
@@ -217,7 +226,7 @@ test("the global control uses Next refresh for server profiles and document relo
     });
     function render() {
       index = 0; effects = [];
-      PullToRefresh();
+      PullToRefresh({});
       effects.forEach(effect => effect());
     }
     render();
