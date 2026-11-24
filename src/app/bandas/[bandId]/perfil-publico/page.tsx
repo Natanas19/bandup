@@ -23,7 +23,8 @@ type PublishedProfile = Omit<ComponentProps<typeof PublicBandProfile>, "preview"
 const previewAction = "absolute top-1 z-20 inline-flex h-11 w-11 items-center justify-center rounded-lg text-brand";
 const previewIcon = "inline-flex h-7 w-7 items-center justify-center rounded-lg bg-surface p-1.5";
 
-function PublishedPreview({ publicPath, editHref, links }: {
+function PublishedPreview({ bandId, publicPath, editHref, links }: {
+  bandId: string;
   publicPath: string | null;
   editHref: string | null;
   links: BandPublicLink[] | null;
@@ -62,15 +63,15 @@ function PublishedPreview({ publicPath, editHref, links }: {
     <div className="relative isolate rounded-xl border-t border-nav-border bg-surface focus-within:ring-2 focus-within:ring-focus">
       {profile && publicPath ? (
         <>
-          <a href={publicPath} target="_blank" rel="noopener noreferrer"
-            aria-label="Abrir prévia do perfil público (abre em nova aba)"
+          <Link href={`${publicPath}?editorBand=${encodeURIComponent(bandId)}`}
+            aria-label="Abrir página pública"
             className="group/open absolute inset-0 rounded-xl focus-visible:outline-none">
             <span className={`${previewAction} right-1`}>
               <span className={`${previewIcon} group-focus-visible/open:ring-4 group-focus-visible/open:ring-focus`}>
                 <NavigationIcon name="ArrowUpRight" className="h-4 w-4" />
               </span>
             </span>
-          </a>
+          </Link>
           <div className="pointer-events-none relative z-10 overflow-hidden rounded-xl [&_a]:pointer-events-auto">
             <PublicBandProfile {...profile} preview />
           </div>
@@ -184,7 +185,7 @@ function EnabledBandProfilePage() {
                     Prévia da página pública
                     <span aria-hidden="true" className="mr-1 h-2.5 w-2.5 shrink-0 rotate-45 border-b-2 border-r-2 border-brand transition-transform group-open:rotate-[225deg] motion-reduce:transition-none" />
                   </summary>
-                  {previewOpen && <PublishedPreview key={publicPath} publicPath={publicPath} links={links}
+                  {previewOpen && <PublishedPreview key={publicPath} bandId={bandId} publicPath={publicPath} links={links}
                     editHref={isAdmin ? `/bandas/${encodeURIComponent(bandId)}/perfil` : null} />}
                 </details>
               )} />

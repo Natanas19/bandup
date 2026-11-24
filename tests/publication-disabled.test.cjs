@@ -149,9 +149,27 @@ function publicLinksPage(result, events = {data: [], error: null}) {
     }},
   });
   const page = load('src/app/b/[slug]/page.tsx');
-  const props = {params: Promise.resolve({slug: 'demo'})};
+  const props = {params: Promise.resolve({slug: 'demo'}), searchParams: Promise.resolve({})};
   return {calls, page, props, load};
 }
+
+test('public profile offers an explicit editor return only for a valid editor context', async () => {
+  const {page, props} = publicLinksPage({data: []});
+  const direct = renderToStaticMarkup(await page.default(props));
+  assert.doesNotMatch(direct, /Retorno ao BandUp|Voltar ao editor/);
+  const fromEditor = renderToStaticMarkup(await page.default({
+    ...props, searchParams: Promise.resolve({editorBand: 'demo-band'}),
+  }));
+  assert.match(fromEditor, /<nav aria-label="Retorno ao BandUp"[^>]*safe-area-inset-top/);
+  assert.match(fromEditor, /href="\/bandas\/demo-band\/perfil-publico"[^>]*min-h-11[^>]*focus-visible/);
+  assert.match(fromEditor, /Voltar ao editor do perfil público/);
+  assert.equal(fromEditor.replace(/^<nav\b.*?<\/nav>/, ''), direct);
+  for (const editorBand of ['//outside.example', '../dashboard', ['demo-band', 'other-band']]) {
+    assert.equal(renderToStaticMarkup(await page.default({
+      ...props, searchParams: Promise.resolve({editorBand}),
+    })), direct);
+  }
+});
 
 test('published profile renders ordered platform links with safe external anchors and label fallbacks', async () => {
   const {calls, page, props} = publicLinksPage({error: null, data: [
@@ -301,9 +319,9 @@ test('private profile preview starts open and can close and reopen with the shar
   assert.equal(publicPreview.details.props.children[0].type, 'summary');
   const [publicContent, editLink] = publicPreview.container.props.children;
   const [previewLink, publicVisual] = publicContent.props.children;
-  assert.equal(previewLink.props.href, '/b/demo');
-  assert.equal(previewLink.props.target, '_blank');
-  assert.equal(previewLink.props.rel, 'noopener noreferrer');
+  assert.equal(previewLink.props.href, '/b/demo?editorBand=demo-band');
+  assert.equal(previewLink.props['aria-label'], 'Abrir página pública');
+  assert.equal(previewLink.props.target, undefined);
   assert.equal(editLink.props.href, '/bandas/demo-band/perfil');
   assert.equal(editLink.props['aria-label'], 'Editar perfil');
   assert.match(editLink.props.className, /h-11 w-11.*left-1/);
